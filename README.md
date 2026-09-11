@@ -213,4 +213,4 @@ A engine de precisão de seleção (snap para o interativo, candidatos ranqueado
 
 ## Licença
 
-MIT © Edinaldo Filho
+MIT © [Edinaldo Filho](mailto:edinaldofilho2021@ufpi.edu.br)

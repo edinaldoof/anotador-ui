@@ -2,6 +2,7 @@
   "name": "anotador-ui",
   "version": "0.2.0",
   "description": "Anote a interface do app em desenvolvimento (selecionar, comentar, alterar propriedades) e entregue as anotações a um agente de código — Claude Code, Codex, Gemini ou qualquer outro — como pedidos de mudança precisos, com conversa de mão dupla pela própria página.",
+  "author": "Edinaldo Filho <edinaldofilho2021@ufpi.edu.br>",
   "type": "module",
   "private": true,
   "bin": {
