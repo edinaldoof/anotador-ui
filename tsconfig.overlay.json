@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "moduleDetection": "legacy",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "erasableSyntaxOnly": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "files": ["tipos/anotador.d.ts", "tipos/navegador.d.ts", "overlay/engine.ts", "overlay/estilos.ts", "overlay/ui.ts"]
+}

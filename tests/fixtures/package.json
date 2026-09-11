@@ -1,0 +1,7 @@
+{
+  "name": "fixtures-e2e",
+  "private": true,
+  "devDependencies": {
+    "tailwindcss": "^4.1.0"
+  }
+}

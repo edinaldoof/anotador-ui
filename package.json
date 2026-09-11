@@ -1,0 +1,50 @@
+{
+  "name": "anotador-ui",
+  "version": "0.2.0",
+  "description": "Anote a interface do app em desenvolvimento (selecionar, comentar, alterar propriedades) e entregue as anotações a um agente de código — Claude Code, Codex, Gemini ou qualquer outro — como pedidos de mudança precisos, com conversa de mão dupla pela própria página.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "anotador": "bin/anotador.mjs"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node bin/anotador.mjs",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.overlay.json",
+    "test:unit": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"tests/**/*.test.ts\"",
+    "test": "npm run typecheck && npm run test:unit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edinaldoof/anotador-ui.git"
+  },
+  "homepage": "https://github.com/edinaldoof/anotador-ui#readme",
+  "keywords": [
+    "anotacao",
+    "ui",
+    "overlay",
+    "proxy",
+    "claude-code",
+    "codex",
+    "agentes",
+    "design-review",
+    "dev-tools"
+  ],
+  "files": [
+    "bin",
+    "lib",
+    "overlay",
+    "tipos",
+    "skills",
+    "server.ts",
+    "README.md",
+    "LICENSE"
+  ]
+}

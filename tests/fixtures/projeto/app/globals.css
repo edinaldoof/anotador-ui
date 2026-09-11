@@ -1,0 +1,9 @@
+@theme {
+  --color-interactive: oklch(45% 0.09 190);
+  --color-primary: #2563eb;
+}
+
+:root {
+  --marca: #be185d;
+  --marca-alias: var(--marca);
+}

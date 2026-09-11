@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anotador · conectar</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #171918; color: #e7e7e7; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: #9dbdf7; }
+code, .mono { font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
+main { max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }
+header.topo { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
+header.topo h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 10px; }
+header.topo .logo { width: 34px; height: 34px; border-radius: 10px; background: #2563eb; display: grid; place-items: center; }
+header.topo .logo svg { width: 18px; height: 18px; }
+header.topo .versao { color: #8b918e; font-size: 12px; }
+.pilulas { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.pilula { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px 5px 9px; border-radius: 999px; background: #2a2e2d; color: #c7ccca; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.pilula::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: currentColor; flex: none; }
+.pilula.ok { background: #213b30; color: #7ee2b0; }
+.pilula.aviso { background: #3d3218; color: #f2c14e; }
+.pilula.erro { background: #472626; color: #f28b82; }
+.pilula.neutro::before { animation: pulsar 1.6s ease-in-out infinite; }
+@keyframes pulsar { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+.grade { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 860px) { .grade { grid-template-columns: 1fr 1fr; } .grade .larga { grid-column: 1 / -1; } }
+.cartao { background: #1f2221; border: 1px solid #343837; border-radius: 16px; padding: 18px 20px; }
+.cartao h2 { font-size: 15px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.cartao h2 .n { width: 22px; height: 22px; border-radius: 999px; background: #2c302f; color: #cfd4d2; font-size: 12px; display: grid; place-items: center; }
+.cartao .sub { color: #8b918e; font-size: 12.5px; margin: 0 0 14px; }
+label.campo { display: block; margin: 10px 0; }
+label.campo span { display: block; color: #a3a8a6; font-size: 12px; margin-bottom: 4px; }
+input[type=text], input[type=url], select, textarea { width: 100%; background: #2a2e2d; border: 1px solid #383d3c; border-radius: 10px; padding: 9px 12px; color: #fff; font: inherit; outline: 0; }
+input:focus, select:focus, textarea:focus { border-color: #4b8bf5; }
+.linha { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.linha > input { flex: 1; min-width: 200px; }
+button { font: inherit; color: #fff; border: 0; border-radius: 999px; padding: 9px 16px; background: #2c302f; cursor: pointer; font-weight: 600; }
+button:hover { background: #363b3a; }
+button.primario { background: #2f9e6a; }
+button.primario:hover { background: #35b078; }
+button.azul { background: #2563eb; }
+button.azul:hover { background: #3b74ee; }
+button.perigo:hover { background: #5a2a2a; }
+button.mini { padding: 5px 10px; font-size: 12px; }
+button:disabled { opacity: .45; cursor: default; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 12px; background: #242827; border: 1px solid #343837; cursor: pointer; text-align: left; font-weight: 500; }
+.chip:hover { border-color: #4b8bf5; background: #24303f; }
+.chip.marcado { border-color: #2f9e6a; background: #213b30; }
+.chip .porta { font-weight: 700; }
+.chip .fw { color: #9dbdf7; font-size: 12px; }
+.chip .tit { color: #8b918e; font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resultado { margin-top: 8px; font-size: 13px; color: #a3a8a6; min-height: 20px; }
+.resultado.ok { color: #7ee2b0; }
+.resultado.erro { color: #f28b82; }
+details.opcoes { margin-top: 8px; }
+details.opcoes summary { cursor: pointer; color: #a3a8a6; font-size: 13px; }
+.conectado { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; background: #213b30; border-radius: 12px; margin-bottom: 12px; }
+.conectado .alvo { font-weight: 700; color: #7ee2b0; }
+.conectado .esp { flex: 1; }
+.abas { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
+.aba { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; background: #2a2e2d; border: 1px solid transparent; color: #cfd4d2; font-weight: 600; }
+.aba .st { width: 8px; height: 8px; border-radius: 999px; background: #5a615f; }
+.aba.instalado .st { background: #7ee2b0; }
+.aba.ativa { border-color: #4b8bf5; background: #24303f; color: #fff; }
+.aba.nao { opacity: .55; }
+.sessoes { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.sessao { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: #242827; border: 1px solid #2c302f; border-radius: 12px; }
+.sessao .tit { flex: 1; min-width: 0; }
+.sessao .tit .nome { font-weight: 600; }
+.sessao .tit .det { color: #8b918e; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sessao.viva { border-color: #2f9e6a55; }
+.selo { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #2c302f; color: #cfd4d2; white-space: nowrap; }
+.selo.viva { background: #213b30; color: #7ee2b0; }
+.selo.ouvindo { background: #1e2a3f; color: #9dbdf7; }
+.selo.ponte { background: #3d3218; color: #f2c14e; }
+.vazio { color: #8b918e; font-size: 13px; padding: 8px 0; }
+.como { color: #c7ccca; font-size: 13px; background: #242827; border-radius: 12px; padding: 10px 12px; margin: 6px 0 10px; }
+pre.bloco { background: #121413; border: 1px solid #2c302f; border-radius: 12px; padding: 12px 14px; overflow: auto; margin: 6px 0; font-size: 12px; line-height: 1.55; color: #cfe3ff; }
+.exec { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid #2c302f; font-size: 13px; }
+.exec:first-child { border-top: 0; }
+.exec .q { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rodape { margin-top: 24px; color: #6f7674; font-size: 12px; display: flex; gap: 14px; flex-wrap: wrap; }
+.toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #1f2221; border: 1px solid #343837; padding: 9px 14px; border-radius: 999px; box-shadow: 0 8px 30px rgba(0,0,0,.4); opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.on { opacity: 1; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header class="topo">
+    <h1><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 8h10M18 8h2M4 16h4M12 16h8"/><circle cx="16" cy="8" r="2"/><circle cx="10" cy="16" r="2"/></svg></span> Anotador <span class="versao" id="versao"></span></h1>
+    <div class="pilulas">
+      <span class="pilula neutro" id="pilula-app">App: verificando…</span>
+      <span class="pilula neutro" id="pilula-agente">Agente: verificando…</span>
+    </div>
+  </header>
+
+  <div class="grade">
+    <section class="cartao larga" id="cartao-app">
+      <h2><span class="n">1</span> App em desenvolvimento</h2>
+      <p class="sub">O anotador fica na frente do seu servidor de desenvolvimento e injeta o overlay de anotação. Nada muda no código do app.</p>
+      <div class="conectado" id="bloco-conectado" hidden>
+        <span>Conectado a <span class="alvo mono" id="alvo-atual"></span> <span id="app-detalhe" style="color:#a3a8a6"></span></span>
+        <span class="esp"></span>
+        <a href="/" id="abrir-app"><button class="primario" type="button">Abrir o app com o anotador</button></a>
+        <button type="button" class="perigo" id="btn-desconectar">Desconectar</button>
+      </div>
+      <div class="linha" style="justify-content:space-between">
+        <span style="color:#a3a8a6;font-size:13px" id="rotulo-deteccao">Servidores encontrados nesta máquina:</span>
+        <button type="button" class="mini" id="btn-redetectar">Procurar de novo</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="linha">
+        <input type="url" id="alvo" placeholder="http://localhost:3000" autocomplete="off" spellcheck="false">
+        <button type="button" id="btn-testar">Testar</button>
+        <button type="button" class="primario" id="btn-conectar">Conectar e abrir</button>
+      </div>
+      <div class="resultado" id="resultado"></div>
+      <details class="opcoes" id="opcoes">
+        <summary>Projeto e rótulo do agente</summary>
+        <label class="campo"><span>Nome do projeto (nomeia a pasta da fila)</span><input type="text" id="nome" autocomplete="off"></label>
+        <label class="campo"><span>Pasta do código-fonte (para localizar cada elemento no código)</span><input type="text" id="fonte" class="mono" autocomplete="off" spellcheck="false"></label>
+        <label class="campo"><span>Nome do agente mostrado na interface</span><input type="text" id="agente-rotulo" autocomplete="off"></label>
+      </details>
+    </section>
+
+    <section class="cartao larga">
+      <h2><span class="n">2</span> Agente que aplica as anotações</h2>
+      <p class="sub">Quem recebe cada lote e mexe no código. Uma sessão pode <b>ouvir</b> os eventos ao vivo; sem ninguém ouvindo, a <b>ponte</b> chama o agente pela linha de comando.</p>
+      <div class="abas" id="abas"></div>
+      <div id="painel-agente"></div>
+      <div class="linha" style="margin-top:14px">
+        <span style="color:#a3a8a6;font-size:13px">Ponte automática — sem ninguém ouvindo, a cada lote chamar:</span>
+        <select id="ponte" style="width:auto;min-width:220px"></select>
+        <span class="selo ponte" id="ponte-estado" hidden></span>
+      </div>
+      <div id="ouvintes" style="margin-top:14px"></div>
+      <div id="execucoes" style="margin-top:14px"></div>
+    </section>
+
+    <section class="cartao larga">
+      <h2><span class="n">3</span> Qualquer outro agente ou script</h2>
+      <p class="sub">Protocolo neutro: eventos por WebSocket, lotes em Markdown e uma API REST. Serve para Antigravity, Cursor, um script seu ou qualquer modelo.</p>
+      <pre class="bloco" id="protocolo"></pre>
+    </section>
+  </div>
+
+  <footer class="rodape">
+    <span id="rodape-fila"></span>
+    <span id="rodape-fonte"></span>
+    <a href="https://github.com/edinaldoof/anotador-ui" target="_blank" rel="noopener">documentação</a>
+  </footer>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const h = (tag, attrs, ...filhos) => {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") el.className = v;
+      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+      else if (v === true) el.setAttribute(k, "");
+      else el.setAttribute(k, String(v));
+    }
+    for (const f of filhos.flat()) if (f !== null && f !== undefined && f !== false) el.append(f instanceof Node ? f : document.createTextNode(String(f)));
+    return el;
+  };
+  const api = async (caminho, corpo) => {
+    const r = await fetch(caminho, corpo === undefined ? { cache: "no-store" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpo) });
+    const texto = await r.text();
+    let json;
+    try { json = JSON.parse(texto); } catch { json = { ok: r.ok, erro: texto }; }
+    if (!r.ok && json.erro === undefined) json.erro = "HTTP " + r.status;
+    json.__status = r.status;
+    return json;
+  };
+  let toastT = null;
+  const avisar = (m) => { const t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("on"), 2800); };
+  const copiar = async (texto) => {
+    try { await navigator.clipboard.writeText(texto); avisar("Copiado."); }
+    catch { const ta = h("textarea", null, texto); document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); avisar("Copiado."); }
+  };
+  const hora = (iso) => { const d = new Date(iso); const hoje = new Date().toDateString() === d.toDateString(); return hoje ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); };
+
+  let saude = null;
+  let agentes = null;
+  let agenteAtivo = localStorage.getItem("anotador:agente") || "claude";
+  let preencheuOpcoes = false;
+
+  // ---------- estado / pílulas ----------
+  function renderizarSaude(s) {
+    saude = s;
+    $("versao").textContent = s.versao ? "v" + s.versao : "";
+    $("rodape-fila").textContent = "fila: " + s.saida;
+    $("rodape-fonte").textContent = s.fonte ? "código-fonte: " + s.fonte : "";
+    const pa = $("pilula-app");
+    if (!s.conectado) { pa.className = "pilula aviso"; pa.textContent = "App: não conectado"; }
+    else if (s.app && s.app.alcancavel) { pa.className = "pilula ok"; pa.textContent = "App: respondendo" + (s.app.framework ? " · " + s.app.framework : "") + (s.app.status ? " · HTTP " + s.app.status : ""); }
+    else { pa.className = "pilula erro"; pa.textContent = "App: sem resposta" + (s.app && s.app.erro ? " · " + s.app.erro : ""); }
+    const pg = $("pilula-agente");
+    const n = s.quemOuve ? s.quemOuve.length : s.ouvintes || 0;
+    if (n > 0) { pg.className = "pilula ok"; pg.textContent = "Agente: " + n + " ouvindo" + (s.quemOuve && s.quemOuve[0] && s.quemOuve[0].agente ? " · " + Array.from(new Set(s.quemOuve.map((o) => o.agente).filter(Boolean))).join(", ") : ""); }
+    else if (s.ponte) { pg.className = "pilula aviso"; pg.textContent = "Agente: ninguém ouvindo · ponte " + nomeAgente(s.ponte.agente); }
+    else { pg.className = "pilula erro"; pg.textContent = "Agente: ninguém ouvindo"; }
+    $("bloco-conectado").hidden = !s.conectado;
+    $("btn-conectar").textContent = s.conectado ? "Trocar e abrir" : "Conectar e abrir";
+    if (s.conectado) {
+      $("alvo-atual").textContent = s.alvo;
+      $("app-detalhe").textContent = s.app && s.app.titulo ? "· “" + s.app.titulo + "”" : "";
+      $("abrir-app").href = "/";
+    }
+    if (!preencheuOpcoes) {
+      preencheuOpcoes = true;
+      if (s.alvo && !$("alvo").value) $("alvo").value = s.alvo;
+      $("nome").value = s.nome || "";
+      $("fonte").value = s.fonte || "";
+      $("agente-rotulo").value = s.agente || "Claude";
+      if (!s.alvo && s.conexoes && s.conexoes[0]) { $("alvo").value = s.conexoes[0].alvo; mostrarResultado("Última conexão usada nesta pasta: " + s.conexoes[0].alvo + " (" + hora(s.conexoes[0].usadoEm) + ")", ""); }
+    }
+    renderizarPonte();
+    renderizarOuvintes();
+  }
+  async function atualizarSaude() {
+    try { const s = await api("saude"); if (s.ok) renderizarSaude(s); }
+    catch { const pa = $("pilula-app"); pa.className = "pilula erro"; pa.textContent = "Anotador: sem resposta"; }
+  }
+
+  // ---------- detecção e sondagem ----------
+  let detectados = [];
+  async function detectar() {
+    $("rotulo-deteccao").textContent = "Procurando servidores nas portas comuns…";
+    $("chips").textContent = "";
+    try {
+      const r = await api("deteccao");
+      detectados = r.servidores || [];
+    } catch { detectados = []; }
+    $("rotulo-deteccao").textContent = detectados.length ? "Servidores encontrados nesta máquina — clique para escolher:" : "Nenhum servidor nas portas comuns. Inicie o app em modo dev (npm run dev) ou digite a URL.";
+    const chips = $("chips");
+    chips.textContent = "";
+    for (const s of detectados) {
+      chips.append(h("button", { type: "button", class: "chip" + ($("alvo").value === s.url ? " marcado" : ""), onclick: () => { $("alvo").value = s.url; for (const c of chips.children) c.classList.toggle("marcado", c === event.currentTarget); testar(); } },
+        h("span", { class: "porta mono" }, ":" + s.porta),
+        s.framework ? h("span", { class: "fw" }, s.framework) : h("span", { class: "fw" }, s.html ? "app web" : "HTTP " + s.status),
+        s.titulo ? h("span", { class: "tit", title: s.titulo }, s.titulo) : null));
+    }
+    if (detectados.length && !$("alvo").value) { $("alvo").value = detectados[0].url; chips.firstChild.classList.add("marcado"); testar(); }
+  }
+  function mostrarResultado(texto, classe) { const r = $("resultado"); r.textContent = texto; r.className = "resultado " + (classe || ""); }
+  async function testar() {
+    const alvo = $("alvo").value.trim();
+    if (!alvo) { mostrarResultado("Digite a URL do servidor de desenvolvimento.", "erro"); return null; }
+    mostrarResultado("Testando " + alvo + "…", "");
+    const r = await api("sondar", { alvo });
+    if (!r.ok) { mostrarResultado(r.erro || "não foi possível testar", "erro"); return null; }
+    const s = r.sondagem;
+    if (s.anotador) { mostrarResultado("Essa URL é o próprio anotador — aponte para o servidor do app.", "erro"); return s; }
+    if (!s.alcancavel) { mostrarResultado("Sem resposta em " + alvo + " (" + (s.erro || "desconhecido") + "). O servidor de desenvolvimento está rodando?", "erro"); return s; }
+    mostrarResultado("Respondeu HTTP " + s.status + (s.framework ? " · " + s.framework : "") + (s.titulo ? " · “" + s.titulo + "”" : "") + (s.html ? "" : " · não é HTML (API?)"), "ok");
+    return s;
+  }
+  async function conectar() {
+    const alvo = $("alvo").value.trim();
+    if (!alvo) { mostrarResultado("Digite a URL do servidor de desenvolvimento.", "erro"); return; }
+    const btn = $("btn-conectar"); btn.disabled = true;
+    try {
+      const corpo = { alvo, nome: $("nome").value.trim() || undefined, fonte: $("fonte").value.trim() || undefined, agente: $("agente-rotulo").value.trim() || undefined };
+      let r = await api("conectar", corpo);
+      if (r.__status === 409 && confirm(r.erro + "\n\nConectar mesmo assim? Você pode subir o app depois.")) r = await api("conectar", { ...corpo, forcar: true });
+      if (!r.ok) { mostrarResultado(r.erro || "falha ao conectar", "erro"); return; }
+      renderizarSaude(r.saude);
+      mostrarResultado("Conectado. Abrindo o app…", "ok");
+      location.href = "/";
+    } finally { btn.disabled = false; }
+  }
+  async function desconectar() {
+    const r = await api("desconectar", {});
+    if (r.ok) { await atualizarSaude(); mostrarResultado("Desconectado. O app continua rodando na porta dele; só o anotador saiu da frente.", ""); }
+  }
+
+  // ---------- agentes ----------
+  function nomeAgente(id) { const a = (agentes && agentes.agentes || []).find((x) => x.id === id); return a ? a.nome : id; }
+  async function carregarAgentes() {
+    try { const r = await api("agentes"); if (r.ok) { agentes = r; renderizarAgentes(); } } catch { /* tenta no próximo ciclo */ }
+  }
+  function renderizarAgentes() {
+    if (!agentes) return;
+    const abas = $("abas"); abas.textContent = "";
+    for (const a of agentes.agentes) {
+      abas.append(h("button", { type: "button", class: "aba" + (a.instalado ? " instalado" : " nao") + (a.id === agenteAtivo ? " ativa" : ""), title: a.instalado ? a.caminho : "não encontrado no PATH", onclick: () => { agenteAtivo = a.id; localStorage.setItem("anotador:agente", a.id); renderizarAgentes(); } },
+        h("span", { class: "st" }), a.nome, a.instalado ? null : h("span", { style: "font-weight:400;color:#8b918e;font-size:11px" }, "não encontrado")));
+    }
+    const a = agentes.agentes.find((x) => x.id === agenteAtivo) || agentes.agentes[0];
+    const painel = $("painel-agente"); painel.textContent = "";
+    if (!a) return;
+    painel.append(h("div", { class: "como" }, a.como));
+    const ouvindo = new Set((saude && saude.quemOuve || []).map((o) => o.sessao).filter(Boolean));
+    if (a.sessoes) {
+      const sessoes = (agentes.sessoes || []).filter((s) => s.agente === a.id);
+      painel.append(h("div", { style: "color:#a3a8a6;font-size:13px;margin-top:8px" }, "Sessões deste projeto" + (saude && saude.fonte ? " (" + saude.fonte + ")" : "") + " — escolha onde iniciar a conversa:"));
+      const lista = h("div", { class: "sessoes" });
+      if (!sessoes.length) lista.append(h("div", { class: "vazio" }, "Nenhuma sessão de " + a.nome + " encontrada para esta pasta."));
+      for (const s of sessoes) {
+        const estaOuvindo = ouvindo.has(s.id);
+        const acoes = [];
+        if (a.id === "claude" && s.ativa) {
+          acoes.push(h("button", { type: "button", class: "mini azul", title: "Copia o comando para colar na sessão aberta", onclick: () => copiar("/anotar") }, estaOuvindo ? "Já está ouvindo" : "Digite /anotar nela"));
+        }
+        if (a.ponte && !(a.id === "claude" && s.ativa)) {
+          acoes.push(h("button", { type: "button", class: "mini primario", onclick: (e) => iniciarConversa(a.id, s.id, e.currentTarget) }, "Iniciar conversa aqui"));
+        }
+        lista.append(h("div", { class: "sessao" + (s.ativa ? " viva" : "") },
+          h("div", { class: "tit" },
+            h("div", { class: "nome" }, s.nome || (s.titulo ? s.titulo : "sessão " + s.id.slice(0, 8)), " ", h("span", { class: "mono", style: "color:#6f7674;font-size:11px" }, s.id.slice(0, 8))),
+            h("div", { class: "det" }, [s.origem, s.titulo && s.nome ? s.titulo : null, hora(s.em)].filter(Boolean).join(" · "))),
+          s.ativa ? h("span", { class: "selo viva" }, "aberta agora") : null,
+          estaOuvindo ? h("span", { class: "selo ouvindo" }, "ouvindo") : null,
+          ...acoes));
+      }
+      painel.append(lista);
+    }
+    if (a.ponte && a.instalado) {
+      painel.append(h("div", { class: "linha", style: "margin-top:8px" },
+        h("button", { type: "button", onclick: (e) => iniciarConversa(a.id, null, e.currentTarget) }, a.sessoes ? "Iniciar conversa numa sessão nova" : "Iniciar conversa"),
+        h("span", { style: "color:#8b918e;font-size:12px" }, "Roda o agente em segundo plano com os lotes pendentes; o log fica em “Execuções”.")));
+    }
+    renderizarPonte();
+    renderizarExecucoes();
+    renderizarOuvintes();
+  }
+  async function iniciarConversa(agente, sessao, btn) {
+    if (btn) btn.disabled = true;
+    try {
+      const r = await api("agente/iniciar", { agente, sessao });
+      if (!r.ok) { avisar(r.erro || "não foi possível iniciar"); return; }
+      avisar(nomeAgente(agente) + " iniciado (pid " + r.execucao.pid + ").");
+      await carregarAgentes();
+    } finally { if (btn) btn.disabled = false; }
+  }
+  function renderizarPonte() {
+    if (!agentes) return;
+    const sel = $("ponte");
+    const atual = saude && saude.ponte ? saude.ponte.agente + "|" + (saude.ponte.sessao || "") : "";
+    sel.textContent = "";
+    sel.append(h("option", { value: "" }, "ninguém (só sessões ouvindo)"));
+    for (const a of agentes.agentes.filter((x) => x.ponte && x.instalado)) {
+      sel.append(h("option", { value: a.id + "|" }, a.nome + (a.sessoes ? " · sessão nova" : "")));
+      for (const s of (agentes.sessoes || []).filter((s) => s.agente === a.id && !(a.id === "claude" && s.ativa)).slice(0, 6)) {
+        sel.append(h("option", { value: a.id + "|" + s.id }, a.nome + " · " + (s.nome || s.titulo || s.id.slice(0, 8)).slice(0, 40)));
+      }
+    }
+    if (atual && !Array.from(sel.options).some((o) => o.value === atual)) sel.append(h("option", { value: atual }, nomeAgente(saude.ponte.agente) + " · " + saude.ponte.sessao.slice(0, 8)));
+    sel.value = atual;
+    const est = $("ponte-estado");
+    est.hidden = !atual;
+    est.textContent = atual ? "ativa" : "";
+  }
+  async function definirPonte() {
+    const v = $("ponte").value;
+    const [agente, sessao] = v ? v.split("|") : [null, ""];
+    const r = await api("agente/ponte", { agente: agente || null, sessao: sessao || null });
+    if (!r.ok) { avisar(r.erro || "não foi possível salvar"); return; }
+    avisar(agente ? "Ponte automática: " + nomeAgente(agente) : "Ponte automática desligada.");
+    await atualizarSaude();
+  }
+  function renderizarOuvintes() {
+    const box = $("ouvintes"); box.textContent = "";
+    const lista = (saude && saude.quemOuve) || [];
+    box.append(h("div", { style: "color:#a3a8a6;font-size:13px" }, "Ouvindo os eventos agora:"));
+    if (!lista.length) { box.append(h("div", { class: "vazio" }, "Ninguém. Abra uma sessão do agente e conecte (Claude Code: /anotar), ou ligue a ponte automática.")); return; }
+    for (const o of lista) {
+      box.append(h("div", { class: "exec" },
+        h("span", { class: "selo ouvindo" }, o.agente || "agente"),
+        h("span", { class: "q" }, [o.rotulo, o.sessao ? "sessão " + o.sessao.slice(0, 8) : null, o.cwd, o.ip].filter(Boolean).join(" · ") || "sem identificação"),
+        h("span", { style: "color:#8b918e;font-size:12px" }, "desde " + hora(o.desde))));
+    }
+  }
+  function renderizarExecucoes() {
+    const box = $("execucoes"); box.textContent = "";
+    const lista = (agentes && agentes.execucoes) || [];
+    if (!lista.length) return;
+    box.append(h("div", { style: "color:#a3a8a6;font-size:13px" }, "Execuções da ponte:"));
+    for (const e of lista.slice(0, 8)) {
+      const rodando = e.terminadoEm === null;
+      const log = h("pre", { class: "bloco", hidden: true });
+      box.append(h("div", { class: "exec" },
+        h("span", { class: "selo " + (rodando ? "viva" : e.codigo === 0 ? "ouvindo" : "ponte") }, rodando ? "rodando" : "código " + e.codigo),
+        h("span", { class: "q", title: e.comando.join(" ") }, nomeAgente(e.agente) + (e.sessao ? " · sessão " + e.sessao.slice(0, 8) : " · sessão nova") + " · " + e.motivo),
+        h("span", { style: "color:#8b918e;font-size:12px" }, hora(e.iniciadoEm)),
+        h("button", { type: "button", class: "mini", onclick: async () => { if (log.hidden) { log.textContent = await (await fetch("agente/execucoes/" + encodeURIComponent(e.id) + "/log", { cache: "no-store" })).text() || "(vazio)"; } log.hidden = !log.hidden; } }, "log")), log);
+    }
+  }
+  function renderizarProtocolo() {
+    const o = location.origin;
+    const ws = o.replace(/^http/, "ws") + "/__anotador/eventos?agente=NomeDoAgente&sessao=opcional";
+    $("protocolo").textContent = [
+      "# ouvir eventos (JSON por quadro): {tipo: lote|progresso|processado|mensagem, id, caminhoMd, resumo, arquivos}",
+      ws,
+      "",
+      "# lotes",
+      "GET  " + o + "/__anotador/lotes?estado=pendente        # fila",
+      "GET  " + o + "/__anotador/lotes/<id>/md                # Markdown: onde está no código e como aplicar",
+      "GET  " + o + "/__anotador/lotes/<id>                   # JSON completo + capturas",
+      "",
+      "# conversa com quem anota (aparece na página, em tempo real)",
+      "POST " + o + "/__anotador/lotes/<id>/progresso   {\"nota\":\"aplicando em X\"}",
+      "POST " + o + "/__anotador/lotes/<id>/mensagens   {\"autor\":\"agente\",\"agente\":\"Nome\",\"tipo\":\"nota|pergunta|escolha\",\"texto\":\"…\",\"opcoes\":[\"A\",\"B\"]}",
+      "GET  " + o + "/__anotador/lotes/<id>/conversa    # respostas do usuário (autor: usuario, responde: <id da pergunta>)",
+      "POST " + o + "/__anotador/lotes/<id>/processado  {\"nota\":\"o que mudou\"}",
+      "",
+      "# a mesma coisa pela linha de comando",
+      "anotador pendentes | ver <id> | progresso <id> --nota … | nota <id> --texto … | perguntar <id> --texto … --opcoes \"A|B\" | conversa <id> | processado <id> --nota …",
+    ].join("\n");
+  }
+
+  $("btn-testar").addEventListener("click", testar);
+  $("btn-conectar").addEventListener("click", conectar);
+  $("btn-desconectar").addEventListener("click", desconectar);
+  $("btn-redetectar").addEventListener("click", detectar);
+  $("ponte").addEventListener("change", definirPonte);
+  $("alvo").addEventListener("keydown", (e) => { if (e.key === "Enter") conectar(); });
+  $("protocolo").addEventListener("click", () => copiar($("protocolo").textContent));
+
+  renderizarProtocolo();
+  atualizarSaude().then(() => { detectar(); carregarAgentes(); });
+  setInterval(atualizarSaude, 4000);
+  setInterval(carregarAgentes, 10000);
+})();
+</script>
+</body>
+</html>
