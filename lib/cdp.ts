@@ -215,6 +215,11 @@ export class Pagina {
     return res["value"] as T;
   }
 
+  /** força prefers-color-scheme, para conferir os dois temas de uma página */
+  async emularTema(tema: "light" | "dark"): Promise<void> {
+    await this.canal.enviar("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: tema }] }, this.sessionId);
+  }
+
   async esperar(ms: number): Promise<void> {
     await new Promise((r) => setTimeout(r, ms));
   }
