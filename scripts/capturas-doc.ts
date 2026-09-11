@@ -163,16 +163,16 @@ body{width:1200px;height:630px;overflow:hidden;position:relative;background:#0d1
   font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#e9ecec}
 .brilho{position:absolute;width:760px;height:760px;border-radius:50%;right:-190px;top:-300px;
   background:radial-gradient(circle,rgba(47,109,246,.42),transparent 62%)}
-.conteudo{position:absolute;inset:0;padding:66px 0 0 68px;width:640px}
+.conteudo{position:absolute;inset:0;padding:62px 0 0 68px;width:560px}
 .logo{width:66px;height:66px;border-radius:18px;background:linear-gradient(160deg,#5b90ff,#2f6df6);
   display:grid;place-items:center;box-shadow:0 10px 30px rgba(47,109,246,.45)}
-h1{font-size:56px;letter-spacing:-.03em;margin:26px 0 0;font-weight:800}
-p.linha{font-size:21px;line-height:1.45;color:#aeb6bd;margin-top:16px}
+h1{font-size:54px;letter-spacing:-.03em;margin:24px 0 0;font-weight:800}
+p.linha{font-size:19.5px;line-height:1.45;color:#aeb6bd;margin-top:14px}
 p.linha b{color:#e9ecec;font-weight:600}
-.selos{display:flex;gap:9px;margin-top:28px;flex-wrap:wrap}
+.selos{display:flex;gap:8px;margin-top:26px;flex-wrap:wrap;max-width:500px}
 .selo{font-size:13.5px;font-weight:600;padding:7px 14px;border-radius:999px;
   background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);color:#cdd4da}
-.tela{position:absolute;right:-120px;top:96px;width:720px;border-radius:16px;overflow:hidden;
+.tela{position:absolute;right:-140px;top:104px;width:680px;border-radius:16px;overflow:hidden;
   border:1px solid rgba(255,255,255,.14);box-shadow:0 40px 90px rgba(0,0,0,.6)}
 .tela img{display:block;width:100%}
 .rodape{position:absolute;left:68px;bottom:46px;font-size:15px;color:#7f8890;font-family:ui-monospace,monospace}
