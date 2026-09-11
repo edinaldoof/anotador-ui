@@ -3,7 +3,8 @@
 //   node --disable-warning=ExperimentalWarning scripts/capturas-doc.ts --alvo http://localhost:3001 --rota /entrar --saida docs/imagens
 
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { Navegador, encontrarChromium, type Pagina } from "../lib/cdp.ts";
 import { iniciarServidor } from "../server.ts";
@@ -82,6 +83,11 @@ async function principal(): Promise<void> {
     };
     await salvar("conexao", pagina, await recorteDe(".cartao", true));
     await salvar("agentes", pagina, await recorteDe(".casca > section:nth-of-type(2)"));
+    // A página segue o tema do sistema; o README mostra a versão certa para cada leitor.
+    await pagina.emularTema("dark");
+    await pagina.esperar(500);
+    await salvar("conexao-escuro", pagina, await recorteDe(".cartao", true));
+    await pagina.emularTema("light");
 
     // 2. anotar: selecionar um elemento, comentar e abrir o painel de propriedades
     await pagina.navegar(origem + values.rota, 90_000);
@@ -134,12 +140,52 @@ async function principal(): Promise<void> {
     await esperarAte(async () => pagina.avaliar<boolean>(`!!${noOverlay(".an-conversa")} && ${noOverlay(".an-conversa")}.checkVisibility() && /Como prefere/.test(${noOverlay(".an-conversa .fluxo")}.textContent)`), 20_000);
     await pagina.esperar(600);
     await salvar("conversa", pagina);
+    // 5. banner de apresentação (imagem de compartilhamento do repositório, 1200×630)
+    const capa = join(tmpdir(), "anotador-capa.html");
+    await writeFile(capa, banner(resolve(values.saida, "anotar.png")));
+    await pagina.definirViewport(1200, 630, 2);
+    await pagina.navegar("file://" + capa, 30_000);
+    await pagina.esperar(700);
+    await salvar("banner", pagina);
+
     console.log("erros de página:", pagina.erros.length ? JSON.stringify(pagina.erros) : "nenhum");
     await pagina.fechar();
   } finally {
     await navegador.fechar();
     await servidor.fechar();
   }
+}
+
+function banner(captura: string): string {
+  return `<!doctype html><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0}
+body{width:1200px;height:630px;overflow:hidden;position:relative;background:#0d1017;
+  font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#e9ecec}
+.brilho{position:absolute;width:760px;height:760px;border-radius:50%;right:-190px;top:-300px;
+  background:radial-gradient(circle,rgba(47,109,246,.42),transparent 62%)}
+.conteudo{position:absolute;inset:0;padding:66px 0 0 68px;width:640px}
+.logo{width:66px;height:66px;border-radius:18px;background:linear-gradient(160deg,#5b90ff,#2f6df6);
+  display:grid;place-items:center;box-shadow:0 10px 30px rgba(47,109,246,.45)}
+h1{font-size:56px;letter-spacing:-.03em;margin:26px 0 0;font-weight:800}
+p.linha{font-size:21px;line-height:1.45;color:#aeb6bd;margin-top:16px}
+p.linha b{color:#e9ecec;font-weight:600}
+.selos{display:flex;gap:9px;margin-top:28px;flex-wrap:wrap}
+.selo{font-size:13.5px;font-weight:600;padding:7px 14px;border-radius:999px;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);color:#cdd4da}
+.tela{position:absolute;right:-120px;top:96px;width:720px;border-radius:16px;overflow:hidden;
+  border:1px solid rgba(255,255,255,.14);box-shadow:0 40px 90px rgba(0,0,0,.6)}
+.tela img{display:block;width:100%}
+.rodape{position:absolute;left:68px;bottom:46px;font-size:15px;color:#7f8890;font-family:ui-monospace,monospace}
+</style>
+<div class="brilho"></div>
+<div class="conteudo">
+  <div class="logo"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round"><path d="M4 8h8M18 8h2M4 16h4M14 16h6"/><circle cx="15" cy="8" r="2.2"/><circle cx="11" cy="16" r="2.2"/></svg></div>
+  <h1>anotador-ui</h1>
+  <p class="linha">Anote a interface do app <b>em desenvolvimento</b> e entregue tudo a um <b>agente de código</b> como pedidos de mudança precisos.</p>
+  <div class="selos"><span class="selo">Claude Code</span><span class="selo">Codex</span><span class="selo">Gemini</span><span class="selo">qualquer agente</span></div>
+</div>
+<div class="tela"><img src="file://${captura}"></div>
+<div class="rodape">github.com/edinaldoof/anotador-ui</div>`;
 }
 
 for (const sinal of ["SIGINT", "SIGTERM"] as const) process.on(sinal, () => process.exit(1));

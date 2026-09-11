@@ -67,7 +67,10 @@ anotador
 
 Abra **http://localhost:3999/__anotador/**. A página detecta os servidores rodando nas portas comuns, mostra framework e título de cada um, testa e conecta:
 
-![Página de conexão: servidores detectados na máquina, com framework e título, e o app conectado](docs/imagens/conexao.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/imagens/conexao-escuro.png">
+  <img alt="Página de conexão: servidores detectados na máquina, com framework e título, e o app conectado" src="docs/imagens/conexao.png">
+</picture>
 
 A conexão fica gravada por pasta: na próxima vez, `anotador` reconecta sozinho. As pílulas no topo dizem se o app responde e quantos agentes estão ouvindo. Também dá para usar a linha de comando:
 
