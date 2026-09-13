@@ -407,4 +407,15 @@ button { cursor: pointer; border: 0; background: transparent; }
 }
 .an-avaliacao .rodape input:focus { border-color: var(--an-marca-clara); box-shadow: var(--an-foco); }
 .an-avaliacao .rodape input::placeholder { color: var(--an-texto-3); }
+
+.an-pergunta { display: flex; flex-direction: column; gap: 7px; margin: 8px 8px 10px; padding: 10px 11px; background: var(--an-aviso-fundo); border-radius: 12px; }
+.an-pergunta .txt { color: var(--an-aviso-claro); font-size: 12.5px; line-height: 1.45; }
+.an-pergunta .opcoes { display: flex; flex-direction: column; gap: 5px; }
+.an-pergunta input {
+  background: var(--an-superficie); border: 1px solid var(--an-borda); border-radius: 9px;
+  padding: 6px 10px; color: var(--an-texto); outline: 0; font-size: 12px;
+}
+.an-pergunta input:focus { border-color: var(--an-marca-clara); }
+.an-pergunta input::placeholder { color: var(--an-texto-3); }
+.an-pergunta .respondida { color: var(--an-ok-claro); font-size: 12px; }
 `;

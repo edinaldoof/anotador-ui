@@ -312,8 +312,14 @@ interface EstadoAvaliacao {
   medicao: ResultadoAuditoria | null;
   id: string | null;
   enviando: boolean;
-  parecer: { agente: string; resumo: string; itens: ItemParecerOverlay[] } | null;
+  parecer: { agente: string; resumo: string; itens: ItemParecerOverlay[]; perguntas?: PerguntaOverlay[] } | null;
   erro: string | null;
+}
+
+interface PerguntaOverlay {
+  texto: string;
+  opcoes: string[];
+  resposta?: string | null;
 }
 
 interface ItemParecerOverlay {
@@ -523,6 +529,22 @@ function renderizarAvaliacao(): void {
     const p = avaliacao.parecer;
     corpo.append(h("div", { class: "secao" }, `Parecer de ${p.agente}`));
     if (p.resumo) corpo.append(h("div", { class: "resumo" }, p.resumo));
+    // O agente pergunta quando o julgamento depende da intenção do produto, que nenhuma medida revela.
+    (p.perguntas ?? []).forEach((q, i) => {
+      const bloco = h("div", { class: "an-pergunta" }, h("div", { class: "txt" }, q.texto));
+      if (q.resposta) {
+        bloco.append(h("div", { class: "respondida" }, "Você respondeu: " + q.resposta));
+      } else {
+        const grupo = h("div", { class: "opcoes" });
+        for (const o of q.opcoes) grupo.append(h("button", { class: "an-opcao", onclick: () => void responderPergunta(i, o) }, h("span", { class: "mira" }), o));
+        const campo = h("input", { type: "text", placeholder: "ou escreva a resposta…" });
+        campo.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && campo.value.trim()) void responderPergunta(i, campo.value.trim());
+        });
+        bloco.append(grupo, campo);
+      }
+      corpo.append(bloco);
+    });
     if (!p.itens.length) corpo.append(h("div", { class: "vazio" }, "Sem apontamentos além do que já foi medido."));
     for (const i of p.itens) corpo.append(linhaDeParecer(i));
   } else if (avaliacao.id) {
@@ -545,4 +567,21 @@ function renderizarAvaliacao(): void {
   });
   painel.append(h("div", { class: "rodape" }, campo, botao));
   if (avaliacao.erro) painel.append(h("div", { class: "erro" }, avaliacao.erro));
+}
+
+async function responderPergunta(indice: number, resposta: string): Promise<void> {
+  if (!avaliacao.id) return;
+  try {
+    const r = await fetch(CFG.base + "/avaliacoes/" + encodeURIComponent(avaliacao.id) + "/resposta", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ indice, resposta }),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    avaliacao.parecer = ((await r.json()) as { parecer: EstadoAvaliacao["parecer"] }).parecer;
+    avisar(`Resposta enviada a ${AGENTE}.`);
+    renderizarAvaliacao();
+  } catch (erro) {
+    avisar("Não foi possível responder: " + (erro instanceof Error ? erro.message : String(erro)), 5000);
+  }
 }

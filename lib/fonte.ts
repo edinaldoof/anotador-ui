@@ -646,3 +646,48 @@ export function arquivosProvaveis(analise: AnaliseLote, limite = 3): string[] {
     .slice(0, limite)
     .map(([arquivo]) => arquivo);
 }
+
+export interface IntencaoDeArquivo {
+  arquivo: string;
+  texto: string;
+}
+
+/**
+ * O "porquê" que os autores escreveram nos arquivos da rota: blocos /** … *\/ com prosa.
+ * É o contexto que nenhuma medição alcança — quem é o público, que regra de negócio manda —
+ * e sem ele um parecer sobre intuitividade vira palpite.
+ */
+export function intencaoDaRota(arquivos: ArquivoFonte[], caminho: string, limite = 6): IntencaoDeArquivo[] {
+  const rota = arquivosDaRota(arquivos, caminho);
+  if (!rota) return [];
+  const candidatos = [...rota.entradas, ...rota.alcance];
+  const saida: IntencaoDeArquivo[] = [];
+  for (const relativo of candidatos) {
+    if (saida.length >= limite) break;
+    const arquivo = arquivos.find((a) => a.relativo === relativo);
+    if (!arquivo) continue;
+    const cabeca = arquivo.linhas.slice(0, 140).join("\n");
+    for (const bloco of cabeca.matchAll(/\/\*\*([\s\S]*?)\*\//g)) {
+      const texto = (bloco[1] ?? "")
+        .split("\n")
+        .map((l) => l.replace(/^\s*\*\s?/, "").trimEnd())
+        .join("\n")
+        .trim();
+      // Uma linha solta costuma ser rótulo de tipo; prosa de verdade explica uma decisão.
+      if (texto.length < 90 || /^@/.test(texto)) continue;
+      saida.push({ arquivo: relativo, texto: texto.slice(0, 1200) });
+      break;
+    }
+  }
+  return saida;
+}
+
+/** Contexto de produto que o projeto queira declarar para quem julga a interface. */
+export function contextoDeProduto(arquivos: ArquivoFonte[]): IntencaoDeArquivo | null {
+  const nomes = [".anotador/contexto.md", "docs/contexto-de-produto.md", "docs/publico.md", "docs/produto.md"];
+  for (const nome of nomes) {
+    const arquivo = arquivos.find((a) => a.relativo === nome);
+    if (arquivo) return { arquivo: nome, texto: arquivo.linhas.join("\n").slice(0, 4000) };
+  }
+  return null;
+}

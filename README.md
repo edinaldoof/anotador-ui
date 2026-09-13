@@ -188,6 +188,8 @@ anotador avaliacoes       # pedidos, com e sem parecer
 anotador avaliacao <id>   # o dossiê e o parecer
 ```
 
+O dossiê também carrega **o porquê que está escrito no código**: os blocos de comentário dos arquivos daquela rota, mais um `.anotador/contexto.md` se o projeto quiser declarar público e objetivo. Isso existe porque layout se mede, propósito não — duas opções lado a lado podem ser dois públicos diferentes, e sem esse contexto o parecer vira palpite. Quando a resposta não está em lugar nenhum, o agente manda uma **pergunta com opções** em vez de afirmar, e ela aparece no painel para você responder com um clique.
+
 A separação importa: a régua nunca inventa, e o agente nunca precisa adivinhar o que já foi medido. As regras são testadas contra uma página com defeitos de propósito — cada uma precisa acender lá e ficar calada numa página bem-feita.
 
 ## O que chega ao agente

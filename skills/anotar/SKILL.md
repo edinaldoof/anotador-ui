@@ -69,7 +69,8 @@ O usuário pediu um **parecer de UI/UX** sobre a página inteira, não uma anota
 2. **Leia a captura** (Read no PNG). Sem olhar a tela, o parecer vira palpite.
 3. Julgue só o que a régua não alcança: hierarquia visual, clareza da ação principal, consistência entre componentes do mesmo papel, densidade e respiro, elegância. Não repita os achados objetivos.
 4. Cada item precisa apontar **um elemento concreto** (seletor), dizer o **problema** para quem usa, e uma **sugestão aplicável na linguagem do projeto** (token ou utilitária, nunca valor solto). Se a tela estiver boa, diga isso em poucas linhas — parecer inflado queima a confiança na ferramenta.
-5. Devolva por `POST /__anotador/avaliacoes/<id>/parecer` no formato que o próprio dossiê descreve. O painel do usuário mostra cada item com botão para anotar e mandar você aplicar.
+5. **Onde o julgamento depender da intenção, pergunte em vez de afirmar.** O dossiê traz uma seção com o que os autores escreveram nos arquivos da rota — quase todo "por que está assim" está lá. Se não estiver, mande uma `pergunta` com opções no próprio parecer: ela aparece para quem abriu a página e a resposta volta para você em `GET /__anotador/avaliacoes/<id>`. Duas opções lado a lado podem ser dois públicos distintos, não uma escolha mal explicada.
+6. Devolva por `POST /__anotador/avaliacoes/<id>/parecer` no formato que o próprio dossiê descreve. O painel do usuário mostra cada item com botão para anotar e mandar você aplicar.
 
 `anotador avaliacoes` lista os pedidos; `anotador avaliacao <id>` imprime o dossiê e o parecer.
 

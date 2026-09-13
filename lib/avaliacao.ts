@@ -4,6 +4,7 @@
 
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { IntencaoDeArquivo } from "./fonte.ts";
 
 export interface PaginaAvaliada {
   url: string;
@@ -34,11 +35,20 @@ export interface ItemParecer {
   comoAplicar?: string;
 }
 
+export interface PerguntaParecer {
+  texto: string;
+  opcoes: string[];
+  resposta?: string | null;
+  respondidaEm?: string;
+}
+
 export interface Parecer {
   agente: string;
   em: string;
   resumo: string;
   itens: ItemParecer[];
+  /** o que o agente não pôde julgar sem saber a intenção do produto */
+  perguntas: PerguntaParecer[];
 }
 
 export interface RegistroAvaliacao {
@@ -100,18 +110,31 @@ export function validarParecer(bruto: unknown, agentePadrao: string): Parecer {
     if (typeof it["comoAplicar"] === "string" && it["comoAplicar"].trim()) item.comoAplicar = it["comoAplicar"].trim().slice(0, 800);
     itens.push(item);
   }
-  if (!itens.length && typeof o["resumo"] !== "string") throw new Error("parecer sem itens nem resumo");
+  const perguntas: PerguntaParecer[] = [];
+  for (const q of (Array.isArray(o["perguntas"]) ? o["perguntas"] : []).slice(0, 10)) {
+    if (!q || typeof q !== "object") continue;
+    const pq = q as Record<string, unknown>;
+    const texto = typeof pq["texto"] === "string" ? pq["texto"].trim() : "";
+    if (!texto) continue;
+    const opcoes = Array.isArray(pq["opcoes"]) ? pq["opcoes"].filter((x): x is string => typeof x === "string" && x.trim() !== "").map((x) => x.trim().slice(0, 120)) : [];
+    perguntas.push({ texto: texto.slice(0, 400), opcoes: opcoes.slice(0, 6) });
+  }
+  if (!itens.length && !perguntas.length && typeof o["resumo"] !== "string") throw new Error("parecer sem itens, perguntas nem resumo");
   return {
     agente: typeof o["agente"] === "string" && o["agente"].trim() ? o["agente"].trim().slice(0, 40) : agentePadrao,
     em: new Date().toISOString(),
     resumo: typeof o["resumo"] === "string" ? o["resumo"].trim().slice(0, 1500) : "",
     itens,
+    perguntas,
   };
 }
 
 const SINAL = { alta: "⚠", media: "•", baixa: "·" } as const;
 
-export function gerarDossie(pedido: PedidoAvaliacao, extras: { porta: number; sistema?: string | null; captura?: string | null }): string {
+export function gerarDossie(
+  pedido: PedidoAvaliacao,
+  extras: { porta: number; sistema?: string | null; captura?: string | null; intencao?: IntencaoDeArquivo[]; contexto?: IntencaoDeArquivo | null }
+): string {
   const p = pedido.pagina;
   const linhas: string[] = [
     `# Avaliação de página ${pedido.id}`,
@@ -146,6 +169,19 @@ export function gerarDossie(pedido: PedidoAvaliacao, extras: { porta: number; si
   if (componentes?.length) linhas.push("", `Componentes React em cena: ${componentes.join(", ")}`);
   if (extras.sistema) linhas.push("", "## Sistema de design do projeto", "", extras.sistema);
 
+  if (extras.contexto) {
+    linhas.push("", `## Contexto de produto (${extras.contexto.arquivo})`, "", extras.contexto.texto.slice(0, 2500));
+  }
+  if (extras.intencao?.length) {
+    linhas.push(
+      "",
+      "## Intenção registrada no código desta rota",
+      "",
+      "O que quem escreveu a tela deixou explicado. **Leia antes de julgar**: quase toda pergunta sobre \"por que está assim\" costuma estar respondida aqui."
+    );
+    for (const i of extras.intencao) linhas.push("", `**${i.arquivo}**`, "", "> " + i.texto.split("\n").join("\n> "));
+  }
+
   linhas.push(
     "",
     "## O que se espera do seu parecer",
@@ -160,6 +196,8 @@ export function gerarDossie(pedido: PedidoAvaliacao, extras: { porta: number; si
     "",
     "Regras do parecer: cada item precisa apontar **um elemento concreto** (use o seletor), dizer o **problema** e uma **sugestão aplicável**, na linguagem do projeto (tokens e utilitárias, não valores soltos). Não repita o que já está medido. Se algo estiver bom, não invente defeito — parecer curto e certo vale mais que longo.",
     "",
+    "**Onde o julgamento depende da intenção, pergunte em vez de afirmar.** Layout se mede; propósito não. Duas opções lado a lado podem ser dois públicos diferentes, e não uma escolha mal explicada; um campo a mais pode ser exigência legal; uma tela densa pode servir a quem passa o dia nela. Antes de apontar, procure a resposta na seção de intenção acima e no contexto de produto. Se não estiver lá, mande uma `pergunta` com opções — ela aparece para quem abriu a página, e a resposta volta para você.",
+    "",
     "Devolva assim:",
     "",
     "```bash",
@@ -171,6 +209,7 @@ export function gerarDossie(pedido: PedidoAvaliacao, extras: { porta: number; si
     JSON.stringify(
       {
         resumo: "duas ou três frases sobre a impressão geral",
+        perguntas: [{ texto: "o que você precisa saber para julgar com segurança", opcoes: ["alternativa A", "alternativa B"] }],
         itens: [
           {
             titulo: "frase curta do problema",

@@ -23,7 +23,7 @@ import { marcaPeloNome } from "./lib/marcas.ts";
 import { PORTAS_COMUNS, alvoPermitido, detectarServidores, sondar, type Sondagem } from "./lib/deteccao.ts";
 import { estadoDasFontes, instalarFontes, tamanhoInstalado } from "./lib/fontes.ts";
 import { Fila, idSeguro, validarLote } from "./lib/fila.ts";
-import { analisarLote, arquivosProvaveis, lerProjeto } from "./lib/fonte.ts";
+import { analisarLote, arquivosProvaveis, contextoDeProduto, intencaoDaRota, lerProjeto } from "./lib/fonte.ts";
 import { cabecalhosParaAlvo, ehHtml, extrairNonce, filtrarCabecalhosResposta, injetarScript } from "./lib/injetar.ts";
 import { Difusor, ehPedidoWs, type InfoOuvinte } from "./lib/ws.ts";
 
@@ -338,6 +338,17 @@ function rotuloDoModelo(ponte: PonteConfig | null | undefined): string | null {
   return ponte.esforco ? `${titulo} · ${ponte.esforco}` : titulo;
 }
 
+async function extrasDoDossie(fonte: string | null, caminho: string, porta: number, captura: string | null): Promise<Parameters<typeof gerarDossie>[1]> {
+  const base = { porta, captura, sistema: await resumoDoSistema(fonte) };
+  if (!fonte) return base;
+  try {
+    const arquivos = await lerProjeto(fonte);
+    return { ...base, intencao: intencaoDaRota(arquivos, caminho), contexto: contextoDeProduto(arquivos) };
+  } catch {
+    return base;
+  }
+}
+
 async function resumoDoSistema(fonte: string | null): Promise<string | null> {
   if (!fonte) return null;
   try {
@@ -465,7 +476,7 @@ async function processarAvaliacao(ctx: ContextoApi, pedido: Parameters<typeof ge
     const r = await capturarAvaliacao(destino, pedido.pagina.viewport, { urlsInstantaneo: urls, chrome: opcoes.chrome });
     captura = r.caminho;
     if (r.erro) registrar(opcoes, `captura da avaliação ${pedido.id}: ${r.erro}`);
-    if (captura) await avaliacoes.gravar(pedido, gerarDossie(pedido, { porta: ctx.porta(), sistema: await resumoDoSistema(opcoes.fonte), captura }));
+    if (captura) await avaliacoes.gravar(pedido, gerarDossie(pedido, await extrasDoDossie(opcoes.fonte, pedido.pagina.caminho, ctx.porta(), captura)));
   }
   const entregues = difusor.transmitir({
     tipo: "avaliacao",
@@ -523,7 +534,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       responderJson(res, 400, { ok: false, erro: erro instanceof Error ? erro.message : String(erro) });
       return true;
     }
-    const dossie = gerarDossie(pedido, { porta: ctx.porta(), sistema: await resumoDoSistema(opcoes.fonte), captura: null });
+    const dossie = gerarDossie(pedido, await extrasDoDossie(opcoes.fonte, pedido.pagina.caminho, ctx.porta(), null));
     await ctx.avaliacoes.gravar(pedido, dossie);
     responderJson(res, 201, { ok: true, id: pedido.id, caminhoMd: ctx.avaliacoes.caminhoMd(pedido.id) });
     void processarAvaliacao(ctx, pedido, origemPublicaDe(req, opcoes)).catch((erro: Error) => registrar(opcoes, `falha ao processar avaliação: ${erro.message}`));
@@ -533,7 +544,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     responderJson(res, 200, { ok: true, avaliacoes: await ctx.avaliacoes.listar() });
     return true;
   }
-  const mAv = /^\/avaliacoes\/([^/]+)(?:\/(md|parecer|instantaneo))?$/.exec(caminho);
+  const mAv = /^\/avaliacoes\/([^/]+)(?:\/(md|parecer|instantaneo|resposta))?$/.exec(caminho);
   if (mAv) {
     const id = decodeURIComponent(mAv[1] ?? "");
     const sub = mAv[2];
@@ -551,6 +562,34 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       const html = await ctx.avaliacoes.lerInstantaneo(id);
       if (html === null) responderJson(res, 404, { ok: false, erro: "instantâneo não encontrado" });
       else responderTexto(res, 200, html, "text/html; charset=utf-8");
+      return true;
+    }
+    if (sub === "resposta" && metodo === "POST") {
+      const parecer = await ctx.avaliacoes.lerParecer(id);
+      if (!parecer) {
+        responderJson(res, 404, { ok: false, erro: "ainda não há parecer com perguntas" });
+        return true;
+      }
+      let corpo: Record<string, unknown>;
+      try {
+        corpo = await lerJson(req);
+      } catch {
+        responderJson(res, 400, { ok: false, erro: "corpo inválido" });
+        return true;
+      }
+      const indice = Number(corpo["indice"]);
+      const resposta = typeof corpo["resposta"] === "string" ? corpo["resposta"].trim().slice(0, 400) : "";
+      const pergunta = parecer.perguntas[indice];
+      if (!pergunta || !resposta) {
+        responderJson(res, 400, { ok: false, erro: "pergunta ou resposta inválida" });
+        return true;
+      }
+      pergunta.resposta = resposta;
+      pergunta.respondidaEm = new Date().toISOString();
+      await ctx.avaliacoes.gravarParecer(id, parecer);
+      difusor.transmitir({ tipo: "mensagem", id, mensagem: { id: `${id}-q${indice}`, lote: id, autor: "usuario", tipo: "resposta", texto: resposta, opcoes: [pergunta.texto], em: pergunta.respondidaEm } });
+      registrar(opcoes, `avaliação ${id} · resposta à pergunta ${indice + 1}: ${resposta}`);
+      responderJson(res, 200, { ok: true, parecer });
       return true;
     }
     if (sub === "parecer" && metodo === "POST") {
