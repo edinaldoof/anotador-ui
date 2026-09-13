@@ -20,6 +20,7 @@
     "overlay/engine.ts",
     "overlay/estilos.ts",
     "overlay/ui.ts",
+    "overlay/auditoria.ts",
     "overlay/design.ts"
   ]
 }

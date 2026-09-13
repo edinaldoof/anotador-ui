@@ -73,3 +73,45 @@ async function capturar(fila: Fila, lote: Lote, opcoes: OpcoesCaptura): Promise<
     await navegador.fechar();
   }
 }
+
+/** Print da página inteira para a avaliação; falha vira só um aviso, nunca derruba o pedido. */
+export async function capturarAvaliacao(
+  destino: string,
+  viewport: { largura: number; altura: number; dpr: number },
+  opcoes: OpcoesCaptura
+): Promise<{ caminho: string | null; erro?: string }> {
+  const tentar = async (): Promise<{ caminho: string | null; erro?: string }> => {
+    const navegador = await Navegador.abrir({ caminho: opcoes.chrome ?? null });
+    try {
+      const pagina = await navegador.novaPagina();
+      await pagina.definirViewport(viewport.largura || 1280, viewport.altura || 800, Math.min(2, viewport.dpr || 1));
+      let navegou = false;
+      let ultimoErro: unknown = new Error("nenhum endereço de instantâneo");
+      for (const url of opcoes.urlsInstantaneo) {
+        try {
+          await pagina.navegar(url, 15_000);
+          navegou = true;
+          break;
+        } catch (erro) {
+          ultimoErro = erro;
+        }
+      }
+      if (!navegou) throw ultimoErro;
+      await pagina.esperar(700);
+      await mkdir(join(destino, ".."), { recursive: true }).catch(() => undefined);
+      await mkdir(destino.replace(/\/[^/]+$/, ""), { recursive: true });
+      await writeFile(destino, await pagina.capturar({ paginaInteira: true }));
+      return { caminho: destino };
+    } finally {
+      await navegador.fechar();
+    }
+  };
+  const limite = new Promise<{ caminho: string | null; erro?: string }>((_, rejeitar) =>
+    setTimeout(() => rejeitar(new Error("tempo esgotado na captura")), opcoes.timeoutMs ?? 30_000).unref()
+  );
+  try {
+    return await Promise.race([tentar(), limite]);
+  } catch (erro) {
+    return { caminho: null, erro: erro instanceof Error ? erro.message : String(erro) };
+  }
+}

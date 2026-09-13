@@ -367,4 +367,44 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-design .rodape .dica { flex: 1; }
 .an-design .rodape .fonte { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
 .an-barra .an-ico.ativo { background: var(--an-superficie-alta); color: var(--an-texto); }
+
+/* ---------- avaliação da página ---------- */
+.an-avaliacao {
+  position: fixed; right: 14px; top: 62px; width: 400px; max-height: min(78vh, 720px); pointer-events: auto;
+  display: flex; flex-direction: column; background: var(--an-fundo); border: 1px solid var(--an-borda);
+  border-radius: 18px; box-shadow: var(--an-sombra-alta); overflow: hidden;
+}
+.an-avaliacao .cab { display: flex; align-items: center; gap: 9px; padding: 10px 10px 10px 12px; border-bottom: 1px solid var(--an-borda); background: var(--an-superficie); }
+.an-avaliacao .cab .tit { flex: 1; min-width: 0; font-weight: 700; font-size: 13.5px; }
+.an-avaliacao .cab .tit .sub { display: block; color: var(--an-texto-2); font-size: 11px; font-weight: 400; }
+.an-avaliacao .corpo { flex: 1; overflow: auto; padding: 6px; scrollbar-width: thin; scrollbar-color: var(--an-borda-forte) transparent; }
+.an-avaliacao .secao { color: var(--an-texto-3); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 10px 8px 5px; }
+.an-avaliacao .vazio { color: var(--an-texto-2); font-size: 12.5px; padding: 10px 8px; }
+.an-avaliacao .aguardando { color: var(--an-aviso-claro); font-size: 12.5px; padding: 10px 8px; }
+.an-avaliacao .resumo { color: var(--an-texto); font-size: 12.5px; line-height: 1.5; padding: 4px 8px 8px; }
+.an-avaliacao .erro { color: var(--an-erro-claro); font-size: 12px; padding: 0 12px 10px; }
+.an-achado { display: flex; gap: 9px; padding: 8px 9px; border-radius: 10px; cursor: pointer; align-items: flex-start; }
+.an-achado:hover { background: var(--an-superficie); }
+.an-achado .sinal { width: 7px; height: 7px; border-radius: 999px; flex: none; margin-top: 5px; background: var(--an-texto-3); }
+.an-achado.alta .sinal { background: var(--an-erro); }
+.an-achado.media .sinal { background: var(--an-aviso); }
+.an-achado .col { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.an-achado .titulo { font-size: 12.5px; font-weight: 600; color: var(--an-texto); display: flex; align-items: center; gap: 7px; }
+.an-achado .cat { font-size: 10px; font-weight: 600; color: var(--an-marca-clara); background: var(--an-marca-fundo); border-radius: 999px; padding: 1px 7px; }
+.an-achado .sub { font-size: 11.5px; color: var(--an-texto-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-achado .evid { font-size: 11.5px; color: var(--an-texto-3); line-height: 1.45; }
+.an-achado .sugestao { font-size: 11.5px; color: var(--an-ok-claro); line-height: 1.45; }
+.an-achado .aplicar { font-size: 11px; color: var(--an-marca-clara); line-height: 1.4; }
+.an-achado.parecer { cursor: default; align-items: flex-start; }
+.an-btn.mini { padding: 4px 10px; font-size: 11.5px; flex: none; align-self: center; }
+.an-btn.primario { background: var(--an-marca); }
+.an-btn.primario:hover { background: var(--an-marca-forte); }
+.an-btn.primario:disabled { background: var(--an-superficie-alta); color: var(--an-texto-3); cursor: default; }
+.an-avaliacao .rodape { display: flex; gap: 7px; padding: 9px 10px; border-top: 1px solid var(--an-borda); }
+.an-avaliacao .rodape input {
+  flex: 1; min-width: 0; background: var(--an-superficie-alta); border: 1px solid var(--an-borda);
+  border-radius: 10px; padding: 7px 11px; color: var(--an-texto); outline: 0; font-size: 12.5px;
+}
+.an-avaliacao .rodape input:focus { border-color: var(--an-marca-clara); box-shadow: var(--an-foco); }
+.an-avaliacao .rodape input::placeholder { color: var(--an-texto-3); }
 `;

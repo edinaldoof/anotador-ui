@@ -342,6 +342,57 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     assert.deepEqual(pagina.erros, [], "nenhum erro de página com a árvore e a área");
   });
 
+  test("auditoria acende em página com defeito e cala em página limpa", async () => {
+    await pagina.navegar(proxy.origem + "/defeitos");
+    await pagina.esperarPor("window.__anotadorCarregado", 10_000);
+    await pagina.esperar(400);
+    const r = await debug<ResultadoAuditoria>("auditar()");
+    const contexto = await debug<{ estrutura: { cabecalhos: string[]; botoes: number; campos: number } }>("contexto()");
+    // Volta para a página boa antes de afirmar: se algo falhar, o teste seguinte ainda encontra o app de pé.
+    await pagina.navegar(proxy.origem + "/");
+    await pagina.esperarPor("window.__anotadorCarregado", 10_000);
+    await pagina.esperar(300);
+    const limpa = await debug<ResultadoAuditoria>("auditar()");
+
+    const regras = new Map<string, AchadoAuditoria[]>();
+    for (const a of r.achados) regras.set(a.regra, [...(regras.get(a.regra) ?? []), a]);
+    const detalhe = () => JSON.stringify(r.achados.map((a) => `${a.regra}: ${a.alvo} — ${a.evidencia}`), null, 1);
+
+    // Cada regra precisa poder ficar vermelha; sem isso a auditoria só prova que não explode.
+    for (const esperada of [
+      "contraste abaixo do mínimo",
+      "alvo de toque pequeno",
+      "campo sem rótulo",
+      "botão sem nome",
+      "salto de nível",
+      "hierarquia invertida",
+      "transborda a janela",
+      "texto cortado",
+      "quase alinhado",
+      "raio inconsistente",
+      "altura de controle desigual",
+      "vãos desiguais",
+    ]) {
+      assert.ok(regras.has(esperada), `a regra "${esperada}" não acendeu na página de defeitos. Achados: ${detalhe()}`);
+    }
+
+    const contraste = regras.get("contraste abaixo do mínimo")?.[0];
+    assert.match(contraste?.evidencia ?? "", /^[12]\.\d+:1 onde a norma pede 4\.5:1/, "a evidência traz a razão medida");
+    assert.ok(contraste?.seletor, "todo achado aponta um seletor para o agente localizar no código");
+    assert.ok(
+      regras.get("alvo de toque pequeno")?.some((a) => a.evidencia === "16×16px, abaixo de 24×24"),
+      `o botão de 16px precisa aparecer entre os alvos pequenos: ${JSON.stringify(regras.get("alvo de toque pequeno"))}`
+    );
+    assert.ok(r.medidos > 10, `mediu ${r.medidos} elementos`);
+
+    assert.equal(contexto.estrutura.campos, 1);
+    assert.ok(contexto.estrutura.cabecalhos[0]?.startsWith("h1:"), "o contexto lista os cabeçalhos na ordem do documento");
+
+    // A mesma régua na página bem-comportada não pode inventar achado.
+    const graves = limpa.achados.filter((a) => a.gravidade !== "baixa");
+    assert.deepEqual(graves, [], `a página de teste não deveria acusar nada grave: ${JSON.stringify(graves)}`);
+  });
+
   test("modo Navegar devolve os cliques ao app", async () => {
     await clicarEm(noOverlay(".an-modo button:nth-child(2)"));
     await esperarAte(async () => !(await debug<boolean>("armado()")));

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Página com defeitos de propósito</title>
+    <style>
+      body { margin: 0; font: 16px system-ui, sans-serif; background: #fff; color: #111; width: 1200px; }
+      .coluna { margin-left: 40px; width: 300px; height: 18px; background: #eee; }
+      /* um pixel fora da coluna que os cinco irmãos respeitam */
+      .torta { margin-left: 42px; width: 300px; height: 18px; background: #ddd; }
+      .larga { width: 2000px; height: 20px; background: #f5f5f5; }
+      .cortado { width: 60px; overflow: hidden; white-space: nowrap; }
+      .controles { display: flex; align-items: flex-start; gap: 0; }
+      .controles .a { height: 32px; border-radius: 4px; padding: 0 12px; }
+      .controles .b { height: 40px; border-radius: 14px; padding: 0 12px; }
+      .fileira { display: flex; align-items: flex-start; }
+      .fileira > * { width: 80px; height: 24px; background: #eee; }
+      .fileira > :nth-child(2) { margin-left: 8px; }
+      .fileira > :nth-child(3) { margin-left: 24px; }
+      .apagado { color: #b3b3b3; background: #ffffff; }
+    </style>
+  </head>
+  <body>
+    <h1 style="font-size: 20px">Título da página</h1>
+    <!-- salta de h1 para h3 -->
+    <h3 style="font-size: 16px">Seção</h3>
+    <!-- e este h4 aparece maior que o h3 acima -->
+    <h4 style="font-size: 26px">Subseção que grita</h4>
+
+    <p class="apagado">Texto cinza claro sobre branco, abaixo do mínimo da norma.</p>
+
+    <div class="coluna"></div>
+    <div class="coluna"></div>
+    <div class="coluna"></div>
+    <div class="coluna"></div>
+    <div class="coluna"></div>
+    <div class="torta"></div>
+
+    <div class="larga"></div>
+    <div class="cortado">Uma frase que não cabe de jeito nenhum nesta caixa estreita</div>
+
+    <div class="controles">
+      <button class="a">Salvar</button>
+      <button class="b">Cancelar</button>
+    </div>
+
+    <div class="fileira"><span></span><span></span><span></span></div>
+
+    <form>
+      <input type="text" id="sem-rotulo" />
+      <button type="button" id="so-icone"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="#888"></circle></svg></button>
+      <button type="button" id="minusculo" style="width: 16px; height: 16px; padding: 0">×</button>
+    </form>
+  </body>
+</html>

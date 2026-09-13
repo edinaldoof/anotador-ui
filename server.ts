@@ -13,10 +13,11 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { Ponte, detectarAgentes, mensagemDeAbertura, mensagemParaLote, modelosDe, sessoesClaude, sessoesCodex, type IdAgente } from "./lib/agentes.ts";
-import { capturarLote } from "./lib/captura.ts";
+import { Avaliacoes, gerarDossie, validarParecer, validarPedido } from "./lib/avaliacao.ts";
+import { capturarAvaliacao, capturarLote } from "./lib/captura.ts";
 import { encontrarChromium } from "./lib/cdp.ts";
 import { paginaConexao } from "./lib/conexao.ts";
-import { analisarSistema } from "./lib/design.ts";
+import { analisarSistema, lerSistemaDeDesign } from "./lib/design.ts";
 import { RegistroConexoes, pastaBase } from "./lib/conexoes.ts";
 import { marcaPeloNome } from "./lib/marcas.ts";
 import { PORTAS_COMUNS, alvoPermitido, detectarServidores, sondar, type Sondagem } from "./lib/deteccao.ts";
@@ -29,7 +30,7 @@ import { Difusor, ehPedidoWs, type InfoOuvinte } from "./lib/ws.ts";
 export const BASE = "/__anotador";
 const RAIZ = dirname(fileURLToPath(import.meta.url));
 const LIMITE_CORPO = 12 * 1024 * 1024;
-const ARQUIVOS_OVERLAY = ["engine.ts", "estilos.ts", "ui.ts", "design.ts"];
+const ARQUIVOS_OVERLAY = ["engine.ts", "estilos.ts", "ui.ts", "auditoria.ts", "design.ts"];
 
 type RemovedorDeTipos = (codigo: string, opcoes?: { mode?: "strip" | "transform" }) => string;
 const removerTipos = (modulo as unknown as { stripTypeScriptTypes?: RemovedorDeTipos }).stripTypeScriptTypes;
@@ -77,6 +78,7 @@ export interface PedidoConexao {
 export interface ServidorAnotador {
   porta: number;
   readonly fila: Fila;
+  readonly avaliacoes: Avaliacoes;
   difusor: Difusor;
   readonly alvo: string | null;
   conectar(pedido: PedidoConexao): Promise<void>;
@@ -274,6 +276,7 @@ function tunelarWs(req: IncomingMessage, socket: Duplex, cabeca: Buffer, alvo: U
 // ---------- API da fila ----------
 interface ContextoApi {
   fila: Fila;
+  avaliacoes: Avaliacoes;
   difusor: Difusor;
   opcoes: OpcoesServidor;
   porta: () => number;
@@ -333,6 +336,26 @@ function rotuloDoModelo(ponte: PonteConfig | null | undefined): string | null {
   const modelo = modelosDe(ponte.agente).find((m) => m.valor === ponte.modelo);
   const titulo = modelo?.titulo ?? ponte.modelo;
   return ponte.esforco ? `${titulo} · ${ponte.esforco}` : titulo;
+}
+
+async function resumoDoSistema(fonte: string | null): Promise<string | null> {
+  if (!fonte) return null;
+  try {
+    const sistema = lerSistemaDeDesign(await lerProjeto(fonte));
+    const linhas = [
+      `${sistema.tokens.length} tokens declarados em ${sistema.arquivos.join(", ")}.`,
+      sistema.espaco.base ? `Passo de espaçamento: ${sistema.espaco.base}px, respeitado por ${sistema.espaco.dentro} de ${sistema.espaco.total} tokens de medida.` : "Sem passo de espaçamento claro.",
+    ];
+    if (sistema.escalaDeTexto.length) linhas.push(`Escala de texto: ${sistema.escalaDeTexto.join(", ")}px.`);
+    const comIntencao = sistema.tokens.filter((t) => t.intencao).slice(0, 12);
+    if (comIntencao.length) {
+      linhas.push("", "Tokens com intenção declarada — respeite o que o projeto já decidiu:");
+      for (const t of comIntencao) linhas.push(`- \`${t.nome}\` (${t.px !== undefined ? t.px + "px" : t.valor}): ${t.intencao}`);
+    }
+    return linhas.join("\n");
+  } catch {
+    return null;
+  }
 }
 
 async function saude(ctx: ContextoApi): Promise<Record<string, unknown>> {
@@ -432,6 +455,48 @@ async function processarLote(ctx: ContextoApi, lote: Lote, origemPublica: string
   }
 }
 
+async function processarAvaliacao(ctx: ContextoApi, pedido: Parameters<typeof gerarDossie>[0], origemPublica: string): Promise<void> {
+  const { avaliacoes, difusor, opcoes } = ctx;
+  let captura: string | null = null;
+  if (opcoes.capturas && pedido.instantaneo) {
+    const caminhoInstantaneo = `${BASE}/avaliacoes/${pedido.id}/instantaneo`;
+    const urls = Array.from(new Set([origemPublica + caminhoInstantaneo, enderecoInterno(opcoes, ctx.porta()) + caminhoInstantaneo]));
+    const destino = join(ctx.fila.dir, "capturas", `avaliacao-${pedido.id}`, "pagina.png");
+    const r = await capturarAvaliacao(destino, pedido.pagina.viewport, { urlsInstantaneo: urls, chrome: opcoes.chrome });
+    captura = r.caminho;
+    if (r.erro) registrar(opcoes, `captura da avaliação ${pedido.id}: ${r.erro}`);
+    if (captura) await avaliacoes.gravar(pedido, gerarDossie(pedido, { porta: ctx.porta(), sistema: await resumoDoSistema(opcoes.fonte), captura }));
+  }
+  const entregues = difusor.transmitir({
+    tipo: "avaliacao",
+    id: pedido.id,
+    quantidade: pedido.achados.length,
+    url: pedido.pagina.url,
+    caminhoMd: avaliacoes.caminhoMd(pedido.id),
+    resumo: `avaliação de ${pedido.pagina.caminho || pedido.pagina.url}${pedido.foco ? ` · foco: ${pedido.foco}` : ""}`,
+  });
+  registrar(opcoes, `avaliação ${pedido.id} de ${pedido.pagina.caminho}: ${pedido.achados.length} achado(s) medido(s) — ${entregues} ouvinte(s)`);
+  if (entregues === 0 && opcoes.ponte) {
+    try {
+      await ctx.ponte.iniciar({
+        agente: opcoes.ponte.agente,
+        sessao: opcoes.ponte.sessao,
+        modelo: opcoes.ponte.modelo ?? null,
+        esforco: opcoes.ponte.esforco ?? null,
+        fonte: opcoes.fonte,
+        motivo: `avaliação ${pedido.id.slice(0, 8)} sem ninguém ouvindo`,
+        mensagem: [
+          `Um pedido de avaliação de página chegou do anotador-ui (projeto "${opcoes.nome}").`,
+          `Leia o dossiê em ${avaliacoes.caminhoMd(pedido.id)} — ele traz o que já foi medido, a estrutura da página, o sistema de design e${captura ? " a captura da tela" : " (sem captura)"}.`,
+          `Julgue o que a medição não alcança e devolva o parecer por POST em http://127.0.0.1:${ctx.porta()}${BASE}/avaliacoes/${pedido.id}/parecer, no formato que o próprio dossiê descreve.`,
+        ].join("\n\n"),
+      });
+    } catch (erro) {
+      registrar(opcoes, `ponte não iniciou para a avaliação: ${erro instanceof Error ? erro.message : String(erro)}`);
+    }
+  }
+}
+
 async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ctx: ContextoApi): Promise<boolean> {
   const { fila, difusor, opcoes } = ctx;
   const caminho = url.pathname.slice(BASE.length) || "/";
@@ -449,6 +514,69 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
   if (caminho === "/saude" && metodo === "GET") {
     responderJson(res, 200, await saude(ctx));
     return true;
+  }
+  if (caminho === "/avaliacoes" && metodo === "POST") {
+    let pedido;
+    try {
+      pedido = validarPedido(JSON.parse((await lerCorpo(req)).toString("utf8")));
+    } catch (erro) {
+      responderJson(res, 400, { ok: false, erro: erro instanceof Error ? erro.message : String(erro) });
+      return true;
+    }
+    const dossie = gerarDossie(pedido, { porta: ctx.porta(), sistema: await resumoDoSistema(opcoes.fonte), captura: null });
+    await ctx.avaliacoes.gravar(pedido, dossie);
+    responderJson(res, 201, { ok: true, id: pedido.id, caminhoMd: ctx.avaliacoes.caminhoMd(pedido.id) });
+    void processarAvaliacao(ctx, pedido, origemPublicaDe(req, opcoes)).catch((erro: Error) => registrar(opcoes, `falha ao processar avaliação: ${erro.message}`));
+    return true;
+  }
+  if (caminho === "/avaliacoes" && metodo === "GET") {
+    responderJson(res, 200, { ok: true, avaliacoes: await ctx.avaliacoes.listar() });
+    return true;
+  }
+  const mAv = /^\/avaliacoes\/([^/]+)(?:\/(md|parecer|instantaneo))?$/.exec(caminho);
+  if (mAv) {
+    const id = decodeURIComponent(mAv[1] ?? "");
+    const sub = mAv[2];
+    if (!idSeguro(id)) {
+      responderJson(res, 400, { ok: false, erro: "id inválido" });
+      return true;
+    }
+    if (sub === "md" && metodo === "GET") {
+      const md = await ctx.avaliacoes.lerMarkdown(id);
+      if (md === null) responderJson(res, 404, { ok: false, erro: "avaliação não encontrada" });
+      else responderTexto(res, 200, md, "text/markdown; charset=utf-8");
+      return true;
+    }
+    if (sub === "instantaneo" && metodo === "GET") {
+      const html = await ctx.avaliacoes.lerInstantaneo(id);
+      if (html === null) responderJson(res, 404, { ok: false, erro: "instantâneo não encontrado" });
+      else responderTexto(res, 200, html, "text/html; charset=utf-8");
+      return true;
+    }
+    if (sub === "parecer" && metodo === "POST") {
+      if (!(await ctx.avaliacoes.ler(id))) {
+        responderJson(res, 404, { ok: false, erro: "avaliação não encontrada" });
+        return true;
+      }
+      let parecer;
+      try {
+        parecer = validarParecer(JSON.parse((await lerCorpo(req, 512 * 1024)).toString("utf8")), opcoes.agente);
+      } catch (erro) {
+        responderJson(res, 400, { ok: false, erro: erro instanceof Error ? erro.message : String(erro) });
+        return true;
+      }
+      await ctx.avaliacoes.gravarParecer(id, parecer);
+      difusor.transmitir({ tipo: "parecer", id, quantidade: parecer.itens.length, resumo: parecer.resumo });
+      registrar(opcoes, `parecer de ${parecer.agente} para a avaliação ${id}: ${parecer.itens.length} item(ns)`);
+      responderJson(res, 201, { ok: true, parecer });
+      return true;
+    }
+    if (!sub && metodo === "GET") {
+      const pedido = await ctx.avaliacoes.ler(id);
+      if (!pedido) responderJson(res, 404, { ok: false, erro: "avaliação não encontrada" });
+      else responderJson(res, 200, { ok: true, avaliacao: { ...pedido, instantaneo: null }, parecer: await ctx.avaliacoes.lerParecer(id) });
+      return true;
+    }
   }
   if (caminho === "/design" && metodo === "GET") {
     if (!opcoes.fonte) {
@@ -798,6 +926,7 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
   const difusor = new Difusor();
   const registro = opcoes.registro === null ? null : new RegistroConexoes(opcoes.registro ?? undefined);
   const ponte = new Ponte(join(fila.dir, "agentes"), (m) => registrar(opcoes, m));
+  let avaliacoes = new Avaliacoes(fila.dir);
   let alvoUrl: URL | null = null;
   let portaReal = opcoes.porta;
 
@@ -826,6 +955,8 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
         fila = new Fila(saidaDe(pedido.nome));
         await fila.preparar();
         ctx.fila = fila;
+        avaliacoes = new Avaliacoes(fila.dir);
+        ctx.avaliacoes = avaliacoes;
         ponte.pasta = join(fila.dir, "agentes");
       }
     }
@@ -850,7 +981,7 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
     registrar(opcoes, "desconectado do app; a página em " + BASE + "/ pede um novo alvo");
   };
 
-  const ctx: ContextoApi = { fila, difusor, opcoes, porta: () => portaReal, alvo: () => alvoUrl, conectar, desconectar, ponte, registro, sondagem: { em: 0, alvo: null, valor: null } };
+  const ctx: ContextoApi = { fila, avaliacoes, difusor, opcoes, porta: () => portaReal, alvo: () => alvoUrl, conectar, desconectar, ponte, registro, sondagem: { em: 0, alvo: null, valor: null } };
 
   if (opcoes.alvo) {
     const inicial = opcoes.alvo;
@@ -916,6 +1047,9 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
     get fila() {
       return ctx.fila;
     },
+    get avaliacoes() {
+      return ctx.avaliacoes;
+    },
     difusor,
     get alvo() {
       return opcoes.alvo;
@@ -945,6 +1079,8 @@ uso:
   anotador desconectar [--porta 3999]
   anotador fontes [--compact] [--forcar]        (instala a San Francisco da Apple nesta máquina)
   anotador design [--fonte dir] [--tudo]        (tokens do projeto e o que foge das próprias regras)
+  anotador avaliacoes [--porta 3999]            (pedidos de avaliação de página, com e sem parecer)
+  anotador avaliacao <id> [--porta 3999]        (dossiê e, se houver, o parecer do agente)
   anotador saude [--porta 3999]
   anotador pendentes [--porta 3999] [--saida dir]
   anotador ver <id> [--porta 3999] [--saida dir]
@@ -1016,6 +1152,30 @@ async function principal(): Promise<void> {
 
   if (comando === "saude") {
     console.log(JSON.stringify(await chamarApi(porta, "/saude"), null, 2));
+    return;
+  }
+  if (comando === "avaliacoes") {
+    const r = (await chamarApi(porta, "/avaliacoes")) as { avaliacoes?: Array<{ id: string; em: string; url: string; achados: number; temParecer: boolean }> };
+    const lista = r.avaliacoes ?? [];
+    if (!lista.length) console.log("nenhuma avaliação pedida");
+    for (const a of lista) console.log(`${a.id}\t${a.em}\t${a.achados} medido(s)\t${a.temParecer ? "com parecer" : "AGUARDA PARECER"}\t${a.url}`);
+    return;
+  }
+  if (comando === "avaliacao") {
+    const id = positionals[1];
+    if (!id) throw new Error("informe o id da avaliação");
+    console.log(String(await chamarApi(porta, `/avaliacoes/${encodeURIComponent(id)}/md`)));
+    const r = (await chamarApi(porta, `/avaliacoes/${encodeURIComponent(id)}`)) as { parecer?: { agente: string; resumo: string; itens: Array<{ titulo: string; categoria: string; gravidade: string; problema: string; sugestao: string }> } };
+    if (!r.parecer) {
+      console.log("\n(sem parecer ainda)");
+      return;
+    }
+    console.log(`\n=== parecer de ${r.parecer.agente} ===\n${r.parecer.resumo}\n`);
+    for (const i of r.parecer.itens) {
+      console.log(`[${i.gravidade}] ${i.titulo}  (${i.categoria})`);
+      console.log(`    ${i.problema}`);
+      console.log(`    → ${i.sugestao}\n`);
+    }
     return;
   }
   if (comando === "design") {

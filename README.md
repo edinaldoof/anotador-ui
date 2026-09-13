@@ -175,6 +175,21 @@ As regras foram calibradas contra projetos reais, porque linter que grita demais
 | cor literal repetida | dois tokens escrevendo o mesmo valor. `--color-text-main: var(--color-brand-ink)` é alias e **não** conta: alias é o jeito certo de dar nome semântico |
 | token sem uso | nem `var()` nem utilitária derivada o referenciam; prefixo de biblioteca é sinalizado à parte, porque ela lê a variável em tempo de execução |
 
+## Avaliação da página
+
+A lupa na barra (`Alt+E`) mede a página com uma régua objetiva e, se você quiser, pede um **parecer ao agente conectado**. São duas coisas separadas de propósito:
+
+**A régua** roda no navegador e não opina — mede. Doze regras: contraste contra o mínimo da norma, alvo de toque, campo sem rótulo, botão sem nome, salto e inversão de nível nos cabeçalhos, transbordo que faz a página rolar de lado, texto cortado, elemento a poucos pixels de uma coluna que os irmãos respeitam, raio e altura desiguais entre controles vizinhos, e vãos irregulares numa mesma linha. Cada achado traz o seletor, e passar o mouse acende o elemento.
+
+**O parecer** é do agente. O anotador monta um dossiê com tudo que já foi medido, a estrutura da página, os componentes em cena, o sistema de design com a intenção de cada token, e a captura da tela; então pede que ele julgue só o que a régua não alcança — hierarquia visual, clareza da ação principal, consistência, densidade, elegância. Cada item volta apontando um elemento, o problema e uma sugestão na linguagem do projeto, com botão para virar anotação e você mandar aplicar.
+
+```bash
+anotador avaliacoes       # pedidos, com e sem parecer
+anotador avaliacao <id>   # o dossiê e o parecer
+```
+
+A separação importa: a régua nunca inventa, e o agente nunca precisa adivinhar o que já foi medido. As regras são testadas contra uma página com defeitos de propósito — cada uma precisa acender lá e ficar calada numa página bem-feita.
+
 ## O que chega ao agente
 
 Cada lote gera em `~/.claude/anotacoes/<projeto>/` (`ANOTADOR_HOME` troca a base):

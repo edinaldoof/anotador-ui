@@ -1,0 +1,548 @@
+// Inspeção da página, no nível do que se faria à mão nas ferramentas do navegador.
+// Só mede: contraste, alvo de toque, hierarquia, transbordo, alinhamento, escala, consistência.
+// Nenhum julgamento subjetivo mora aqui — isso é trabalho do agente, e ele recebe estes fatos
+// junto com a captura para não precisar adivinhar.
+
+// ---------- utilidades de medida ----------
+function luminancia(c: [number, number, number]): number {
+  const f = (v: number) => {
+    const n = v / 255;
+    return n <= 0.03928 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+}
+
+function corRgba(valor: string): [number, number, number, number] | null {
+  const m = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/.exec(valor);
+  if (!m) return null;
+  return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
+}
+
+// O fundo efetivo é o do primeiro ancestral que pinta algo opaco.
+function fundoEfetivo(el: Element): [number, number, number] {
+  let n: Element | null = el;
+  let guarda = 0;
+  while (n && guarda++ < 20) {
+    const c = corRgba(getComputedStyle(n).backgroundColor);
+    if (c && c[3] > 0.95) return [c[0], c[1], c[2]];
+    n = n.parentElement;
+  }
+  return [255, 255, 255];
+}
+
+function razaoDeContraste(frente: [number, number, number], fundo: [number, number, number]): number {
+  const a = luminancia(frente);
+  const b = luminancia(fundo);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+function descreverCurto(el: Element): string {
+  let d = el.tagName.toLowerCase();
+  if (el.id && !ehDinamico(el.id)) d += "#" + el.id;
+  const cls = classesEstaveis(el).slice(0, 2);
+  if (cls.length) d += "." + cls.join(".");
+  const t = (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 30);
+  return d + (t ? ` "${t}"` : "");
+}
+
+function melhorSeletor(el: Element): string | null {
+  try {
+    return construirSeletores(el, el.ownerDocument)[0]?.valor ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ---------- inspeção ----------
+function auditarPagina(): ResultadoAuditoria {
+  const achados: AchadoAuditoria[] = [];
+  const add = (a: Omit<AchadoAuditoria, "seletor" | "rect">, el: Element | null) => {
+    achados.push({ ...a, seletor: el ? melhorSeletor(el) : null, rect: el ? rectTopo(el) : null });
+  };
+  const visiveis: Array<{ el: Element; r: DOMRect; cs: CSSStyleDeclaration }> = [];
+  for (const el of document.querySelectorAll("body *")) {
+    if (visiveis.length > 3000) break;
+    if (ignorar(el)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === "hidden" || cs.display === "none" || Number(cs.opacity) === 0) continue;
+    visiveis.push({ el, r, cs });
+  }
+
+  // 1. contraste do texto (WCAG AA)
+  for (const { el, cs } of visiveis) {
+    if (textoDireto(el).length < 2) continue;
+    const fg = corRgba(cs.color);
+    if (!fg || fg[3] < 0.5) continue;
+    const razao = razaoDeContraste([fg[0], fg[1], fg[2]], fundoEfetivo(el));
+    const tam = parseFloat(cs.fontSize);
+    const peso = Number(cs.fontWeight) || 400;
+    const minimo = tam >= 24 || (tam >= 18.66 && peso >= 700) ? 3 : 4.5;
+    if (razao < minimo) {
+      add(
+        {
+          regra: "contraste abaixo do mínimo",
+          categoria: "acessibilidade",
+          gravidade: razao < minimo - 1.5 ? "alta" : "media",
+          alvo: descreverCurto(el),
+          evidencia: `${razao.toFixed(2)}:1 onde a norma pede ${minimo}:1 (texto de ${Math.round(tam)}px)`,
+        },
+        el
+      );
+    }
+  }
+
+  // 2. alvo de toque (WCAG 2.2 §2.5.8); link no meio de um parágrafo é exceção da própria norma
+  for (const el of document.querySelectorAll('a[href], button, input:not([type=hidden]), select, textarea, [role="button"], [role="link"]')) {
+    if (ignorar(el)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1 || (r.width >= 24 && r.height >= 24)) continue;
+    const pai = el.parentElement;
+    const embutido = el.tagName === "A" && pai && (pai.textContent ?? "").trim().length > (el.textContent ?? "").trim().length + 3;
+    if (embutido) continue;
+    add(
+      {
+        regra: "alvo de toque pequeno",
+        categoria: "acessibilidade",
+        gravidade: "media",
+        alvo: descreverCurto(el),
+        evidencia: `${Math.round(r.width)}×${Math.round(r.height)}px, abaixo de 24×24`,
+      },
+      el
+    );
+  }
+
+  // 3. rótulo acessível em campo e botão
+  for (const el of document.querySelectorAll("input:not([type=hidden]), select, textarea")) {
+    if (ignorar(el)) continue;
+    const campo = el as HTMLInputElement;
+    if (campo.labels?.length || campo.getAttribute("aria-label") || campo.getAttribute("aria-labelledby") || campo.getAttribute("title") || campo.getAttribute("placeholder")) continue;
+    add({ regra: "campo sem rótulo", categoria: "acessibilidade", gravidade: "alta", alvo: descreverCurto(el), evidencia: "nada nomeia este campo para leitor de tela" }, el);
+  }
+  for (const el of document.querySelectorAll('button, [role="button"]')) {
+    if (ignorar(el) || (el.textContent ?? "").trim() || el.getAttribute("aria-label") || el.getAttribute("title")) continue;
+    add({ regra: "botão sem nome", categoria: "acessibilidade", gravidade: "alta", alvo: descreverCurto(el), evidencia: "só ícone, sem texto nem aria-label" }, el);
+  }
+
+  // 4. hierarquia dos cabeçalhos
+  const cabecalhos = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6"))
+    .filter((el) => !ignorar(el))
+    .map((el) => ({ el, n: Number(el.tagName[1]), tam: parseFloat(getComputedStyle(el).fontSize) }));
+  const h1 = cabecalhos.filter((c) => c.n === 1);
+  if (h1.length === 0 && cabecalhos.length) add({ regra: "sem h1", categoria: "hierarquia", gravidade: "media", alvo: "documento", evidencia: "a página tem cabeçalhos, mas nenhum de primeiro nível" }, null);
+  if (h1.length > 1) add({ regra: "vários h1", categoria: "hierarquia", gravidade: "media", alvo: "documento", evidencia: `${h1.length} cabeçalhos de primeiro nível competindo pelo topo` }, h1[1]?.el ?? null);
+  for (let i = 1; i < cabecalhos.length; i++) {
+    const a = cabecalhos[i - 1];
+    const b = cabecalhos[i];
+    if (!a || !b) continue;
+    if (b.n - a.n > 1) add({ regra: "salto de nível", categoria: "hierarquia", gravidade: "media", alvo: descreverCurto(b.el), evidencia: `vai de h${a.n} para h${b.n} sem passar pelo nível do meio` }, b.el);
+    if (b.n > a.n && b.tam > a.tam + 0.5) {
+      add({ regra: "hierarquia invertida", categoria: "hierarquia", gravidade: "media", alvo: descreverCurto(b.el), evidencia: `h${b.n} aparece em ${b.tam}px, maior que o h${a.n} acima (${a.tam}px)` }, b.el);
+    }
+  }
+
+  // 5. transbordo e texto cortado
+  const largura = document.documentElement.clientWidth;
+  // Passar da janela só é defeito se a página inteira rolar de lado. Dentro de um contêiner
+  // que rola de propósito (tabela larga, carrossel), sair da borda é o comportamento esperado.
+  const rolaDeLado = document.documentElement.scrollWidth > largura + 1;
+  const dentroDeRolagem = (el: Element): boolean => {
+    let n = el.parentElement;
+    let guarda = 0;
+    while (n && guarda++ < 20) {
+      const o = getComputedStyle(n).overflowX;
+      if (o === "auto" || o === "scroll") return true;
+      n = n.parentElement;
+    }
+    return false;
+  };
+  for (const { el, r, cs } of visiveis) {
+    if (rolaDeLado && r.right > largura + 1 && !dentroDeRolagem(el)) {
+      add({ regra: "transborda a janela", categoria: "layout", gravidade: "alta", alvo: descreverCurto(el), evidencia: `passa ${Math.round(r.right - largura)}px da largura de ${largura}px e faz a página rolar de lado` }, el);
+    }
+    if (el.children.length === 0 && el.scrollWidth > el.clientWidth + 2 && /hidden|clip/.test(cs.overflowX)) {
+      add({ regra: "texto cortado", categoria: "layout", gravidade: "media", alvo: descreverCurto(el), evidencia: `conteúdo de ${el.scrollWidth}px espremido em ${el.clientWidth}px` }, el);
+    }
+  }
+
+  // 6. quase-alinhamento: borda a 1–3px de uma coluna que vários elementos respeitam
+  const colunas = new Map<number, number>();
+  for (const { r } of visiveis) {
+    const x = Math.round(r.left);
+    colunas.set(x, (colunas.get(x) ?? 0) + 1);
+  }
+  const fortes = Array.from(colunas.entries())
+    .filter(([, n]) => n >= 4)
+    .map(([x]) => x);
+  const jaApontado = new Set<string>();
+  for (const { el, r } of visiveis) {
+    const x = Math.round(r.left);
+    if ((colunas.get(x) ?? 0) >= 4) continue;
+    const perto = fortes.find((f) => Math.abs(f - x) >= 1 && Math.abs(f - x) <= 3);
+    if (perto === undefined) continue;
+    const chave = descreverCurto(el);
+    if (jaApontado.has(chave)) continue;
+    jaApontado.add(chave);
+    add(
+      {
+        regra: "quase alinhado",
+        categoria: "layout",
+        gravidade: "baixa",
+        alvo: chave,
+        evidencia: `começa em ${x}px, ${Math.abs(perto - x)}px fora da coluna de ${perto}px que ${colunas.get(perto)} elementos respeitam`,
+      },
+      el
+    );
+  }
+
+  // 7. irmãos que deveriam combinar: raio e altura de controles lado a lado
+  for (const { el } of visiveis) {
+    const filhos = Array.from(el.children).filter((f) => !ignorar(f) && f.getBoundingClientRect().width > 0);
+    if (filhos.length < 2 || filhos.length > 12) continue;
+    const cs = getComputedStyle(el);
+    if (!/flex|grid/.test(cs.display)) continue;
+
+    const raios = new Map<string, number>();
+    const alturas: number[] = [];
+    let controles = 0;
+    for (const f of filhos) {
+      const fcs = getComputedStyle(f);
+      const r = f.getBoundingClientRect();
+      const ehControle = /^(button|a|input|select)$/.test(f.tagName.toLowerCase()) || f.getAttribute("role") === "button";
+      if (ehControle) {
+        controles++;
+        alturas.push(Math.round(r.height));
+        raios.set(fcs.borderTopLeftRadius, (raios.get(fcs.borderTopLeftRadius) ?? 0) + 1);
+      }
+    }
+    if (controles >= 2) {
+      if (raios.size > 1) {
+        add(
+          {
+            regra: "raio inconsistente",
+            categoria: "consistencia",
+            gravidade: "media",
+            alvo: descreverCurto(el),
+            evidencia: `controles lado a lado com raios diferentes: ${Array.from(raios.keys()).join(", ")}`,
+          },
+          el
+        );
+      }
+      const alturasDistintas = Array.from(new Set(alturas));
+      if (alturasDistintas.length > 1 && Math.max(...alturasDistintas) - Math.min(...alturasDistintas) > 2) {
+        add(
+          {
+            regra: "altura de controle desigual",
+            categoria: "consistencia",
+            gravidade: "media",
+            alvo: descreverCurto(el),
+            evidencia: `botões e campos vizinhos medem ${alturasDistintas.sort((a, b) => a - b).join("px, ")}px`,
+          },
+          el
+        );
+      }
+    }
+
+    // 8. grade: espaços desiguais entre itens de uma mesma linha
+    const emLinha = filhos.map((f) => f.getBoundingClientRect()).filter((r) => r.width > 0);
+    if (emLinha.length >= 3) {
+      const mesmaLinha = emLinha.every((r) => Math.abs(r.top - (emLinha[0] as DOMRect).top) < 2);
+      if (mesmaLinha) {
+        const vaos: number[] = [];
+        for (let i = 1; i < emLinha.length; i++) vaos.push(Math.round((emLinha[i] as DOMRect).left - (emLinha[i - 1] as DOMRect).right));
+        const distintos = Array.from(new Set(vaos.filter((v) => v >= 0)));
+        if (distintos.length > 1 && Math.max(...distintos) - Math.min(...distintos) > 2) {
+          add(
+            {
+              regra: "vãos desiguais",
+              categoria: "escala",
+              gravidade: "baixa",
+              alvo: descreverCurto(el),
+              evidencia: `itens da mesma linha separados por ${distintos.sort((a, b) => a - b).join("px, ")}px`,
+            },
+            el
+          );
+        }
+      }
+    }
+  }
+
+  const ordem = { alta: 0, media: 1, baixa: 2 };
+  achados.sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade] || a.regra.localeCompare(b.regra));
+  return { achados, medidos: visiveis.length, em: new Date().toISOString() };
+}
+
+/** Contexto que ajuda o agente a julgar sem adivinhar: estrutura, componentes e escala. */
+function contextoDaPagina(): Record<string, unknown> {
+  const contar = (sel: string) => document.querySelectorAll(sel).length;
+  const cabecalhos = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6"))
+    .filter((el) => !ignorar(el))
+    .slice(0, 20)
+    .map((el) => `${el.tagName.toLowerCase()}: ${(el.textContent ?? "").trim().slice(0, 60)}`);
+  const componentes = new Map<string, number>();
+  for (const el of Array.from(document.querySelectorAll("body *")).slice(0, 1500)) {
+    if (ignorar(el)) continue;
+    const nome = componentesReact(el)[0];
+    if (nome) componentes.set(nome, (componentes.get(nome) ?? 0) + 1);
+  }
+  return {
+    url: location.href,
+    titulo: document.title,
+    viewport: { largura: innerWidth, altura: innerHeight, dpr: devicePixelRatio || 1 },
+    tema: document.documentElement.getAttribute("data-theme"),
+    estrutura: {
+      cabecalhos,
+      marcos: ["header", "nav", "main", "aside", "footer", "form"].filter((t) => contar(t) > 0),
+      botoes: contar('button, [role="button"]'),
+      links: contar("a[href]"),
+      campos: contar("input:not([type=hidden]), select, textarea"),
+      imagens: contar("img"),
+    },
+    componentes: Array.from(componentes.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([nome, n]) => `${nome} ×${n}`),
+  };
+}
+
+// ---------- painel: medição agora, parecer do agente quando ele responder ----------
+interface EstadoAvaliacao {
+  aberto: boolean;
+  medicao: ResultadoAuditoria | null;
+  id: string | null;
+  enviando: boolean;
+  parecer: { agente: string; resumo: string; itens: ItemParecerOverlay[] } | null;
+  erro: string | null;
+}
+
+interface ItemParecerOverlay {
+  titulo: string;
+  categoria: string;
+  gravidade: "alta" | "media" | "baixa";
+  seletor?: string | null;
+  problema: string;
+  sugestao: string;
+  comoAplicar?: string;
+}
+
+const avaliacao: EstadoAvaliacao = { aberto: false, medicao: null, id: null, enviando: false, parecer: null, erro: null };
+let sondaParecer: ReturnType<typeof setInterval> | null = null;
+
+function elementoDoSeletor(seletor: string | null | undefined): ElementoEstilizavel | null {
+  if (!seletor) return null;
+  try {
+    const el = document.querySelector(seletor);
+    return estilizavel(el) ? el : null;
+  } catch {
+    return null;
+  }
+}
+
+async function alternarAvaliacao(): Promise<void> {
+  if (avaliacao.aberto) {
+    fecharAvaliacao();
+    return;
+  }
+  avaliacao.aberto = true;
+  ui.btnAvaliar.classList.add("ativo");
+  if (!ui.avaliacao) {
+    ui.avaliacao = h("div", { class: "an-avaliacao" });
+    raiz?.append(ui.avaliacao);
+  }
+  ui.avaliacao.hidden = false;
+  avaliacao.medicao = auditarPagina();
+  renderizarAvaliacao();
+}
+
+function fecharAvaliacao(): void {
+  avaliacao.aberto = false;
+  ui.btnAvaliar.classList.remove("ativo");
+  if (ui.avaliacao) ui.avaliacao.hidden = true;
+  limparRealces();
+  if (sondaParecer) clearInterval(sondaParecer);
+  sondaParecer = null;
+}
+
+async function pedirParecer(foco: string): Promise<void> {
+  if (avaliacao.enviando || !avaliacao.medicao) return;
+  avaliacao.enviando = true;
+  avaliacao.erro = null;
+  avaliacao.parecer = null;
+  renderizarAvaliacao();
+  try {
+    const contexto = { ...contextoDaPagina(), medidos: avaliacao.medicao.medidos };
+    const corpo = {
+      pagina: {
+        url: location.href,
+        caminho: location.pathname,
+        titulo: document.title,
+        viewport: { largura: innerWidth, altura: innerHeight, dpr: devicePixelRatio || 1 },
+        tema: document.documentElement.getAttribute("data-theme"),
+      },
+      contexto,
+      achados: avaliacao.medicao.achados,
+      foco: foco || null,
+      instantaneo: CFG.capturas ? instantaneoHtml([]) : null,
+    };
+    const resp = await fetch(CFG.base + "/avaliacoes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpo) });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    avaliacao.id = ((await resp.json()) as { id: string }).id;
+    avisar(`Pedido de parecer enviado a ${AGENTE}.`);
+    acompanharParecer();
+  } catch (erro) {
+    avaliacao.erro = erro instanceof Error ? erro.message : String(erro);
+  } finally {
+    avaliacao.enviando = false;
+    renderizarAvaliacao();
+  }
+}
+
+function acompanharParecer(): void {
+  if (sondaParecer) clearInterval(sondaParecer);
+  const inicio = Date.now();
+  sondaParecer = setInterval(() => {
+    if (!avaliacao.id || Date.now() - inicio > 20 * 60 * 1000) {
+      if (sondaParecer) clearInterval(sondaParecer);
+      sondaParecer = null;
+      return;
+    }
+    void fetch(CFG.base + "/avaliacoes/" + encodeURIComponent(avaliacao.id), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((corpo: { parecer?: EstadoAvaliacao["parecer"] } | null) => {
+        if (!corpo?.parecer) return;
+        avaliacao.parecer = corpo.parecer;
+        if (sondaParecer) clearInterval(sondaParecer);
+        sondaParecer = null;
+        avisar(`${corpo.parecer.agente} respondeu: ${corpo.parecer.itens.length} ponto(s).`, 6000);
+        renderizarAvaliacao();
+      })
+      .catch(() => undefined);
+  }, 3000);
+}
+
+function linhaDeAchado(a: AchadoAuditoria): HTMLElement {
+  const el = elementoDoSeletor(a.seletor);
+  return h(
+    "div",
+    {
+      class: "an-achado " + a.gravidade,
+      title: a.seletor ?? "",
+      onmouseenter: () => (el ? realcar([el]) : undefined),
+      onmouseleave: limparRealces,
+      onclick: () => {
+        if (!el) return;
+        fecharAvaliacao();
+        selecionarElemento(el);
+      },
+    },
+    h("span", { class: "sinal" }),
+    h("span", { class: "col" }, h("span", { class: "titulo" }, a.regra), h("span", { class: "sub" }, a.alvo), h("span", { class: "evid" }, a.evidencia))
+  );
+}
+
+function linhaDeParecer(i: ItemParecerOverlay): HTMLElement {
+  const el = elementoDoSeletor(i.seletor);
+  const bloco = h(
+    "div",
+    {
+      class: "an-achado parecer " + i.gravidade,
+      onmouseenter: () => (el ? realcar([el]) : undefined),
+      onmouseleave: limparRealces,
+    },
+    h("span", { class: "sinal" }),
+    h(
+      "span",
+      { class: "col" },
+      h("span", { class: "titulo" }, i.titulo, h("span", { class: "cat" }, i.categoria)),
+      h("span", { class: "evid" }, i.problema),
+      h("span", { class: "sugestao" }, "→ " + i.sugestao),
+      i.comoAplicar ? h("span", { class: "aplicar mono" }, i.comoAplicar) : null
+    )
+  );
+  if (el) {
+    bloco.append(
+      h("button", {
+        class: "an-btn mini",
+        title: "Selecionar este elemento para anotar",
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          fecharAvaliacao();
+          selecionarElemento(el);
+          if (estado.atual && !estado.atual.comentario) {
+            estado.atual.comentario = i.sugestao;
+            if (ui.entradaBalao) ui.entradaBalao.value = i.sugestao;
+            ui.comentarioPainel.value = i.sugestao;
+          }
+        },
+      }, "Anotar")
+    );
+  }
+  return bloco;
+}
+
+function renderizarAvaliacao(): void {
+  const painel = ui.avaliacao;
+  if (!painel) return;
+  const m = avaliacao.medicao;
+  painel.textContent = "";
+  const alca = h("span", { class: "an-alca", html: ICONES.alca, title: "Arrastar" });
+  const cab = h(
+    "div",
+    { class: "cab" },
+    alca,
+    h("span", { class: "an-ico", style: "background:var(--an-superficie-alta)", html: ICONES.lupa }),
+    h(
+      "div",
+      { class: "tit" },
+      "Avaliação da página",
+      h("span", { class: "sub" }, m ? `${m.medidos} elementos medidos · ${m.achados.length} achado(s)` : "medindo…")
+    ),
+    h("button", {
+      class: "an-ico",
+      title: "Medir de novo",
+      html: ICONES.recarregar,
+      onclick: () => {
+        avaliacao.medicao = auditarPagina();
+        renderizarAvaliacao();
+      },
+    }),
+    h("button", { class: "an-ico", title: "Fechar", html: ICONES.fechar, onclick: fecharAvaliacao })
+  );
+  painel.append(cab);
+  tornarArrastavel(painel, [alca, cab], "avaliacao");
+
+  const corpo = h("div", { class: "corpo" });
+  if (m) {
+    corpo.append(h("div", { class: "secao" }, "Medido pela régua"));
+    if (!m.achados.length) corpo.append(h("div", { class: "vazio" }, "Nada fora do lugar nas regras objetivas."));
+    for (const a of m.achados) corpo.append(linhaDeAchado(a));
+  }
+
+  if (avaliacao.parecer) {
+    const p = avaliacao.parecer;
+    corpo.append(h("div", { class: "secao" }, `Parecer de ${p.agente}`));
+    if (p.resumo) corpo.append(h("div", { class: "resumo" }, p.resumo));
+    if (!p.itens.length) corpo.append(h("div", { class: "vazio" }, "Sem apontamentos além do que já foi medido."));
+    for (const i of p.itens) corpo.append(linhaDeParecer(i));
+  } else if (avaliacao.id) {
+    corpo.append(h("div", { class: "aguardando" }, `Aguardando ${AGENTE} olhar a página…`));
+  }
+  painel.append(corpo);
+
+  const campo = h("input", { type: "text", placeholder: `O que ${AGENTE} deve olhar com atenção? (opcional)` });
+  const botao = h(
+    "button",
+    {
+      class: "an-btn primario",
+      disabled: avaliacao.enviando || !m,
+      onclick: () => void pedirParecer(campo.value.trim()),
+    },
+    avaliacao.enviando ? "Enviando…" : avaliacao.parecer ? "Pedir de novo" : `Pedir parecer a ${AGENTE}`
+  );
+  campo.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") void pedirParecer(campo.value.trim());
+  });
+  painel.append(h("div", { class: "rodape" }, campo, botao));
+  if (avaliacao.erro) painel.append(h("div", { class: "erro" }, avaliacao.erro));
+}

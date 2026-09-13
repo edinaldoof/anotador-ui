@@ -134,6 +134,8 @@ interface Ui {
   camadaRealces: HTMLDivElement;
   btnDesign: HTMLButtonElement;
   design: HTMLDivElement | null;
+  btnAvaliar: HTMLButtonElement;
+  avaliacao: HTMLDivElement | null;
 }
 
 interface OpcoesArrasto {
@@ -164,6 +166,7 @@ const ICONES = {
   fixar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M8 3h8l-1 7 3 3H6l3-3z"/></svg>',
   seta: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6l6 6-6 6z"/></svg>',
   paleta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.5-1.1-.3-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4.1-4-7.7-9-7.7Z"/><circle cx="7.5" cy="11.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="11" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"/></svg>',
+  lupa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.2-4.2"/><path d="M8 10.5h5M10.5 8v5"/></svg>',
   recarregar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>',
 };
 
@@ -193,7 +196,7 @@ const estado: Estado = {
 
 let host: HTMLDivElement | null = null;
 let raiz: HTMLDivElement | null = null;
-const ui = { balao: null, entradaBalao: null, religar: null, conversa: null, arvore: null, arvoreCorpo: null, arvoreSub: null, btnFixar: null, btnLimparArea: null, design: null } as Ui;
+const ui = { balao: null, entradaBalao: null, religar: null, conversa: null, arvore: null, arvoreCorpo: null, arvoreSub: null, btnFixar: null, btnLimparArea: null, design: null, avaliacao: null } as Ui;
 
 // ---------- utilidades ----------
 type Filho = Node | string | number | null | undefined | false | Filho[];
@@ -428,6 +431,8 @@ function montar(): void {
     },
     arvore: () => resumoArvore(),
     abrirArvore: () => abrirArvore(),
+    auditar: () => auditarPagina(),
+    contexto: () => contextoDaPagina(),
   };
   window.__anotadorCarregado = true;
 }
@@ -458,6 +463,7 @@ function montarBarra(raizUi: HTMLDivElement): void {
   ui.alcaBarra = h("button", { class: "an-alca", title: "Arrastar a barra (duplo clique recoloca)", html: ICONES.alca });
   ui.btnArvore = h("button", { class: "an-ico", title: "Estrutura de elementos: árvore para escolher o nível certo (Alt+R)", html: ICONES.arvore, onclick: () => alternarArvore() });
   ui.btnDesign = h("button", { class: "an-ico", title: "Sistema de design: o que a página pinta e o que o projeto declara (Alt+D)", html: ICONES.paleta, onclick: () => void alternarExplorador() });
+  ui.btnAvaliar = h("button", { class: "an-ico", title: "Avaliar a página: régua objetiva e parecer do agente (Alt+E)", html: ICONES.lupa, onclick: () => void alternarAvaliacao() });
   const titulo = h("div", { class: "titulo" }, "Anotando ", h("span", { class: "url" }, "• " + location.host + location.pathname));
   ui.barra = h(
     "div",
@@ -471,6 +477,7 @@ function montarBarra(raizUi: HTMLDivElement): void {
     h("button", { class: "an-ico", title: "Ver fila e lotes", html: ICONES.lista, onclick: () => alternarFila() }),
     ui.btnArvore,
     ui.btnDesign,
+    ui.btnAvaliar,
     h("div", { class: "an-modo" }, ui.modoSel, ui.modoNav),
     ui.btnEnviar,
     ui.estado
@@ -597,6 +604,7 @@ function ajustarFlutuantes(): void {
     [ui.conversa, "conversa"],
     [ui.arvore, "arvore"],
     [ui.design, "design"],
+    [ui.avaliacao, "avaliacao"],
   ];
   for (const [el, chave] of flutuantes) {
     if (!el || el.hidden || !el.style.left) continue;
@@ -819,6 +827,11 @@ function aoTeclar(e: KeyboardEvent): void {
     void alternarExplorador();
     return;
   }
+  if (soAlt && e.key.toLowerCase() === "e" && raiz && !raiz.hidden) {
+    e.preventDefault();
+    void alternarAvaliacao();
+    return;
+  }
   if (soAlt && /^Arrow(Up|Down|Left|Right)$/.test(e.key) && raiz && !raiz.hidden && estado.armado) {
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -855,6 +868,10 @@ function aoTeclar(e: KeyboardEvent): void {
     }
     if (estado.arvore.area) {
       limparArea();
+      return;
+    }
+    if (avaliacao.aberto && dentroDe(e, ui.avaliacao)) {
+      fecharAvaliacao();
       return;
     }
     if (design.aberto && dentroDe(e, ui.design)) {

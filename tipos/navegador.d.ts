@@ -38,6 +38,8 @@ interface DepuracaoAnotador {
   abrirConversa(id: string): boolean;
   arvore(): ResumoArvore;
   abrirArvore(): void;
+  auditar(): ResultadoAuditoria;
+  contexto(): Record<string, unknown>;
 }
 
 interface Window {

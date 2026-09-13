@@ -199,7 +199,7 @@ interface Mensagem {
 }
 
 interface EventoAnotador {
-  tipo: "ola" | "lote" | "progresso" | "processado" | "mensagem" | "conexao";
+  tipo: "ola" | "lote" | "progresso" | "processado" | "mensagem" | "conexao" | "avaliacao" | "parecer";
   nome?: string;
   /** app conectado (ola, conexao); null quando desconectou */
   alvo?: string | null;
@@ -213,6 +213,24 @@ interface EventoAnotador {
   arquivos?: string[];
   nota?: string;
   mensagem?: Mensagem;
+}
+
+interface AchadoAuditoria {
+  regra: string;
+  categoria: "acessibilidade" | "hierarquia" | "consistencia" | "escala" | "layout";
+  gravidade: "alta" | "media" | "baixa";
+  alvo: string;
+  evidencia: string;
+  /** melhor seletor do elemento, para destacar e para achar no código */
+  seletor: string | null;
+  rect: Rect | null;
+}
+
+interface ResultadoAuditoria {
+  achados: AchadoAuditoria[];
+  /** quantos elementos visíveis foram medidos */
+  medidos: number;
+  em: string;
 }
 
 /** estado da árvore de elementos do overlay, para depuração e testes */

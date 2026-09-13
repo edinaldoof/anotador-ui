@@ -29,6 +29,7 @@ export interface AlvoFalso {
 export async function criarAlvoFalso(): Promise<AlvoFalso> {
   const modelo = await readFile(join(AQUI, "fixtures", "pagina.html"), "utf8");
   const html = modelo.replace(/__NONCE__/g, NONCE);
+  const comDefeitos = await readFile(join(AQUI, "fixtures", "defeitos.html"), "utf8");
   const pedidos: PedidoVisto[] = [];
   const registrarPedido = (req: IncomingMessage) => {
     const headers: Record<string, string> = {};
@@ -41,6 +42,13 @@ export async function criarAlvoFalso(): Promise<AlvoFalso> {
     if (url.pathname === "/" || url.pathname === "/outra") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-security-policy": CSP });
       res.end(html);
+      return;
+    }
+    if (url.pathname === "/defeitos") {
+      // Sem CSP nesta rota: `style-src 'self'` bloquearia o <style> embutido e a página
+      // chegaria sem nenhum dos defeitos que ela existe para ter.
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(comDefeitos);
       return;
     }
     if (url.pathname === "/gzip") {

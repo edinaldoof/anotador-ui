@@ -61,7 +61,19 @@ Não marque como processado antes de aplicar. Se decidir não aplicar algo, marq
 
 É o usuário respondendo pela interface (a uma pergunta sua, se `responde` estiver preenchido; recado livre, se não). `opcoes` traz o que ele clicou; `texto`, o que escreveu. Continue o lote de onde parou; confirme com `anotador nota <id>` o que vai fazer com a resposta.
 
-## 2c. Ao chegar `{"tipo":"conexao"}`
+## 2c. Ao chegar `{"tipo":"avaliacao", id, caminhoMd, resumo}`
+
+O usuário pediu um **parecer de UI/UX** sobre a página inteira, não uma anotação pontual.
+
+1. Leia o dossiê em `caminhoMd`. Ele traz: o que a régua objetiva já mediu (contraste, alvo de toque, hierarquia de cabeçalho, transbordo, alinhamento, consistência de controles), a estrutura da página, os componentes em cena, o sistema de design do projeto com a intenção de cada token, e o caminho da captura.
+2. **Leia a captura** (Read no PNG). Sem olhar a tela, o parecer vira palpite.
+3. Julgue só o que a régua não alcança: hierarquia visual, clareza da ação principal, consistência entre componentes do mesmo papel, densidade e respiro, elegância. Não repita os achados objetivos.
+4. Cada item precisa apontar **um elemento concreto** (seletor), dizer o **problema** para quem usa, e uma **sugestão aplicável na linguagem do projeto** (token ou utilitária, nunca valor solto). Se a tela estiver boa, diga isso em poucas linhas — parecer inflado queima a confiança na ferramenta.
+5. Devolva por `POST /__anotador/avaliacoes/<id>/parecer` no formato que o próprio dossiê descreve. O painel do usuário mostra cada item com botão para anotar e mandar você aplicar.
+
+`anotador avaliacoes` lista os pedidos; `anotador avaliacao <id>` imprime o dossiê e o parecer.
+
+## 2d. Ao chegar `{"tipo":"conexao"}`
 
 O usuário trocou (ou desligou) o app conectado pela página de conexão: `alvo` é a nova URL (ou `null`). Nada a fazer além de saber para qual app os próximos lotes se referem.
 
