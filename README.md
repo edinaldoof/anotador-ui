@@ -154,6 +154,27 @@ As marcas vêm do [Simple Icons](https://simpleicons.org) (CC0), embutidas como 
 
 A página lista as **sessões do projeto** — as abertas agora e as recentes — e mostra quem está **ouvindo**. Antigravity, Cursor e afins não têm linha de comando para agentes: abra a pasta do projeto e peça ao agente para ler `lotes/<id>.md` e usar a API.
 
+## Sistema de design
+
+O anotador lê os tokens que o projeto declara no CSS — inclusive **a intenção escrita no comentário ao lado** — e compara com o que a página realmente pinta. O que não casa é o achado: cor sem token, medida fora da escala, token que ninguém usa.
+
+No overlay, o ícone de paleta (`Alt+D`) abre o explorador: cores, tamanhos de texto, espaçamentos e raios em uso, cada um com quantos elementos o usam e a qual token pertence. Passar o mouse acende na página todos os elementos daquele valor; clicar seleciona um para anotar. A aba **Fora do sistema** reúne o que escapou.
+
+Pela linha de comando, para o agente ou para o relatório:
+
+```bash
+anotador design          # tokens, escala e achados acima de "baixa"
+anotador design --tudo   # inclui token sem uso e cor repetida
+```
+
+As regras foram calibradas contra projetos reais, porque linter que grita demais ninguém lê:
+
+| Regra | O que conta como defeito |
+|---|---|
+| espaçamento fora da escala | valor que não é múltiplo do passo que a maioria dos tokens respeita; exceção documentada no comentário cai para gravidade baixa |
+| cor literal repetida | dois tokens escrevendo o mesmo valor. `--color-text-main: var(--color-brand-ink)` é alias e **não** conta: alias é o jeito certo de dar nome semântico |
+| token sem uso | nem `var()` nem utilitária derivada o referenciam; prefixo de biblioteca é sinalizado à parte, porque ela lê a variável em tempo de execução |
+
 ## O que chega ao agente
 
 Cada lote gera em `~/.claude/anotacoes/<projeto>/` (`ANOTADOR_HOME` troca a base):

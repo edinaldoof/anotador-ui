@@ -16,6 +16,7 @@ import { Ponte, detectarAgentes, mensagemDeAbertura, mensagemParaLote, modelosDe
 import { capturarLote } from "./lib/captura.ts";
 import { encontrarChromium } from "./lib/cdp.ts";
 import { paginaConexao } from "./lib/conexao.ts";
+import { analisarSistema } from "./lib/design.ts";
 import { RegistroConexoes, pastaBase } from "./lib/conexoes.ts";
 import { marcaPeloNome } from "./lib/marcas.ts";
 import { PORTAS_COMUNS, alvoPermitido, detectarServidores, sondar, type Sondagem } from "./lib/deteccao.ts";
@@ -28,7 +29,7 @@ import { Difusor, ehPedidoWs, type InfoOuvinte } from "./lib/ws.ts";
 export const BASE = "/__anotador";
 const RAIZ = dirname(fileURLToPath(import.meta.url));
 const LIMITE_CORPO = 12 * 1024 * 1024;
-const ARQUIVOS_OVERLAY = ["engine.ts", "estilos.ts", "ui.ts"];
+const ARQUIVOS_OVERLAY = ["engine.ts", "estilos.ts", "ui.ts", "design.ts"];
 
 type RemovedorDeTipos = (codigo: string, opcoes?: { mode?: "strip" | "transform" }) => string;
 const removerTipos = (modulo as unknown as { stripTypeScriptTypes?: RemovedorDeTipos }).stripTypeScriptTypes;
@@ -447,6 +448,15 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
   }
   if (caminho === "/saude" && metodo === "GET") {
     responderJson(res, 200, await saude(ctx));
+    return true;
+  }
+  if (caminho === "/design" && metodo === "GET") {
+    if (!opcoes.fonte) {
+      responderJson(res, 200, { ok: true, sistema: null, achados: [], erro: "sem pasta de código-fonte configurada" });
+      return true;
+    }
+    const relatorio = analisarSistema(await lerProjeto(opcoes.fonte));
+    responderJson(res, 200, { ok: true, ...relatorio });
     return true;
   }
   if (caminho === "/deteccao" && metodo === "GET") {
@@ -934,6 +944,7 @@ uso:
   anotador conectar <url> [--porta 3999]        (troca o app de um anotador já no ar)
   anotador desconectar [--porta 3999]
   anotador fontes [--compact] [--forcar]        (instala a San Francisco da Apple nesta máquina)
+  anotador design [--fonte dir] [--tudo]        (tokens do projeto e o que foge das próprias regras)
   anotador saude [--porta 3999]
   anotador pendentes [--porta 3999] [--saida dir]
   anotador ver <id> [--porta 3999] [--saida dir]
@@ -986,6 +997,7 @@ async function principal(): Promise<void> {
       "sem-capturas": { type: "boolean", default: false },
       "permitir-externo": { type: "boolean", default: false },
       compact: { type: "boolean", default: false },
+      tudo: { type: "boolean", default: false },
       forcar: { type: "boolean", default: false },
       ajuda: { type: "boolean", default: false },
     },
@@ -1004,6 +1016,31 @@ async function principal(): Promise<void> {
 
   if (comando === "saude") {
     console.log(JSON.stringify(await chamarApi(porta, "/saude"), null, 2));
+    return;
+  }
+  if (comando === "design") {
+    const { sistema, achados } = analisarSistema(await lerProjeto(fonte));
+    const porCategoria = new Map<string, number>();
+    for (const t of sistema.tokens) porCategoria.set(t.categoria, (porCategoria.get(t.categoria) ?? 0) + 1);
+    console.log(`sistema de design em ${fonte}`);
+    console.log(`  ${sistema.tokens.length} tokens em ${sistema.arquivos.length} arquivo(s): ${Array.from(porCategoria).map(([c, n]) => `${n} de ${c}`).join(", ")}`);
+    console.log(
+      sistema.espaco.base
+        ? `  escala de espaço: passo de ${sistema.espaco.base}px, respeitado por ${sistema.espaco.dentro} de ${sistema.espaco.total} tokens`
+        : "  escala de espaço: sem passo claro"
+    );
+    if (sistema.escalaDeTexto.length) console.log(`  escala de texto: ${sistema.escalaDeTexto.join(", ")}px`);
+    const mostrar = values.tudo ? achados : achados.filter((a) => a.gravidade !== "baixa");
+    console.log(`\n${achados.length} achado(s)${values.tudo ? "" : `, ${mostrar.length} acima de "baixa" (use --tudo para ver todos)`}:`);
+    let regraAtual = "";
+    for (const a of mostrar) {
+      if (a.regra !== regraAtual) {
+        regraAtual = a.regra;
+        console.log(`\n  ${a.regra}`);
+      }
+      console.log(`    [${a.gravidade}] ${a.alvo}${a.onde ? `  (${a.onde})` : ""}`);
+      console.log(`          ${a.evidencia}`);
+    }
     return;
   }
   if (comando === "fontes") {

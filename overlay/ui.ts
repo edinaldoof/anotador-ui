@@ -131,6 +131,9 @@ interface Ui {
   arvoreSub: HTMLSpanElement | null;
   btnFixar: HTMLButtonElement | null;
   btnLimparArea: HTMLButtonElement | null;
+  camadaRealces: HTMLDivElement;
+  btnDesign: HTMLButtonElement;
+  design: HTMLDivElement | null;
 }
 
 interface OpcoesArrasto {
@@ -160,6 +163,8 @@ const ICONES = {
   arvore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M9 12h11M14 18h6"/></svg>',
   fixar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M8 3h8l-1 7 3 3H6l3-3z"/></svg>',
   seta: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6l6 6-6 6z"/></svg>',
+  paleta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.5-1.1-.3-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4.1-4-7.7-9-7.7Z"/><circle cx="7.5" cy="11.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="11" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"/></svg>',
+  recarregar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>',
 };
 
 const PROPRIEDADES_COMPUTADAS = [
@@ -188,7 +193,7 @@ const estado: Estado = {
 
 let host: HTMLDivElement | null = null;
 let raiz: HTMLDivElement | null = null;
-const ui = { balao: null, entradaBalao: null, religar: null, conversa: null, arvore: null, arvoreCorpo: null, arvoreSub: null, btnFixar: null, btnLimparArea: null } as Ui;
+const ui = { balao: null, entradaBalao: null, religar: null, conversa: null, arvore: null, arvoreCorpo: null, arvoreSub: null, btnFixar: null, btnLimparArea: null, design: null } as Ui;
 
 // ---------- utilidades ----------
 type Filho = Node | string | number | null | undefined | false | Filho[];
@@ -391,9 +396,10 @@ function montar(): void {
   ui.caixaSel = h("div", { class: "an-caixa selecao" });
   ui.dica = h("div", { class: "an-dica" });
   ui.camadaPins = h("div");
+  ui.camadaRealces = h("div");
   ui.toast = h("div", { class: "an-toast", hidden: true });
   ui.caixaArea = h("div", { class: "an-area" }, h("span", { class: "n", hidden: true }));
-  raiz.append(ui.caixaHover, ui.caixaSel, ui.caixaArea, ui.dica, ui.camadaPins);
+  raiz.append(ui.caixaHover, ui.caixaSel, ui.caixaArea, ui.camadaRealces, ui.dica, ui.camadaPins);
   montarBarra(raiz);
   montarPainel(raiz);
   montarArvore(raiz);
@@ -451,6 +457,7 @@ function montarBarra(raizUi: HTMLDivElement): void {
   ui.modoNav = h("button", { title: "Usar a página normalmente (Alt+A alterna)", onclick: () => definirModo(false) }, "Navegar");
   ui.alcaBarra = h("button", { class: "an-alca", title: "Arrastar a barra (duplo clique recoloca)", html: ICONES.alca });
   ui.btnArvore = h("button", { class: "an-ico", title: "Estrutura de elementos: árvore para escolher o nível certo (Alt+R)", html: ICONES.arvore, onclick: () => alternarArvore() });
+  ui.btnDesign = h("button", { class: "an-ico", title: "Sistema de design: o que a página pinta e o que o projeto declara (Alt+D)", html: ICONES.paleta, onclick: () => void alternarExplorador() });
   const titulo = h("div", { class: "titulo" }, "Anotando ", h("span", { class: "url" }, "• " + location.host + location.pathname));
   ui.barra = h(
     "div",
@@ -463,6 +470,7 @@ function montarBarra(raizUi: HTMLDivElement): void {
     h("span", { class: "an-sep" }),
     h("button", { class: "an-ico", title: "Ver fila e lotes", html: ICONES.lista, onclick: () => alternarFila() }),
     ui.btnArvore,
+    ui.btnDesign,
     h("div", { class: "an-modo" }, ui.modoSel, ui.modoNav),
     ui.btnEnviar,
     ui.estado
@@ -588,6 +596,7 @@ function ajustarFlutuantes(): void {
     [ui.religar, "religar"],
     [ui.conversa, "conversa"],
     [ui.arvore, "arvore"],
+    [ui.design, "design"],
   ];
   for (const [el, chave] of flutuantes) {
     if (!el || el.hidden || !el.style.left) continue;
@@ -805,6 +814,11 @@ function aoTeclar(e: KeyboardEvent): void {
     alternarArvore();
     return;
   }
+  if (soAlt && e.key.toLowerCase() === "d" && raiz && !raiz.hidden) {
+    e.preventDefault();
+    void alternarExplorador();
+    return;
+  }
   if (soAlt && /^Arrow(Up|Down|Left|Right)$/.test(e.key) && raiz && !raiz.hidden && estado.armado) {
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -841,6 +855,10 @@ function aoTeclar(e: KeyboardEvent): void {
     }
     if (estado.arvore.area) {
       limparArea();
+      return;
+    }
+    if (design.aberto && dentroDe(e, ui.design)) {
+      fecharExplorador();
       return;
     }
     if (estado.arvore.aberta && dentroDe(e, ui.arvore)) fecharArvore();
@@ -1061,7 +1079,7 @@ function abrirBalao(a: AnotacaoLocal): void {
     entrada,
     btnMic,
     a.confirmada ? h("button", { class: "an-ico", title: "Excluir anotação", html: ICONES.lixeira, onclick: () => excluirAnotacao(a) }) : null,
-    h("button", { class: "an-ico", title: "Confirmar (Enter)", html: ICONES.ok, style: "color:#7ee2b0", onclick: confirmarEdicao })
+    h("button", { class: "an-ico", title: "Confirmar (Enter)", html: ICONES.ok, style: "color:var(--an-ok-claro)", onclick: confirmarEdicao })
   );
   ui.camadaPins.after(ui.balao);
   ui.entradaBalao = entrada;
@@ -1740,7 +1758,7 @@ function renderizarConversa(): void {
         grupo.append(h("button", { class: "an-opcao livre", onclick: () => focarEntrada(m) }, h("span", { class: "mira" }), "Outro…"));
         corpo.append(grupo);
         if (m.multipla && marcadas.size) {
-          corpo.append(h("button", { class: "an-btn", style: "align-self:flex-start;background:#2563eb", onclick: () => void responder(m, Array.from(marcadas), "") }, `Enviar ${marcadas.size} selecionada(s)`));
+          corpo.append(h("button", { class: "an-btn", style: "align-self:flex-start;background:var(--an-marca)", onclick: () => void responder(m, Array.from(marcadas), "") }, `Enviar ${marcadas.size} selecionada(s)`));
         }
       }
     }
@@ -1934,7 +1952,7 @@ function montarArvore(raizUi: HTMLDivElement): void {
     "div",
     { class: "cab" },
     alca,
-    h("span", { class: "an-ico", style: "background:#2c302f", html: ICONES.arvore }),
+    h("span", { class: "an-ico", style: "background:var(--an-superficie-alta)", html: ICONES.arvore }),
     h("div", { class: "tit" }, "Estrutura", ui.arvoreSub),
     ui.btnLimparArea,
     ui.btnFixar,

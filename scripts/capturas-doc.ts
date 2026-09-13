@@ -179,7 +179,7 @@ body{width:1200px;height:630px;overflow:hidden;position:relative;background:#0d1
 .brilho{position:absolute;width:760px;height:760px;border-radius:50%;right:-190px;top:-300px;
   background:radial-gradient(circle,rgba(47,109,246,.42),transparent 62%)}
 .conteudo{position:absolute;inset:0;padding:62px 0 0 68px;width:560px}
-.logo{width:66px;height:66px;border-radius:18px;background:linear-gradient(160deg,#5b90ff,#2f6df6);
+.logo{width:66px;height:66px;border-radius:18px;background:#2f6df6;
   display:grid;place-items:center;box-shadow:0 10px 30px rgba(47,109,246,.45)}
 h1{font-size:54px;letter-spacing:-.03em;margin:24px 0 0;font-weight:800}
 p.linha{font-size:19.5px;line-height:1.45;color:#aeb6bd;margin-top:14px}
