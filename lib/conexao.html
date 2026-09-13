@@ -363,6 +363,7 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
   <footer class="rodape">
     <span id="rodape-fila"></span>
     <span id="rodape-fonte"></span>
+    <span id="rodape-tipografia" hidden></span>
     <span style="flex:1"></span>
     <a href="https://github.com/edinaldoof/anotador-ui" target="_blank" rel="noopener">documentação</a>
   </footer>
@@ -470,6 +471,22 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     marcarServidorAtual();
     renderizarPonte();
     renderizarOuvintes();
+    avisarTipografia(s.fontes);
+  }
+
+  // Só avisa quando o navegador realmente não tem a fonte e instalar na máquina do anotador resolveria:
+  // de um iPhone ou iPad a San Francisco já é do sistema e não há nada a fazer.
+  let tipografiaConferida = false;
+  function avisarTipografia(fontes) {
+    if (tipografiaConferida || !fontes) return;
+    tipografiaConferida = true;
+    const temSF = (() => { try { return document.fonts.check('14px "SF Pro Text"'); } catch { return true; } })();
+    if (temSF || fontes.nativa || !(fontes.faltando || []).length) return;
+    const el = $("rodape-tipografia");
+    el.textContent = "";
+    el.append("tipografia: ", h("code", null, "anotador fontes"), " instala a San Francisco");
+    el.title = "Faltam nesta máquina: " + fontes.faltando.join(", ");
+    el.hidden = false;
   }
   async function atualizarSaude() {
     try { const s = await api("saude"); if (s.ok) renderizarSaude(s); }

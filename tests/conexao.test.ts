@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { comandoDaPonte, modelosDe } from "../lib/agentes.ts";
 import { RegistroConexoes } from "../lib/conexoes.ts";
+import { FAMILIAS, estadoDasFontes, pastaDasFontes } from "../lib/fontes.ts";
 import { marcaDe } from "../lib/marcas.ts";
 import { alvoPermitido, detectarFramework, detectarServidores, extrairTitulo, sondar } from "../lib/deteccao.ts";
 import { BASE } from "../server.ts";
@@ -63,6 +64,31 @@ describe("modelos e comando da ponte", () => {
     assert.match(marcaDe("codex"), /^<svg/, "o Codex usa a marca da OpenAI");
     assert.equal(marcaDe("codex"), marcaDe("openai"));
     assert.notEqual(marcaDe("claude"), marcaDe("generico"));
+  });
+});
+
+describe("fontes da Apple", () => {
+  test("a pasta de destino segue a plataforma e o estado cobre as três famílias", async () => {
+    const pasta = pastaDasFontes();
+    if (process.platform === "darwin") assert.match(pasta, /Library\/Fonts$/);
+    else assert.match(pasta, /apple-sf$/, "no Linux fica numa pasta própria, separada das fontes do usuário");
+
+    const estado = await estadoDasFontes();
+    assert.equal(estado.nativa, process.platform === "darwin", "só o macOS já traz a San Francisco");
+    assert.equal(
+      estado.instaladas.length + estado.faltando.length,
+      FAMILIAS.length,
+      "cada família conhecida está num dos dois lados"
+    );
+    for (const f of FAMILIAS) {
+      assert.ok([...estado.instaladas, ...estado.faltando].includes(f.familia), `faltou classificar ${f.familia}`);
+    }
+    assert.deepEqual(
+      FAMILIAS.filter((f) => f.padrao).map((f) => f.familia),
+      ["SF Pro", "SF Mono"],
+      "a SF Compact é só de relógio: não entra na instalação padrão"
+    );
+    if (estado.nativa) assert.deepEqual(estado.faltamFerramentas, [], "no macOS não se extrai nada");
   });
 });
 

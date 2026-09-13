@@ -99,10 +99,18 @@ A fila fica no `localStorage` até ser enviada: recarregar a página ou o HMR do
 
 A interface usa a fonte da Apple (San Francisco) quando ela existe — em iPhone, iPad e Mac, ou no Linux e Windows com a SF Pro instalada. Onde não existe, cai na tipografia do próprio app que você está anotando e, por fim, na fonte do sistema. Os arquivos não vêm no repositório: a licença da Apple não permite redistribuir.
 
-<details>
-<summary>Instalar a San Francisco no Linux</summary>
+Em Linux e Windows, um comando resolve:
 
-Baixe de [developer.apple.com/fonts](https://developer.apple.com/fonts/) e extraia a cadeia `dmg` → `pkg` → `Payload` (precisa do 7-Zip completo, `p7zip-full`):
+```bash
+anotador fontes
+```
+
+Ele baixa de developer.apple.com, extrai e instala só na sua máquina — nada é redistribuído pelo repositório. `--compact` inclui a SF Compact (de relógio), `--forcar` reinstala. No Linux precisa de `p7zip-full` e `cpio`.
+
+<details>
+<summary>Fazer à mão, se preferir</summary>
+
+Baixe de [developer.apple.com/fonts](https://developer.apple.com/fonts/) e extraia a cadeia `dmg` → `pkg` → `Payload`:
 
 ```bash
 for f in SF-Pro SF-Compact SF-Mono; do
@@ -205,6 +213,7 @@ anotador                        sobe na porta 3999; reconecta ao último app des
 anotador servir [--alvo URL] [--porta 3999] [--host 0.0.0.0] [--nome slug] [--saida dir] [--fonte dir]
                 [--agente Claude] [--publico http://ip:porta] [--sem-csp] [--sem-capturas] [--chrome caminho] [--permitir-externo]
 anotador conectar <url> | desconectar | saude | pendentes | ver <id> | conversa <id>
+anotador fontes [--compact] [--forcar]         instala a San Francisco da Apple nesta máquina
 anotador progresso <id> --nota … | nota <id> --texto … | perguntar <id> --texto … [--opcoes "A|B|C"] [--multipla] | processado <id> [--nota …]
 ```
 

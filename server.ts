@@ -19,6 +19,7 @@ import { paginaConexao } from "./lib/conexao.ts";
 import { RegistroConexoes, pastaBase } from "./lib/conexoes.ts";
 import { marcaPeloNome } from "./lib/marcas.ts";
 import { PORTAS_COMUNS, alvoPermitido, detectarServidores, sondar, type Sondagem } from "./lib/deteccao.ts";
+import { estadoDasFontes, instalarFontes, tamanhoInstalado } from "./lib/fontes.ts";
 import { Fila, idSeguro, validarLote } from "./lib/fila.ts";
 import { analisarLote, arquivosProvaveis, lerProjeto } from "./lib/fonte.ts";
 import { cabecalhosParaAlvo, ehHtml, extrairNonce, filtrarCabecalhosResposta, injetarScript } from "./lib/injetar.ts";
@@ -335,7 +336,12 @@ function rotuloDoModelo(ponte: PonteConfig | null | undefined): string | null {
 
 async function saude(ctx: ContextoApi): Promise<Record<string, unknown>> {
   const { fila, difusor, opcoes } = ctx;
-  const [app, pendentes, conexoes] = await Promise.all([sondagemDoAlvo(ctx), fila.pendentes().then((l) => l.length).catch(() => 0), ctx.registro ? ctx.registro.listar() : Promise.resolve([])]);
+  const [app, pendentes, conexoes, fontes] = await Promise.all([
+    sondagemDoAlvo(ctx),
+    fila.pendentes().then((l) => l.length).catch(() => 0),
+    ctx.registro ? ctx.registro.listar() : Promise.resolve([]),
+    estadoDasFontes().catch(() => null),
+  ]);
   return {
     ok: true,
     nome: opcoes.nome,
@@ -354,6 +360,7 @@ async function saude(ctx: ContextoApi): Promise<Record<string, unknown>> {
     app,
     pendentes,
     conexoes: conexoes.slice(0, 8),
+    fontes,
     versao: VERSAO,
     protocolo: 1,
   };
@@ -926,6 +933,7 @@ uso:
                   [--agente Claude] [--publico http://ip:porta] [--sem-csp] [--sem-capturas] [--chrome caminho] [--permitir-externo]
   anotador conectar <url> [--porta 3999]        (troca o app de um anotador já no ar)
   anotador desconectar [--porta 3999]
+  anotador fontes [--compact] [--forcar]        (instala a San Francisco da Apple nesta máquina)
   anotador saude [--porta 3999]
   anotador pendentes [--porta 3999] [--saida dir]
   anotador ver <id> [--porta 3999] [--saida dir]
@@ -977,6 +985,8 @@ async function principal(): Promise<void> {
       "sem-csp": { type: "boolean", default: false },
       "sem-capturas": { type: "boolean", default: false },
       "permitir-externo": { type: "boolean", default: false },
+      compact: { type: "boolean", default: false },
+      forcar: { type: "boolean", default: false },
       ajuda: { type: "boolean", default: false },
     },
   });
@@ -994,6 +1004,32 @@ async function principal(): Promise<void> {
 
   if (comando === "saude") {
     console.log(JSON.stringify(await chamarApi(porta, "/saude"), null, 2));
+    return;
+  }
+  if (comando === "fontes") {
+    const estado = await estadoDasFontes();
+    if (estado.nativa) {
+      console.log("Este sistema já traz a San Francisco; o anotador a usa sem instalar nada.");
+      return;
+    }
+    console.log(`pasta:      ${estado.pasta}`);
+    console.log(`instaladas: ${estado.instaladas.join(", ") || "nenhuma"}`);
+    console.log(`faltando:   ${estado.faltando.join(", ") || "nenhuma"}`);
+    if (estado.faltando.length === 0 && !values.forcar) {
+      console.log(`\nTudo no lugar (${Math.round((await tamanhoInstalado()) / 1048576)} MB). Use --forcar para reinstalar.`);
+      return;
+    }
+    console.log("\nBaixando de developer.apple.com. Os arquivos ficam só nesta máquina:");
+    console.log("a licença da Apple permite instalar e usar, não redistribuir.\n");
+    const feito = await instalarFontes({ compact: values.compact, forcar: values.forcar, aoInformar: (m) => console.log("  " + m) });
+    const erros = feito.filter((f) => f.erro);
+    console.log(`\n${feito.reduce((s, f) => s + f.arquivos, 0)} arquivo(s) em ${estado.pasta}`);
+    if (erros.length) {
+      console.error(`falhas: ${erros.map((e) => e.familia).join(", ")}`);
+      process.exitCode = 1;
+    } else if (feito.length) {
+      console.log("Recarregue a página do anotador para ver a tipografia nova.");
+    }
     return;
   }
   if (comando === "conectar") {
@@ -1121,6 +1157,10 @@ async function principal(): Promise<void> {
     `  capturas:  ${chrome ? chrome : "desativadas (Chromium não encontrado — defina ANOTADOR_CHROME)"}`,
     `  csp:       ${opcoes.removerCsp ? "removida das respostas" : "preservada (script injetado com o nonce da página)"}`,
   ];
+  const fontes = await estadoDasFontes().catch(() => null);
+  if (fontes && !fontes.nativa && fontes.faltando.length) {
+    linhas.push(`  fontes:    ${fontes.faltando.join(", ")} sem instalar — \`anotador fontes\` deixa a interface na tipografia da Apple`);
+  }
   console.log(linhas.join("\n"));
   const encerrar = () => {
     registrar(opcoes, "encerrando");
