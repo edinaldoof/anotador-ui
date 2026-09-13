@@ -140,8 +140,10 @@ interface OpcoesArrasto {
   aoClique?: () => void;
 }
 
-const CFG: ConfigOverlay = window.__ANOTADOR_CFG ?? { base: "/__anotador", capturas: true, nome: "", agente: "Claude" };
+const CFG: ConfigOverlay = window.__ANOTADOR_CFG ?? { base: "/__anotador", capturas: true, nome: "", agente: "Claude", marca: "", modelo: null };
 const AGENTE = CFG.agente || "Claude";
+const MARCA_AGENTE = CFG.marca || "";
+const MODELO = CFG.modelo || null;
 const CHAVE_ARMAZENAMENTO = "anotador-ui:" + location.pathname;
 const CHAVE_DESLIGADO = "anotador-ui:desligado";
 
@@ -1682,15 +1684,19 @@ function renderizarConversa(): void {
   if (!c || !painel) return;
   const respondidas = new Set(c.mensagens.filter((m) => m.responde).map((m) => m.responde));
   const abertas = c.mensagens.filter((m) => m.autor === "agente" && m.tipo !== "nota" && !respondidas.has(m.id));
-  const rotuloEstado = c.lote.estado === "processado" ? "aplicado" : c.lote.estado === "em_andamento" ? `${AGENTE} trabalhando` : `aguardando ${AGENTE}`;
+  const rotuloEstado = c.lote.estado === "processado" ? "aplicado" : c.lote.estado === "em_andamento" ? "trabalhando" : `aguardando ${AGENTE}`;
+  // Rolagem grudada embaixo: só acompanha se o usuário já estava no fim da conversa.
+  const fluxoAnterior = painel.querySelector<HTMLDivElement>(".fluxo");
+  const coladoNoFim = !fluxoAnterior || fluxoAnterior.scrollHeight - fluxoAnterior.scrollTop - fluxoAnterior.clientHeight < 40;
+
   painel.textContent = "";
   const alca = h("span", { class: "an-alca", html: ICONES.alca, title: "Arrastar" });
   const cab = h(
     "div",
     { class: "cab" },
     alca,
-    h("span", { class: "an-ico", style: "background:#2c302f", html: ICONES.sliders }),
-    h("div", { class: "tit" }, `Conversa com ${AGENTE}`, h("span", { class: "sub" }, `Lote das ${hora(c.lote.enviadoEm)} · ${rotuloEstado}${c.lote.resumo ? " · " + c.lote.resumo : ""}`)),
+    h("span", { class: "marca", html: MARCA_AGENTE || ICONES.sliders }),
+    h("div", { class: "tit" }, AGENTE, h("span", { class: "sub" }, [MODELO, rotuloEstado, `lote das ${hora(c.lote.enviadoEm)}`].filter(Boolean).join(" · "))),
     h("button", { class: "an-ico", title: "Fechar", html: ICONES.fechar, onclick: fecharConversa })
   );
   painel.append(cab);
@@ -1703,16 +1709,17 @@ function renderizarConversa(): void {
   const usuarioRespondeu = new Map(c.mensagens.filter((m) => m.responde).map((m) => [m.responde ?? "", m] as const));
   for (const m of c.mensagens) {
     if (m.autor === "usuario" && m.responde) continue;
-    const bloco = h("div", { class: "an-msg " + m.autor });
-    bloco.append(h("div", { class: "balao" }, m.texto));
+    const corpo = h("div", { class: "corpo" });
+    if (m.autor === "agente") corpo.append(h("div", { class: "quem" }, (m.agente || AGENTE) + " · " + hora(m.em)));
+    corpo.append(h("div", { class: "balao" }, m.texto));
     if (m.autor === "agente" && m.tipo !== "nota") {
       const resposta = usuarioRespondeu.get(m.id);
       if (resposta) {
         const escolhidas = resposta.opcoes?.length ? resposta.opcoes.join(", ") : "";
-        bloco.append(h("div", { class: "escolhida" }, "Você respondeu" + (escolhidas ? ": " + escolhidas : "") + (resposta.texto && resposta.texto !== escolhidas ? (escolhidas ? " — " : ": ") + resposta.texto : "")));
+        corpo.append(h("div", { class: "escolhida" }, "Você respondeu" + (escolhidas ? ": " + escolhidas : "") + (resposta.texto && resposta.texto !== escolhidas ? (escolhidas ? " — " : ": ") + resposta.texto : "")));
       } else if (m.tipo === "escolha" && m.opcoes?.length) {
         const marcadas = c.selecao.get(m.id) ?? new Set<string>();
-        const grupo = h("div", { class: "opcoes" });
+        const grupo = h("div", { class: "an-perguntas" }, h("div", { class: "rot" }, m.multipla ? "Escolha uma ou mais" : "Escolha uma opção"));
         for (const opcao of m.opcoes) {
           grupo.append(
             h("button", {
@@ -1727,29 +1734,35 @@ function renderizarConversa(): void {
                   void responder(m, [opcao], "");
                 }
               },
-            }, opcao)
+            }, h("span", { class: "mira" }), opcao)
           );
         }
-        grupo.append(h("button", { class: "an-opcao", onclick: () => focarEntrada(m) }, "Outro…"));
-        bloco.append(grupo);
+        grupo.append(h("button", { class: "an-opcao livre", onclick: () => focarEntrada(m) }, h("span", { class: "mira" }), "Outro…"));
+        corpo.append(grupo);
         if (m.multipla && marcadas.size) {
-          bloco.append(h("button", { class: "an-btn", style: "align-self:flex-start;background:#2563eb", onclick: () => void responder(m, Array.from(marcadas), "") }, `Enviar ${marcadas.size} selecionada(s)`));
+          corpo.append(h("button", { class: "an-btn", style: "align-self:flex-start;background:#2563eb", onclick: () => void responder(m, Array.from(marcadas), "") }, `Enviar ${marcadas.size} selecionada(s)`));
         }
       }
     }
-    bloco.append(h("div", { class: "meta" }, (m.autor === "agente" ? (m.agente || AGENTE) + " · " : "Você · ") + hora(m.em)));
+    if (m.autor === "usuario") corpo.append(h("div", { class: "quem" }, "Você · " + hora(m.em)));
+    const bloco = h("div", { class: "an-msg " + m.autor });
+    if (m.autor === "agente") bloco.append(h("span", { class: "av", html: MARCA_AGENTE || ICONES.sliders }));
+    bloco.append(corpo);
     fluxo.append(bloco);
   }
   painel.append(fluxo);
 
   const pendente = abertas[abertas.length - 1];
   if (pendente) painel.append(h("div", { class: "dica-resp" }, pendente.tipo === "escolha" ? "Escolha uma opção acima ou escreva outra resposta." : `${AGENTE} aguarda sua resposta.`));
+
   const campo = h("textarea", { rows: 1, placeholder: pendente ? `Responder a ${AGENTE}…` : `Recado para ${AGENTE} sobre este lote…` });
-  const enviarBtn = h("button", { class: "an-ok", title: "Enviar (Enter)", html: ICONES.ok });
+  const enviarBtn = h("button", { class: "an-ok", title: "Enviar (Enter)", html: ICONES.ok, disabled: true });
   const enviarTexto = () => {
     const texto = campo.value.trim();
     if (!texto) return;
     campo.value = "";
+    campo.style.height = "auto";
+    enviarBtn.disabled = true;
     void responder(pendente ?? null, [], texto);
   };
   enviarBtn.addEventListener("click", enviarTexto);
@@ -1761,12 +1774,23 @@ function renderizarConversa(): void {
   });
   campo.addEventListener("input", () => {
     campo.style.height = "auto";
-    campo.style.height = Math.min(120, campo.scrollHeight) + "px";
+    campo.style.height = Math.min(160, campo.scrollHeight) + "px";
+    enviarBtn.disabled = campo.value.trim() === "";
   });
   const btnMic = h("button", { class: "an-ico", title: "Ditar resposta", html: ICONES.mic });
   btnMic.addEventListener("click", () => alternarDitadoEm(campo, btnMic));
-  painel.append(h("div", { class: "entrada" }, campo, btnMic, enviarBtn));
-  fluxo.scrollTop = fluxo.scrollHeight;
+  const caixa = h(
+    "div",
+    { class: "entrada" },
+    campo,
+    h("div", { class: "acoes" }, btnMic, h("span", { class: "atalho" }, "Enter envia · Shift+Enter quebra linha"), h("span", { class: "esp" }), enviarBtn)
+  );
+  // Clicar em qualquer lugar da caixa foca o campo, como no Prompt Input do Nexus UI.
+  caixa.addEventListener("click", (e) => {
+    if (!(e.target as Element).closest("button")) campo.focus();
+  });
+  painel.append(caixa);
+  if (coladoNoFim) fluxo.scrollTop = fluxo.scrollHeight;
   (painel as HTMLDivElement & { __campo?: HTMLTextAreaElement }).__campo = campo;
 }
 

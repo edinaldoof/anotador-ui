@@ -171,6 +171,49 @@ details.ajustes[open] summary::before { transform: rotate(90deg); }
 .agente:hover { border-color: var(--borda-forte); }
 .agente.ativa { border-color: var(--acento); background: var(--acento-suave); color: var(--texto); box-shadow: 0 0 0 1px var(--acento) inset; }
 .agente .marca-nao { font-weight: 400; font-size: 11px; color: var(--texto-3); }
+.agente .logo, .sessao .logo, .ouvinte .logo, .seletor .logo { display: grid; place-items: center; flex: none; }
+.agente .logo svg { width: 17px; height: 17px; }
+.agente:not(.instalado) .logo { opacity: .45; }
+
+/* seletor de modelo — portado do padrão do Nexus UI (gatilho + menu com linhas de modelo) */
+.seletor { position: relative; display: inline-block; }
+.seletor-gatilho {
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px 7px 9px; border-radius: 999px;
+  background: var(--superficie-2); border: 1px solid var(--borda); color: var(--texto); font-weight: 600; font-size: 13px; max-width: 100%;
+}
+.seletor-gatilho:hover { border-color: var(--borda-forte); background: var(--superficie-3); }
+.seletor-gatilho .logo svg { width: 16px; height: 16px; }
+.seletor-gatilho .rot { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seletor-gatilho .nivel { font-weight: 500; color: var(--texto-3); font-size: 12px; }
+.seletor-gatilho .chevron { width: 14px; height: 14px; color: var(--texto-3); flex: none; transition: transform .15s; }
+.seletor[data-aberto="1"] .seletor-gatilho { border-color: var(--acento); box-shadow: 0 0 0 3px color-mix(in srgb, var(--acento) 16%, transparent); }
+.seletor[data-aberto="1"] .chevron { transform: rotate(180deg); }
+.seletor-menu {
+  position: absolute; z-index: 30; bottom: calc(100% + 8px); left: 0; min-width: 320px; max-width: min(420px, 90vw); max-height: 380px; overflow: auto;
+  background: var(--superficie); border: 1px solid var(--borda); border-radius: 14px; box-shadow: var(--sombra-forte); padding: 5px;
+}
+.seletor-menu.abaixo { bottom: auto; top: calc(100% + 8px); }
+.seletor-grupo { display: flex; align-items: center; gap: 7px; padding: 8px 10px 5px; color: var(--texto-3); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.seletor-grupo .logo svg { width: 14px; height: 14px; }
+.seletor-item {
+  position: relative; display: flex; align-items: center; gap: 9px; width: 100%; min-height: 38px; padding: 7px 34px 7px 10px;
+  border-radius: 9px; border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--texto);
+}
+.seletor-item:hover { background: var(--superficie-2); }
+.seletor-item .logo svg { width: 17px; height: 17px; }
+.seletor-item .col { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.seletor-item .titulo { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seletor-item .desc { font-size: 11.5px; font-weight: 400; color: var(--texto-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seletor-item .check { position: absolute; right: 11px; width: 15px; height: 15px; color: var(--acento); opacity: 0; }
+.seletor-item[aria-checked="true"] .check { opacity: 1; }
+.seletor-item[aria-checked="true"] .titulo { font-weight: 700; }
+.seletor-sep { height: 1px; background: var(--borda); margin: 5px 8px; }
+.seletor-rodape { display: flex; align-items: center; gap: 8px; padding: 8px 10px 6px; flex-wrap: wrap; }
+.seletor-rodape .rot { color: var(--texto-3); font-size: 11.5px; font-weight: 600; flex: 1; }
+.niveis { display: inline-flex; gap: 2px; background: var(--superficie-2); border-radius: 999px; padding: 2px; }
+.niveis button { border: 0; background: transparent; border-radius: 999px; padding: 4px 10px; font-size: 11.5px; font-weight: 600; color: var(--texto-2); }
+.niveis button:hover { color: var(--texto); }
+.niveis button.ativo { background: var(--superficie); color: var(--texto); box-shadow: var(--sombra); }
 .como { color: var(--texto-2); font-size: 12.5px; background: var(--superficie-2); border-radius: 10px; padding: 11px 13px; margin: 12px 0; line-height: 1.5; }
 .como code { background: var(--superficie-3); padding: 1px 5px; border-radius: 5px; }
 
@@ -286,9 +329,9 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
       <div id="painel-agente"></div>
       <div class="faixa">
         <span class="rot">Ponte automática</span>
-        <select id="ponte"></select>
+        <span id="ponte"></span>
         <span class="selo ouvindo" id="ponte-estado" hidden>ativa</span>
-        <span class="dica">Sem ninguém ouvindo, cada lote novo chama este agente pela linha de comando.</span>
+        <span class="dica">Sem ninguém ouvindo, cada lote novo chama este agente e modelo pela linha de comando.</span>
       </div>
       <div class="rotulo-secao" style="margin-top:16px">Ouvindo agora</div>
       <div id="ouvintes"></div>
@@ -361,6 +404,9 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     return hoje ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   };
   const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>';
+  const CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+  const NIVEIS = { low: "baixo", medium: "médio", high: "alto", xhigh: "muito alto", max: "máximo", ultra: "ultra" };
+  const nivelCurto = (e) => NIVEIS[e] || e;
 
   let saude = null;
   let agentes = null;
@@ -491,6 +537,13 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
 
   // ---------- agentes ----------
   function nomeAgente(id) { const a = (agentes && agentes.agentes || []).find((x) => x.id === id); return a ? a.nome : id; }
+  function agentePorId(id) { return (agentes && agentes.agentes || []).find((x) => x.id === id) || null; }
+  function marcaPorNome(nome) {
+    const n = String(nome || "").toLowerCase();
+    const a = (agentes && agentes.agentes || []).find((x) => n.includes(x.id) || n.includes(x.nome.toLowerCase().split(" ")[0]));
+    return a ? a.marca : "";
+  }
+  function modeloDe(agente, valor) { return ((agentePorId(agente) || {}).modelos || []).find((m) => m.valor === valor) || null; }
   async function carregarAgentes() {
     try { const r = await api("agentes"); if (r.ok) { agentes = r; renderizarAgentes(); } } catch { /* tenta no próximo ciclo */ }
   }
@@ -516,7 +569,7 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     const abas = $("abas"); abas.textContent = "";
     for (const a of agentes.agentes) {
       abas.append(h("button", { type: "button", class: "agente" + (a.instalado ? " instalado" : "") + (a.id === agenteAtivo ? " ativa" : ""), title: a.instalado ? a.caminho : "não encontrado no PATH", onclick: () => { agenteAtivo = a.id; verTodasSessoes = false; localStorage.setItem("anotador:agente", a.id); renderizarAgentes(); } },
-        h("span", { class: "luz" }), a.nome, a.instalado ? null : h("span", { class: "marca-nao" }, "não instalado")));
+        h("span", { class: "logo", html: a.marca || "" }), a.nome, a.instalado ? null : h("span", { class: "marca-nao" }, "não instalado")));
     }
     const a = agentes.agentes.find((x) => x.id === agenteAtivo) || agentes.agentes[0];
     const painel = $("painel-agente"); painel.textContent = "";
@@ -562,29 +615,78 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
       await carregarAgentes();
     } finally { if (btn) btn.disabled = false; }
   }
+  // Seletor de modelo: gatilho com a marca do provedor, menu agrupado por agente e níveis de raciocínio.
+  let menuAberto = false;
   function renderizarPonte() {
-    if (!agentes) return;
-    const sel = $("ponte");
-    const atual = saude && saude.ponte ? saude.ponte.agente + "|" + (saude.ponte.sessao || "") : "";
-    sel.textContent = "";
-    sel.append(h("option", { value: "" }, "desligada — só sessões ouvindo"));
-    for (const a of agentes.agentes.filter((x) => x.ponte && x.instalado)) {
-      sel.append(h("option", { value: a.id + "|" }, a.nome + (a.sessoes ? " · sessão nova" : "")));
-      for (const s of (agentes.sessoes || []).filter((s) => s.agente === a.id && !(a.id === "claude" && s.ativa)).slice(0, 5)) {
-        sel.append(h("option", { value: a.id + "|" + s.id }, a.nome + " · " + (s.nome || s.titulo || s.id.slice(0, 8)).slice(0, 40)));
+    if (!agentes || menuAberto) return;
+    const caixa = $("ponte");
+    const ponte = (saude && saude.ponte) || null;
+    const disponiveis = agentes.agentes.filter((a) => a.ponte && a.instalado);
+    const modeloAtual = ponte ? modeloDe(ponte.agente, ponte.modelo) : null;
+    caixa.textContent = "";
+
+    const gatilho = h("button", { type: "button", class: "seletor-gatilho", "aria-haspopup": "true" },
+      h("span", { class: "logo", html: ponte ? (agentePorId(ponte.agente) || {}).marca || "" : "" }),
+      h("span", { class: "rot" }, ponte ? nomeAgente(ponte.agente) + (modeloAtual ? " · " + modeloAtual.titulo : "") : "desligada"),
+      ponte && ponte.esforco ? h("span", { class: "nivel" }, nivelCurto(ponte.esforco)) : null,
+      h("span", { class: "chevron", html: CHEVRON }));
+
+    const menu = h("div", { class: "seletor-menu", hidden: true, role: "menu" });
+    const seletor = h("div", { class: "seletor" }, gatilho, menu);
+
+    const fechar = () => { menuAberto = false; menu.hidden = true; seletor.dataset.aberto = "0"; document.removeEventListener("click", aoClicarFora, true); };
+    const aoClicarFora = (e) => { if (!seletor.contains(e.target)) fechar(); };
+    gatilho.addEventListener("click", (e) => {
+      e.stopPropagation();
+      menuAberto = menu.hidden;
+      menu.hidden = !menu.hidden;
+      seletor.dataset.aberto = menu.hidden ? "0" : "1";
+      if (!menu.hidden) {
+        menu.classList.toggle("abaixo", seletor.getBoundingClientRect().top < 420);
+        setTimeout(() => document.addEventListener("click", aoClicarFora, true), 0);
+      } else document.removeEventListener("click", aoClicarFora, true);
+    });
+    menu.addEventListener("keydown", (e) => { if (e.key === "Escape") { fechar(); gatilho.focus(); } });
+
+    const escolher = async (agente, modelo, esforco) => {
+      fechar();
+      const corpo = { agente, sessao: ponte && ponte.agente === agente ? ponte.sessao : null, modelo: modelo || null, esforco: esforco || null };
+      const r = await api("agente/ponte", corpo);
+      if (!r.ok) { avisar(r.erro || "não foi possível salvar"); return; }
+      const m = modelo ? modeloDe(agente, modelo) : null;
+      avisar(agente ? "Ponte: " + nomeAgente(agente) + (m ? " · " + m.titulo : "") : "Ponte desligada.");
+      await atualizarSaude();
+    };
+
+    const item = (marca, titulo, descricao, marcado, aoEscolher) =>
+      h("button", { type: "button", class: "seletor-item", role: "menuitemradio", "aria-checked": marcado ? "true" : "false", onclick: aoEscolher },
+        h("span", { class: "logo", html: marca || "" }),
+        h("span", { class: "col" }, h("span", { class: "titulo" }, titulo), descricao ? h("span", { class: "desc" }, descricao) : null),
+        h("span", { class: "check", html: CHECK }));
+
+    menu.append(item("", "Desligada", "só as sessões que estiverem ouvindo", !ponte, () => escolher(null, null, null)));
+    for (const a of disponiveis) {
+      menu.append(h("div", { class: "seletor-sep" }));
+      menu.append(h("div", { class: "seletor-grupo" }, h("span", { class: "logo", html: a.marca || "" }), a.nome));
+      if (!a.modelos.length) {
+        menu.append(item(a.marca, "Modelo padrão", "o que o " + a.nome + " já usa", !!ponte && ponte.agente === a.id, () => escolher(a.id, null, null)));
+        continue;
+      }
+      for (const m of a.modelos) {
+        const marcado = !!ponte && ponte.agente === a.id && ponte.modelo === m.valor;
+        menu.append(item(a.marca, m.titulo + (m.padrao ? " ·  padrão" : ""), m.descricao, marcado, () => escolher(a.id, m.valor, m.esforcoPadrao || null)));
       }
     }
-    if (atual && !Array.from(sel.options).some((o) => o.value === atual)) sel.append(h("option", { value: atual }, nomeAgente(saude.ponte.agente) + " · " + saude.ponte.sessao.slice(0, 8)));
-    sel.value = atual;
-    $("ponte-estado").hidden = !atual;
-  }
-  async function definirPonte() {
-    const v = $("ponte").value;
-    const [agente, sessao] = v ? v.split("|") : [null, ""];
-    const r = await api("agente/ponte", { agente: agente || null, sessao: sessao || null });
-    if (!r.ok) { avisar(r.erro || "não foi possível salvar"); return; }
-    avisar(agente ? "Ponte automática: " + nomeAgente(agente) : "Ponte automática desligada.");
-    await atualizarSaude();
+    if (modeloAtual && modeloAtual.esforcos.length) {
+      menu.append(h("div", { class: "seletor-sep" }));
+      const niveis = h("span", { class: "niveis" });
+      for (const nivel of modeloAtual.esforcos) {
+        niveis.append(h("button", { type: "button", class: (ponte.esforco || modeloAtual.esforcoPadrao) === nivel ? "ativo" : "", onclick: () => escolher(ponte.agente, ponte.modelo, nivel) }, nivelCurto(nivel)));
+      }
+      menu.append(h("div", { class: "seletor-rodape" }, h("span", { class: "rot" }, "Raciocínio"), niveis));
+    }
+    caixa.append(seletor);
+    $("ponte-estado").hidden = !ponte;
   }
   function renderizarOuvintes() {
     const box = $("ouvintes"); box.textContent = "";
@@ -639,7 +741,6 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
   $("btn-desconectar").addEventListener("click", desconectar);
   $("btn-redetectar").addEventListener("click", detectar);
   $("btn-copiar-protocolo").addEventListener("click", () => copiar($("protocolo").textContent));
-  $("ponte").addEventListener("change", definirPonte);
   $("alvo").addEventListener("input", marcarServidorAtual);
   $("alvo").addEventListener("keydown", (e) => { if (e.key === "Enter") conectar(); });
   for (const id of ["passo-1", "passo-2"]) $(id).dataset.n = $(id).textContent;

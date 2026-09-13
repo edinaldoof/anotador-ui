@@ -115,6 +115,14 @@ Numa sessão do projeto, `/anotar`: ela sobe o anotador se preciso, liga o monit
 
 Escolha-os como **ponte** na página de conexão: a cada lote o anotador roda `codex exec` (ou `codex exec resume <sessão>`), `gemini -p` ou `opencode run` com um prompt que já traz o id do lote, o caminho do Markdown e os comandos para responder pela interface.
 
+### Escolher o modelo
+
+O seletor lista os modelos que existem **na sua máquina** — os do Claude Code e os que a sua conta do Codex libera, lidos do cache dele — com a marca do provedor, a descrição de cada um e os níveis de raciocínio que ele aceita:
+
+![Seletor de modelo aberto, com os modelos do Claude Code e do Codex CLI agrupados por provedor](docs/imagens/modelos.png)
+
+As marcas vêm do [Simple Icons](https://simpleicons.org) (CC0), embutidas como traçado — sem dependência nova. A escolha não é enfeite: vira argumento na chamada do agente (`claude --model opus --effort high`, `codex exec -m gpt-6-astra -c model_reasoning_effort="high"`), fica gravada com a conexão e aparece no cabeçalho da conversa, para você saber quem respondeu.
+
 ![Cartão de agentes: Claude Code, Codex CLI e Antigravity instalados, sessões abertas do projeto e ponte automática](docs/imagens/agentes.png)
 
 A página lista as **sessões do projeto** — as abertas agora e as recentes — e mostra quem está **ouvindo**. Antigravity, Cursor e afins não têm linha de comando para agentes: abra a pasta do projeto e peça ao agente para ler `lotes/<id>.md` e usar a API.

@@ -11,7 +11,7 @@ export interface Conexao {
   fonte: string | null;
   agente: string;
   /** agente chamado pela ponte quando ninguém está ouvindo */
-  ponte?: { agente: string; sessao: string | null } | null;
+  ponte?: { agente: string; sessao: string | null; modelo?: string | null; esforco?: string | null } | null;
   usadoEm: string;
 }
 

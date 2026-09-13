@@ -70,7 +70,9 @@ async function principal(): Promise<void> {
     const pagina = await navegador.novaPagina();
     await pagina.definirViewport(Number(values.largura), Number(values.altura), 2);
 
-    // 1. página de conexão — um recorte por cartão, para caber legível no README
+    // 1. página de conexão — um recorte por cartão, para caber legível no README.
+    // Janela alta nesta etapa: tudo fica acima da dobra, então clique e recorte usam as mesmas coordenadas.
+    await pagina.definirViewport(Number(values.largura), 1560, 2);
     await pagina.navegar(origem + "/__anotador/", 30_000);
     await esperarAte(async () => pagina.avaliar<boolean>(`document.getElementById("passo-1").classList.contains("feito") && document.querySelectorAll(".agente").length > 0`));
     await pagina.esperar(1500);
@@ -83,6 +85,14 @@ async function principal(): Promise<void> {
     };
     await salvar("conexao", pagina, await recorteDe(".cartao", true));
     await salvar("agentes", pagina, await recorteDe(".casca > section:nth-of-type(2)"));
+    // seletor de modelo aberto: marcas dos provedores, modelos reais da máquina e níveis de raciocínio
+    await clicarEm(pagina, "document.querySelector('#ponte .seletor-gatilho')");
+    await esperarAte(async () => pagina.avaliar<boolean>(`!document.querySelector(".seletor-menu").hidden`));
+    await pagina.esperar(400);
+    const menu = await rectDe(pagina, "document.querySelector('.seletor-menu')");
+    const faixa = await rectDe(pagina, "document.querySelector('.faixa')");
+    await salvar("modelos", pagina, { left: faixa.left - folga, top: menu.top - folga, width: faixa.width + folga * 2, height: faixa.top + faixa.height - menu.top + folga * 2 });
+    await pagina.pressionar("Escape");
     // A página segue o tema do sistema; o README mostra a versão certa para cada leitor.
     await pagina.emularTema("dark");
     await pagina.esperar(500);
@@ -90,6 +100,7 @@ async function principal(): Promise<void> {
     await pagina.emularTema("light");
 
     // 2. anotar: selecionar um elemento, comentar e abrir o painel de propriedades
+    await pagina.definirViewport(Number(values.largura), Number(values.altura), 2);
     await pagina.navegar(origem + values.rota, 90_000);
     await pagina.esperarPor("window.__anotadorCarregado", 30_000);
     await pagina.esperar(800);

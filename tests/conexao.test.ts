@@ -5,7 +5,9 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
+import { comandoDaPonte, modelosDe } from "../lib/agentes.ts";
 import { RegistroConexoes } from "../lib/conexoes.ts";
+import { marcaDe } from "../lib/marcas.ts";
 import { alvoPermitido, detectarFramework, detectarServidores, extrairTitulo, sondar } from "../lib/deteccao.ts";
 import { BASE } from "../server.ts";
 import { abrirWs, criarAlvoFalso, criarProxy, pedir, type AlvoFalso, type ProxySobTeste } from "./ajuda.ts";
@@ -27,6 +29,40 @@ describe("deteccao", () => {
     assert.equal(detectarFramework(new Headers(), "<p>oi</p>"), null);
     assert.equal(extrairTitulo("<html><head><title>\n  Portal  de teste </title></head></html>"), "Portal de teste");
     assert.equal(extrairTitulo("<html></html>"), null);
+  });
+});
+
+describe("modelos e comando da ponte", () => {
+  test("cada agente recebe modelo e nível de raciocínio do jeito que a sua CLI espera", () => {
+    const claude = comandoDaPonte("claude", null, "oi", { modelo: "opus", esforco: "high" }) ?? [];
+    assert.equal(claude[claude.indexOf("--model") + 1], "opus");
+    assert.equal(claude[claude.indexOf("--effort") + 1], "high");
+    assert.equal(claude[claude.length - 1], "oi", "a mensagem continua sendo o último argumento");
+
+    const codex = comandoDaPonte("codex", null, "oi", { modelo: "gpt-6-astra", esforco: "high" }) ?? [];
+    assert.deepEqual(codex.slice(0, 3), ["codex", "exec", "--full-auto"]);
+    assert.equal(codex[codex.indexOf("-m") + 1], "gpt-6-astra");
+    assert.ok(codex.includes('model_reasoning_effort="high"'), `o esforço do Codex vai como override de config: ${codex.join(" ")}`);
+
+    const retomada = comandoDaPonte("codex", "019f-abc", "oi", { modelo: "gpt-6-astra" }) ?? [];
+    assert.ok(retomada.indexOf("-m") < retomada.indexOf("resume"), "as flags vêm antes do subcomando resume");
+    assert.equal(retomada[retomada.indexOf("resume") + 1], "019f-abc");
+
+    assert.deepEqual(comandoDaPonte("gemini", null, "oi", { modelo: "gemini-3" })?.slice(0, 3), ["gemini", "-m", "gemini-3"]);
+    assert.equal(comandoDaPonte("antigravity", null, "oi"), null, "IDE sem linha de comando não tem ponte");
+    const semEscolha = comandoDaPonte("claude", null, "oi") ?? [];
+    assert.ok(!semEscolha.includes("--model") && !semEscolha.includes("--effort"), "sem escolha, nada é imposto");
+  });
+
+  test("o catálogo de modelos traz níveis de raciocínio e marca do provedor", () => {
+    const claude = modelosDe("claude");
+    assert.ok(claude.length >= 3);
+    assert.ok(claude.every((m) => m.esforcos.includes("high")), "todo modelo do Claude aceita esforço alto");
+    assert.equal(claude.filter((m) => m.padrao).length, 1, "exatamente um marcado como padrão");
+    assert.equal(modelosDe("antigravity").length, 0);
+    assert.match(marcaDe("codex"), /^<svg/, "o Codex usa a marca da OpenAI");
+    assert.equal(marcaDe("codex"), marcaDe("openai"));
+    assert.notEqual(marcaDe("claude"), marcaDe("generico"));
   });
 });
 
@@ -180,6 +216,14 @@ describe("servidor sem alvo e página de conexão", () => {
     assert.equal(ruim.status, 400, "Antigravity não tem ponte por linha de comando");
     const desliga = await pedir(`${proxy.origem}${BASE}/agente/ponte`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ agente: null }) });
     assert.equal(desliga.status, 200);
+    if (r.agentes.some((a) => a.id === "claude" && a.instalado)) {
+      const inventado = await pedir(`${proxy.origem}${BASE}/agente/ponte`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ agente: "claude", modelo: "modelo-que-nao-existe", esforco: "turbo" }) });
+      assert.equal(inventado.status, 200);
+      const ponte = (JSON.parse(inventado.corpo) as { ponte: { modelo: string | null; esforco: string | null } }).ponte;
+      assert.equal(ponte.modelo, null, "modelo desconhecido não entra na linha de comando");
+      assert.equal(ponte.esforco, null);
+      await pedir(`${proxy.origem}${BASE}/agente/ponte`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ agente: null }) });
+    }
     const iniciarRuim = await pedir(`${proxy.origem}${BASE}/agente/iniciar`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ agente: "cursor" }) });
     assert.equal(iniciarRuim.status, 400);
     const log = await pedir(`${proxy.origem}${BASE}/agente/execucoes/nao-existe/log`);

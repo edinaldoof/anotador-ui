@@ -12,11 +12,12 @@ import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
-import { Ponte, detectarAgentes, mensagemDeAbertura, mensagemParaLote, sessoesClaude, sessoesCodex, type IdAgente } from "./lib/agentes.ts";
+import { Ponte, detectarAgentes, mensagemDeAbertura, mensagemParaLote, modelosDe, sessoesClaude, sessoesCodex, type IdAgente } from "./lib/agentes.ts";
 import { capturarLote } from "./lib/captura.ts";
 import { encontrarChromium } from "./lib/cdp.ts";
 import { paginaConexao } from "./lib/conexao.ts";
 import { RegistroConexoes, pastaBase } from "./lib/conexoes.ts";
+import { marcaPeloNome } from "./lib/marcas.ts";
 import { PORTAS_COMUNS, alvoPermitido, detectarServidores, sondar, type Sondagem } from "./lib/deteccao.ts";
 import { Fila, idSeguro, validarLote } from "./lib/fila.ts";
 import { analisarLote, arquivosProvaveis, lerProjeto } from "./lib/fonte.ts";
@@ -34,6 +35,9 @@ const removerTipos = (modulo as unknown as { stripTypeScriptTypes?: RemovedorDeT
 export interface PonteConfig {
   agente: IdAgente;
   sessao: string | null;
+  /** modelo e nível de raciocínio, quando o agente aceita escolher */
+  modelo?: string | null;
+  esforco?: string | null;
 }
 
 export interface OpcoesServidor {
@@ -321,6 +325,14 @@ async function sondagemDoAlvo(ctx: ContextoApi): Promise<Sondagem | null> {
   return valor;
 }
 
+/** "Opus 5 · alto" a partir da configuração da ponte, para mostrar de quem é a resposta. */
+function rotuloDoModelo(ponte: PonteConfig | null | undefined): string | null {
+  if (!ponte?.modelo) return null;
+  const modelo = modelosDe(ponte.agente).find((m) => m.valor === ponte.modelo);
+  const titulo = modelo?.titulo ?? ponte.modelo;
+  return ponte.esforco ? `${titulo} · ${ponte.esforco}` : titulo;
+}
+
 async function saude(ctx: ContextoApi): Promise<Record<string, unknown>> {
   const { fila, difusor, opcoes } = ctx;
   const [app, pendentes, conexoes] = await Promise.all([sondagemDoAlvo(ctx), fila.pendentes().then((l) => l.length).catch(() => 0), ctx.registro ? ctx.registro.listar() : Promise.resolve([])]);
@@ -400,6 +412,8 @@ async function processarLote(ctx: ContextoApi, lote: Lote, origemPublica: string
       await ctx.ponte.iniciar({
         agente: opcoes.ponte.agente,
         sessao: opcoes.ponte.sessao,
+        modelo: opcoes.ponte.modelo ?? null,
+        esforco: opcoes.ponte.esforco ?? null,
         fonte: opcoes.fonte,
         motivo: `lote ${lote.id.slice(0, 8)} sem ninguém ouvindo`,
         mensagem: mensagemParaLote({ porta: ctx.porta(), nome: opcoes.nome, alvo: opcoes.alvo, fonte: opcoes.fonte, raizFerramenta: RAIZ }, { id: lote.id, caminhoMd: fila.caminhoMd(lote.id), resumo: resumoLote(lote) }),
@@ -549,9 +563,14 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     const sessao = typeof corpo["sessao"] === "string" && /^[\w.-]{1,120}$/.test(corpo["sessao"]) ? corpo["sessao"] : null;
     try {
       const pendentes = (await fila.pendentes()).length;
+      const modelos = modelosDe(agente);
+      const modelo = typeof corpo["modelo"] === "string" && modelos.some((m) => m.valor === corpo["modelo"]) ? corpo["modelo"] : opcoes.ponte?.agente === agente ? (opcoes.ponte.modelo ?? null) : null;
+      const esforco = typeof corpo["esforco"] === "string" && modelos.find((m) => m.valor === modelo)?.esforcos.includes(corpo["esforco"]) ? corpo["esforco"] : opcoes.ponte?.agente === agente ? (opcoes.ponte.esforco ?? null) : null;
       const execucao = await ctx.ponte.iniciar({
         agente,
         sessao,
+        modelo,
+        esforco,
         fonte: opcoes.fonte,
         motivo: "iniciado pela página de conexão",
         mensagem: typeof corpo["mensagem"] === "string" && corpo["mensagem"].trim() ? corpo["mensagem"].trim().slice(0, 4000) : mensagemDeAbertura({ porta: ctx.porta(), nome: opcoes.nome, alvo: opcoes.alvo, fonte: opcoes.fonte, raizFerramenta: RAIZ }, pendentes),
@@ -582,10 +601,13 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
         responderJson(res, 400, { ok: false, erro: "agente não instalado ou sem ponte por linha de comando" });
         return true;
       }
-      opcoes.ponte = { agente, sessao: typeof corpo["sessao"] === "string" && /^[\w.-]{1,120}$/.test(corpo["sessao"]) ? corpo["sessao"] : null };
+      const modelos = modelosDe(agente);
+      const modelo = typeof corpo["modelo"] === "string" && modelos.some((m) => m.valor === corpo["modelo"]) ? corpo["modelo"] : null;
+      const esforco = typeof corpo["esforco"] === "string" && modelos.find((m) => m.valor === modelo)?.esforcos.includes(corpo["esforco"]) ? corpo["esforco"] : null;
+      opcoes.ponte = { agente, sessao: typeof corpo["sessao"] === "string" && /^[\w.-]{1,120}$/.test(corpo["sessao"]) ? corpo["sessao"] : null, modelo, esforco };
     }
     if (ctx.registro && opcoes.alvo) await ctx.registro.registrar({ alvo: opcoes.alvo, nome: opcoes.nome, fonte: opcoes.fonte, agente: opcoes.agente, ponte: opcoes.ponte ?? null });
-    registrar(opcoes, opcoes.ponte ? `ponte automática: ${opcoes.ponte.agente}${opcoes.ponte.sessao ? ` (sessão ${opcoes.ponte.sessao.slice(0, 8)})` : ""}` : "ponte automática desligada");
+    registrar(opcoes, opcoes.ponte ? `ponte automática: ${opcoes.ponte.agente}${opcoes.ponte.modelo ? ` · ${rotuloDoModelo(opcoes.ponte)}` : ""}${opcoes.ponte.sessao ? ` (sessão ${opcoes.ponte.sessao.slice(0, 8)})` : ""}` : "ponte automática desligada");
     responderJson(res, 200, { ok: true, ponte: opcoes.ponte ?? null });
     return true;
   }
@@ -597,7 +619,14 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     return true;
   }
   if (caminho === "/overlay.js" && metodo === "GET") {
-    const codigo = await montarOverlay({ base: BASE, capturas: opcoes.capturas, nome: opcoes.nome, agente: opcoes.agente });
+    const codigo = await montarOverlay({
+      base: BASE,
+      capturas: opcoes.capturas,
+      nome: opcoes.nome,
+      agente: opcoes.agente,
+      marca: marcaPeloNome(opcoes.ponte?.agente ?? opcoes.agente),
+      modelo: rotuloDoModelo(opcoes.ponte),
+    });
     responderTexto(res, 200, codigo, "application/javascript; charset=utf-8");
     return true;
   }
@@ -1066,7 +1095,7 @@ async function principal(): Promise<void> {
     publico: values.publico ?? null,
     fonte,
     agente: values.agente?.trim() || salva?.agente || "Claude",
-    ponte: salva?.ponte && ["claude", "codex", "gemini", "opencode"].includes(salva.ponte.agente) ? { agente: salva.ponte.agente as IdAgente, sessao: salva.ponte.sessao } : null,
+    ponte: salva?.ponte && ["claude", "codex", "gemini", "opencode"].includes(salva.ponte.agente) ? { agente: salva.ponte.agente as IdAgente, sessao: salva.ponte.sessao, modelo: salva.ponte.modelo ?? null, esforco: salva.ponte.esforco ?? null } : null,
     permitirExterno: values["permitir-externo"],
   };
   let servidor: ServidorAnotador;

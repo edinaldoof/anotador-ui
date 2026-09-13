@@ -175,40 +175,64 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-fila .item.lote .perg { color: #f2c14e; font-size: 12px; }
 
 .an-conversa {
-  position: fixed; left: 14px; bottom: 14px; width: 400px; max-height: min(70vh, 640px); pointer-events: auto;
-  display: flex; flex-direction: column; background: #1f2221; border: 1px solid #343837; border-radius: 18px;
-  box-shadow: 0 16px 50px rgba(0,0,0,.45); overflow: hidden;
+  position: fixed; left: 14px; bottom: 14px; width: 420px; max-height: min(74vh, 680px); pointer-events: auto;
+  display: flex; flex-direction: column; background: #1b1e1d; border: 1px solid #343837; border-radius: 20px;
+  box-shadow: 0 18px 56px rgba(0,0,0,.5); overflow: hidden;
 }
-.an-conversa .cab { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 14px; border-bottom: 1px solid #2c302f; background: #242827; }
-.an-conversa .cab .tit { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.an-conversa .cab .tit .sub { display: block; color: #8b918e; font-size: 11px; font-weight: 400; }
-.an-conversa .fluxo { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; scrollbar-width: thin; scrollbar-color: #4a5150 transparent; }
-.an-conversa .vazio { color: #8b918e; text-align: center; padding: 20px 8px; }
-.an-msg { max-width: 92%; display: flex; flex-direction: column; gap: 6px; }
-.an-msg .balao { padding: 9px 12px; border-radius: 14px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
-.an-msg.agente { align-self: flex-start; }
-.an-msg.agente .balao { background: #2a2e2d; color: #e7e7e7; border-bottom-left-radius: 5px; }
-.an-msg.usuario { align-self: flex-end; }
-.an-msg.usuario .balao { background: #2563eb; color: #fff; border-bottom-right-radius: 5px; }
-.an-msg .meta { color: #8b918e; font-size: 11px; padding: 0 4px; }
-.an-msg.usuario .meta { text-align: right; }
-.an-msg .opcoes { display: flex; flex-wrap: wrap; gap: 6px; }
-.an-opcao { padding: 7px 12px; border-radius: 999px; background: #1f2221; border: 1px solid #4a5150; color: #fff; font-size: 12.5px; text-align: left; }
-.an-opcao:hover { border-color: #7ea7f5; background: #24303f; }
-.an-opcao.marcada { background: #2563eb; border-color: #2563eb; }
+.an-conversa .cab { display: flex; align-items: center; gap: 9px; padding: 10px 10px 10px 12px; border-bottom: 1px solid #2a2f2e; background: #202423; }
+.an-conversa .cab .marca { width: 28px; height: 28px; border-radius: 9px; background: #2a2f2e; display: grid; place-items: center; flex: none; }
+.an-conversa .cab .marca svg { width: 17px; height: 17px; }
+.an-conversa .cab .tit { flex: 1; min-width: 0; font-weight: 700; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-conversa .cab .tit .sub { display: block; color: #8b918e; font-size: 11px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+.an-conversa .fluxo { flex: 1; overflow: auto; padding: 14px 13px 6px; display: flex; flex-direction: column; gap: 15px; scrollbar-width: thin; scrollbar-color: #4a5150 transparent; }
+.an-conversa .vazio { color: #8b918e; text-align: center; padding: 22px 10px; font-size: 12.5px; line-height: 1.5; }
+
+/* mensagem do agente: avatar + texto corrido; do usuário: balão à direita (padrão do Nexus UI) */
+.an-msg { display: flex; gap: 9px; }
+.an-msg.agente { align-self: stretch; }
+.an-msg.agente .av { width: 26px; height: 26px; border-radius: 8px; background: #242827; display: grid; place-items: center; flex: none; margin-top: 1px; }
+.an-msg.agente .av svg { width: 16px; height: 16px; }
+.an-msg .corpo { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.an-msg .quem { color: #8b918e; font-size: 11px; }
+.an-msg.agente .balao { color: #e3e6e5; line-height: 1.5; white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+.an-msg.usuario { align-self: flex-end; max-width: 88%; }
+.an-msg.usuario .corpo { align-items: flex-end; }
+.an-msg.usuario .balao { background: #2f3735; color: #fff; border-radius: 16px 16px 5px 16px; padding: 9px 13px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+.an-msg .escolhida { color: #7ee2b0; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.an-msg .escolhida::before { content: "✓"; font-weight: 700; }
+
+/* perguntas com opções */
+.an-perguntas { display: flex; flex-direction: column; gap: 6px; padding: 9px; background: #202423; border: 1px solid #2f3534; border-radius: 14px; }
+.an-perguntas .rot { color: #8b918e; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 1px 3px 3px; }
+.an-opcao {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 9px 11px; border-radius: 10px;
+  background: #191d1c; border: 1px solid #343837; color: #e7e7e7; font-size: 12.5px; line-height: 1.35;
+}
+.an-opcao:hover { border-color: #4b8bf5; background: #1e2735; }
+.an-opcao .mira { width: 14px; height: 14px; border-radius: 999px; border: 1.6px solid #5a615f; flex: none; }
+.an-opcao.marcada { border-color: #4b8bf5; background: #1e2735; }
+.an-opcao.marcada .mira { border-color: #4b8bf5; box-shadow: inset 0 0 0 3px #4b8bf5; }
+.an-opcao.livre { border-style: dashed; color: #a3a8a6; }
 .an-opcao:disabled { opacity: .5; cursor: default; }
-.an-msg .escolhida { color: #7ee2b0; font-size: 12px; padding: 0 4px; }
-.an-conversa .entrada { display: flex; align-items: flex-end; gap: 6px; padding: 10px; border-top: 1px solid #2c302f; }
-.an-conversa .entrada textarea {
-  flex: 1; min-height: 36px; max-height: 120px; resize: none; background: #2a2e2d; border: 1px solid #383d3c; border-radius: 12px;
-  padding: 9px 12px; color: #fff; outline: 0; line-height: 1.4;
+
+/* entrada: caixa única com a área de texto em cima e as ações embaixo */
+.an-conversa .entrada {
+  margin: 8px 10px 10px; border: 1px solid #383d3c; background: #212625; border-radius: 18px;
+  display: flex; flex-direction: column; overflow: hidden; cursor: text;
 }
-.an-conversa .entrada textarea:focus { border-color: #4b8bf5; }
-.an-conversa .entrada textarea::placeholder { color: #8b918e; }
-.an-conversa .entrada .an-ok { width: 36px; height: 36px; background: #2563eb; }
+.an-conversa .entrada:focus-within { border-color: #4b8bf5; box-shadow: 0 0 0 3px rgba(75,139,245,.16); }
+.an-conversa .entrada textarea {
+  border: 0; background: transparent; outline: 0; resize: none; color: #fff;
+  min-height: 42px; max-height: 160px; padding: 11px 13px 3px; line-height: 1.45; font-size: 13px;
+}
+.an-conversa .entrada textarea::placeholder { color: #7f8785; }
+.an-conversa .entrada .acoes { display: flex; align-items: center; gap: 6px; padding: 4px 7px 7px; }
+.an-conversa .entrada .acoes .esp { flex: 1; }
+.an-conversa .entrada .acoes .atalho { color: #6b7270; font-size: 10.5px; padding-left: 4px; }
+.an-conversa .entrada .an-ok { width: 32px; height: 32px; background: #2563eb; }
 .an-conversa .entrada .an-ok:hover { background: #3b74ee; }
 .an-conversa .entrada .an-ok:disabled { background: #2a2e2d; color: #7f8a86; cursor: default; }
-.an-conversa .dica-resp { padding: 0 14px 8px; color: #f2c14e; font-size: 12px; }
+.an-conversa .dica-resp { padding: 0 15px 6px; color: #f2c14e; font-size: 11.5px; }
 .an-estado.pergunta { background: #3d3218; color: #f2c14e; }
 .an-religar.pergunta .n { background: #f2c14e; color: #1f2221; }
 .an-fila .item.lote .num { background: #3b4240; }

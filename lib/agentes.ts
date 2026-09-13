@@ -3,10 +3,11 @@
 // nenhuma sessão está ouvindo os eventos.
 
 import { spawn } from "node:child_process";
-import { existsSync, openSync } from "node:fs";
+import { existsSync, openSync, readFileSync } from "node:fs";
 import { mkdir, open, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
+import { marcaDe } from "./marcas.ts";
 
 export type IdAgente = "claude" | "codex" | "gemini" | "antigravity" | "cursor" | "opencode";
 
@@ -34,6 +35,73 @@ export const AGENTES: AgenteConhecido[] = [
 export interface AgenteDetectado extends AgenteConhecido {
   instalado: boolean;
   caminho: string | null;
+  /** SVG da marca do provedor, para a interface */
+  marca: string;
+  /** modelos que dá para escolher, quando o agente permite */
+  modelos: ModeloAgente[];
+}
+
+export interface ModeloAgente {
+  valor: string;
+  titulo: string;
+  descricao?: string;
+  /** níveis de raciocínio aceitos por este modelo */
+  esforcos: string[];
+  esforcoPadrao?: string;
+  padrao?: boolean;
+}
+
+// O Claude Code aceita apelido ou nome completo em --model, e --effort de low a max.
+const MODELOS_CLAUDE: ModeloAgente[] = [
+  { valor: "fable", titulo: "Fable 5.1", descricao: "O mais capaz para trabalho difícil", esforcos: ["low", "medium", "high", "xhigh", "max"], esforcoPadrao: "high" },
+  { valor: "opus", titulo: "Opus 5", descricao: "Forte e rápido no dia a dia", esforcos: ["low", "medium", "high", "xhigh", "max"], esforcoPadrao: "high", padrao: true },
+  { valor: "sonnet", titulo: "Sonnet 5", descricao: "Equilibra custo e capacidade", esforcos: ["low", "medium", "high", "xhigh", "max"], esforcoPadrao: "medium" },
+  { valor: "haiku", titulo: "Haiku 4.5", descricao: "Barato para tarefas simples", esforcos: ["low", "medium", "high"], esforcoPadrao: "medium" },
+];
+
+interface ModeloCodex {
+  slug?: string;
+  display_name?: string;
+  description?: string;
+  default_reasoning_level?: string;
+  supported_reasoning_levels?: Array<{ effort?: string }>;
+  visibility?: string;
+}
+
+let cacheModelosCodex: { em: number; lista: ModeloAgente[] } | null = null;
+
+// O Codex guarda em ~/.codex/models_cache.json o que a conta do usuário pode usar.
+function modelosCodex(): ModeloAgente[] {
+  if (cacheModelosCodex && Date.now() - cacheModelosCodex.em < 60_000) return cacheModelosCodex.lista;
+  let lista: ModeloAgente[] = [];
+  try {
+    const bruto = JSON.parse(readFileSync(join(pastaCodex(), "models_cache.json"), "utf8")) as { models?: ModeloCodex[] };
+    lista = (bruto.models ?? [])
+      .filter((m) => m.slug && m.visibility !== "hidden")
+      .slice(0, 12)
+      .map((m) => {
+        const modelo: ModeloAgente = {
+          valor: String(m.slug),
+          titulo: m.display_name ?? String(m.slug),
+          esforcos: (m.supported_reasoning_levels ?? []).map((n) => String(n.effort)).filter(Boolean),
+        };
+        if (m.description) modelo.descricao = m.description;
+        if (m.default_reasoning_level) modelo.esforcoPadrao = m.default_reasoning_level;
+        return modelo;
+      });
+    const padrao = /^model\s*=\s*"([^"]+)"/m.exec(readFileSync(join(pastaCodex(), "config.toml"), "utf8"))?.[1];
+    for (const m of lista) if (m.valor === padrao) m.padrao = true;
+  } catch {
+    lista = [];
+  }
+  cacheModelosCodex = { em: Date.now(), lista };
+  return lista;
+}
+
+export function modelosDe(id: IdAgente): ModeloAgente[] {
+  if (id === "claude") return MODELOS_CLAUDE;
+  if (id === "codex") return modelosCodex();
+  return [];
 }
 
 function procurarNoPath(binario: string): string | null {
@@ -54,7 +122,7 @@ export function detectarAgentes(): AgenteDetectado[] {
   if (cacheAgentes && Date.now() - cacheAgentes.em < 20_000) return cacheAgentes.lista;
   const lista = AGENTES.map((a) => {
     const caminho = procurarNoPath(a.binario);
-    return { ...a, instalado: caminho !== null, caminho };
+    return { ...a, instalado: caminho !== null, caminho, marca: marcaDe(a.id), modelos: caminho ? modelosDe(a.id) : [] };
   });
   cacheAgentes = { em: Date.now(), lista };
   return lista;
@@ -288,6 +356,7 @@ export interface Execucao {
   id: string;
   agente: IdAgente;
   sessao: string | null;
+  modelo?: string | null;
   comando: string[];
   pid: number | null;
   iniciadoEm: string;
@@ -304,18 +373,44 @@ export interface PedidoPonte {
   fonte: string | null;
   mensagem: string;
   motivo: string;
+  modelo?: string | null;
+  esforco?: string | null;
 }
 
-export function comandoDaPonte(agente: IdAgente, sessao: string | null, mensagem: string): string[] | null {
+export interface EscolhaModelo {
+  modelo?: string | null;
+  esforco?: string | null;
+}
+
+export function comandoDaPonte(agente: IdAgente, sessao: string | null, mensagem: string, escolha: EscolhaModelo = {}): string[] | null {
+  const modelo = escolha.modelo?.trim() || null;
+  const esforco = escolha.esforco?.trim() || null;
   switch (agente) {
     case "claude":
-      return ["claude", "-p", "--permission-mode", "acceptEdits", "--allowedTools", "Bash(anotador *) Bash(node *anotador*) Read Edit Write Grep Glob", ...(sessao ? ["--resume", sessao] : []), mensagem];
-    case "codex":
-      return sessao ? ["codex", "exec", "resume", sessao, mensagem] : ["codex", "exec", "--full-auto", mensagem];
+      return [
+        "claude",
+        "-p",
+        "--permission-mode",
+        "acceptEdits",
+        "--allowedTools",
+        "Bash(anotador *) Bash(node *anotador*) Read Edit Write Grep Glob",
+        ...(modelo ? ["--model", modelo] : []),
+        ...(esforco ? ["--effort", esforco] : []),
+        ...(sessao ? ["--resume", sessao] : []),
+        mensagem,
+      ];
+    case "codex": {
+      // O nível de raciocínio do Codex entra como override de configuração, não como flag própria.
+      const ajustes = esforco ? ["-c", `model_reasoning_effort="${esforco}"`] : [];
+      const comModelo = modelo ? ["-m", modelo] : [];
+      return sessao
+        ? ["codex", "exec", ...comModelo, ...ajustes, "resume", sessao, mensagem]
+        : ["codex", "exec", "--full-auto", ...comModelo, ...ajustes, mensagem];
+    }
     case "gemini":
-      return ["gemini", "-p", mensagem, "--yolo"];
+      return ["gemini", ...(modelo ? ["-m", modelo] : []), "-p", mensagem, "--yolo"];
     case "opencode":
-      return ["opencode", "run", mensagem];
+      return ["opencode", "run", ...(modelo ? ["-m", modelo] : []), mensagem];
     default:
       return null;
   }
@@ -336,7 +431,7 @@ export class Ponte {
   }
 
   async iniciar(pedido: PedidoPonte): Promise<Execucao> {
-    const comando = comandoDaPonte(pedido.agente, pedido.sessao, pedido.mensagem);
+    const comando = comandoDaPonte(pedido.agente, pedido.sessao, pedido.mensagem, { modelo: pedido.modelo ?? null, esforco: pedido.esforco ?? null });
     if (!comando) throw new Error(`o agente ${pedido.agente} não tem ponte por linha de comando`);
     const [binario, ...args] = comando;
     if (!binario || !procurarNoPath(binario)) throw new Error(`${binario ?? pedido.agente} não está instalado (não encontrado no PATH)`);
@@ -348,7 +443,7 @@ export class Ponte {
     const env = { ...process.env };
     for (const chave of Object.keys(env)) if (/^(CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|CODEX_SANDBOX)/.test(chave)) delete env[chave];
     const filho = spawn(binario, args, { cwd: pedido.fonte ?? process.cwd(), env, detached: true, stdio: ["ignore", fd, fd] });
-    const execucao: Execucao = { id, agente: pedido.agente, sessao: pedido.sessao, comando, pid: filho.pid ?? null, iniciadoEm: new Date().toISOString(), terminadoEm: null, codigo: null, log, motivo: pedido.motivo };
+    const execucao: Execucao = { id, agente: pedido.agente, sessao: pedido.sessao, modelo: pedido.modelo ?? null, comando, pid: filho.pid ?? null, iniciadoEm: new Date().toISOString(), terminadoEm: null, codigo: null, log, motivo: pedido.motivo };
     this.execucoes.unshift(execucao);
     if (this.execucoes.length > 30) this.execucoes.length = 30;
     filho.on("exit", (codigo) => {

@@ -231,4 +231,8 @@ interface ConfigOverlay {
   nome: string;
   /** nome do agente que aplica as anotações, mostrado na interface */
   agente: string;
+  /** SVG da marca do provedor, para o avatar da conversa */
+  marca: string;
+  /** modelo escolhido para a ponte, quando houver */
+  modelo: string | null;
 }

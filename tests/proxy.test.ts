@@ -58,7 +58,7 @@ test("o overlay é servido como JavaScript sem tipos e com a configuração embu
   const r = await pedir(proxy.origem + BASE + "/overlay.js");
   assert.equal(r.status, 200);
   assert.match(r.headers["content-type"] ?? "", /javascript/);
-  assert.match(r.corpo, /window\.__ANOTADOR_CFG = \{"base":"\/__anotador","capturas":false,"nome":"teste","agente":"Claude"\}/);
+  assert.match(r.corpo, /window\.__ANOTADOR_CFG = \{"base":"\/__anotador","capturas":false,"nome":"teste","agente":"Claude","marca":"<svg[^]*?","modelo":null\}/);
   assert.doesNotMatch(r.corpo, /: string\b|: number\b|interface \w+ \{/, "tipos removidos");
   const { default: vm } = await import("node:vm");
   assert.doesNotThrow(() => new vm.Script(r.corpo), "bundle é JavaScript sintaticamente válido");
