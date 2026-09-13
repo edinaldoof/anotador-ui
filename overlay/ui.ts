@@ -145,7 +145,7 @@ interface OpcoesArrasto {
   aoClique?: () => void;
 }
 
-const CFG: ConfigOverlay = window.__ANOTADOR_CFG ?? { base: "/__anotador", capturas: true, nome: "", agente: "Claude", marca: "", modelo: null };
+const CFG: ConfigOverlay = window.__ANOTADOR_CFG ?? { base: "/__anotador", capturas: true, nome: "", agente: "Claude", marca: "", modelo: null, norma: null };
 const AGENTE = CFG.agente || "Claude";
 const MARCA_AGENTE = CFG.marca || "";
 const MODELO = CFG.modelo || null;
@@ -432,6 +432,11 @@ function montar(): void {
     arvore: () => resumoArvore(),
     abrirArvore: () => abrirArvore(),
     auditar: () => auditarPagina(),
+    auditarNorma: async () => {
+      const base = auditarPagina();
+      await completarComNorma(base);
+      return base;
+    },
     contexto: () => contextoDaPagina(),
   };
   window.__anotadorCarregado = true;

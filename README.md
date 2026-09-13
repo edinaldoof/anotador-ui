@@ -165,7 +165,10 @@ Pela linha de comando, para o agente ou para o relatório:
 ```bash
 anotador design          # tokens, escala e achados acima de "baixa"
 anotador design --tudo   # inclui token sem uso e cor repetida
+anotador design --tokens > tokens.json   # os mesmos tokens no formato do W3C
 ```
+
+O último exporta no **Design Tokens Format Module**, estável desde outubro de 2025 e lido por Figma, Style Dictionary, Tokens Studio e Penpot. `var(--outro)` vira referência `{cor.outro}`, o comentário do autor vira `$description` e cada token carrega em `$extensions` o nome da variável e o `arquivo:linha` de onde saiu — a viagem de volta continua possível. O que o formato não representa fica de fora com o motivo impresso, porque inventar uma forma aproximada é pior do que declarar a ausência.
 
 As regras foram calibradas contra projetos reais, porque linter que grita demais ninguém lê:
 
@@ -180,6 +183,8 @@ As regras foram calibradas contra projetos reais, porque linter que grita demais
 A lupa na barra (`Alt+E`) mede a página com uma régua objetiva e, se você quiser, pede um **parecer ao agente conectado**. São duas coisas separadas de propósito:
 
 **A régua** roda no navegador e não opina — mede. Doze regras: contraste contra o mínimo da norma, alvo de toque, campo sem rótulo, botão sem nome, salto e inversão de nível nos cabeçalhos, transbordo que faz a página rolar de lado, texto cortado, elemento a poucos pixels de uma coluna que os irmãos respeitam, raio e altura desiguais entre controles vizinhos, e vãos irregulares numa mesma linha. Cada achado traz o seletor, e passar o mouse acende o elemento.
+
+**O motor emprestado** entra quando o projeto anotado já tem o `axe-core` instalado — e todo projeto Next com o lint padrão tem, por transitividade. O anotador o serve a partir do `node_modules` do próprio projeto, sem virar dependência de nada, e some sem alarde onde não houver. Ele mede o que a régua não mede: ARIA, semântica, landmarks, tabelas. Sete regras normativas que o motor entrega **desligadas de fábrica** são ligadas aqui pelo nome, entre elas o alvo de toque da WCAG 2.2 — quem roda o motor puro recebe um verde que não mediu o que diz medir. Fora ficam o nível AAA, os critérios que a WCAG 2.2 removeu e as regras experimentais, cada exclusão com o motivo escrito no código. Achado que repete o que a régua já disse sobre o mesmo elemento não aparece duas vezes, e a régua ganha o empate: ela tem calibração que a norma não tem, como a exceção do próprio critério 2.5.8 para link no meio de um parágrafo. No painel, o que veio de fora leva o selo `norma`.
 
 **O parecer** é do agente. O anotador monta um dossiê com tudo que já foi medido, a estrutura da página, os componentes em cena, o sistema de design com a intenção de cada token, e a captura da tela; então pede que ele julgue só o que a régua não alcança — hierarquia visual, clareza da ação principal, consistência, densidade, elegância. Cada item volta apontando um elemento, o problema e uma sugestão na linguagem do projeto, com botão para virar anotação e você mandar aplicar.
 
@@ -252,6 +257,9 @@ anotador servir [--alvo URL] [--porta 3999] [--host 0.0.0.0] [--nome slug] [--sa
                 [--agente Claude] [--publico http://ip:porta] [--sem-csp] [--sem-capturas] [--chrome caminho] [--permitir-externo]
 anotador conectar <url> | desconectar | saude | pendentes | ver <id> | conversa <id>
 anotador fontes [--compact] [--forcar]         instala a San Francisco da Apple nesta máquina
+anotador design [--fonte dir] [--tudo]         tokens do projeto e o que foge das próprias regras
+anotador design --tokens                       os mesmos tokens no formato do W3C, na saída padrão
+anotador avaliacoes | avaliacao <id>           pedidos de parecer e o dossiê de cada um
 anotador progresso <id> --nota … | nota <id> --texto … | perguntar <id> --texto … [--opcoes "A|B|C"] [--multipla] | processado <id> [--nota …]
 ```
 

@@ -39,11 +39,15 @@ interface DepuracaoAnotador {
   arvore(): ResumoArvore;
   abrirArvore(): void;
   auditar(): ResultadoAuditoria;
+  /** a mesma medição somada ao motor de normas emprestado, quando o projeto o tiver */
+  auditarNorma(): Promise<ResultadoAuditoria>;
   contexto(): Record<string, unknown>;
 }
 
 interface Window {
   __ANOTADOR_CFG?: ConfigOverlay;
+  /** nonce da página, copiado da tag do overlay, para carregar o motor sem esbarrar no CSP */
+  __ANOTADOR_NONCE?: string;
   __anotadorCarregado?: boolean;
   __anotadorDebug?: DepuracaoAnotador;
   SpeechRecognition?: ConstrutorReconhecimentoVoz;

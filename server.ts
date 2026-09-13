@@ -17,7 +17,8 @@ import { Avaliacoes, gerarDossie, validarParecer, validarPedido } from "./lib/av
 import { capturarAvaliacao, capturarLote } from "./lib/captura.ts";
 import { encontrarChromium } from "./lib/cdp.ts";
 import { paginaConexao } from "./lib/conexao.ts";
-import { analisarSistema, lerSistemaDeDesign } from "./lib/design.ts";
+import { analisarSistema, lerSistemaDeDesign, paraDtcg } from "./lib/design.ts";
+import { REGRAS_A_LIGAR, REGRAS_QUE_FICAM_FORA, localizarNorma, type MotorNorma } from "./lib/norma.ts";
 import { RegistroConexoes, pastaBase } from "./lib/conexoes.ts";
 import { marcaPeloNome } from "./lib/marcas.ts";
 import { PORTAS_COMUNS, alvoPermitido, detectarServidores, sondar, type Sondagem } from "./lib/deteccao.ts";
@@ -113,6 +114,9 @@ export async function montarOverlay(cfg: ConfigOverlay): Promise<string> {
   const js = fontes.map((ts, i) => `// ---- ${ARQUIVOS_OVERLAY[i]} ----\n` + removerTipos(ts, { mode: "strip" })).join("\n");
   const codigo =
     `(() => {\n"use strict";\nif (window.__anotadorCarregado) return;\nwindow.__ANOTADOR_CFG = ${JSON.stringify(cfg)};\n` +
+    // O nonce da página chega pela própria tag deste script: quem injeta o overlay já o
+    // copiou. Sem isso, um <script> criado depois esbarra no CSP e some sem erro visível.
+    `window.__ANOTADOR_NONCE = (document.currentScript && document.currentScript.nonce) || "";\n` +
     js +
     `\n})();\n//# sourceURL=anotador-ui/overlay.js\n`;
   cacheOverlay = { assinatura, codigo };
@@ -369,13 +373,28 @@ async function resumoDoSistema(fonte: string | null): Promise<string | null> {
   }
 }
 
+// ---------- motor de regras normativas (axe-core do projeto anotado) ----------
+//
+// Procurado uma vez por pasta e lembrado: quem instala uma dependência no meio da
+// sessão reinicia o servidor, e quem não tem axe não paga uma varredura por pedido.
+
+let motorNorma: { fonte: string | null; achado: MotorNorma | null } | null = null;
+
+async function norma(fonte: string | null): Promise<MotorNorma | null> {
+  if (motorNorma && motorNorma.fonte === fonte) return motorNorma.achado;
+  const achado = await localizarNorma(fonte);
+  motorNorma = { fonte, achado };
+  return achado;
+}
+
 async function saude(ctx: ContextoApi): Promise<Record<string, unknown>> {
   const { fila, difusor, opcoes } = ctx;
-  const [app, pendentes, conexoes, fontes] = await Promise.all([
+  const [app, pendentes, conexoes, fontes, motor] = await Promise.all([
     sondagemDoAlvo(ctx),
     fila.pendentes().then((l) => l.length).catch(() => 0),
     ctx.registro ? ctx.registro.listar() : Promise.resolve([]),
     estadoDasFontes().catch(() => null),
+    norma(opcoes.fonte).catch(() => null),
   ]);
   return {
     ok: true,
@@ -391,6 +410,7 @@ async function saude(ctx: ContextoApi): Promise<Record<string, unknown>> {
     ouvintes: difusor.tamanho,
     quemOuve: difusor.ouvintes(),
     capturas: opcoes.capturas,
+    norma: motor ? { versao: motor.versao, origem: motor.origem, ligadas: Object.keys(REGRAS_A_LIGAR).length } : null,
     ponte: opcoes.ponte ?? null,
     app,
     pendentes,
@@ -617,6 +637,44 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       return true;
     }
   }
+  if (caminho === "/norma.js" && metodo === "GET") {
+    const motor = await norma(opcoes.fonte);
+    if (!motor) {
+      responderTexto(res, 404, "// nenhum axe-core no projeto anotado\n", "application/javascript; charset=utf-8");
+      return true;
+    }
+    // Imutável por versão: o arquivo tem 559 KB e não muda enquanto a dependência não muda.
+    const codigo = await readFile(motor.caminho, "utf8");
+    res.writeHead(200, {
+      "content-type": "application/javascript; charset=utf-8",
+      "cache-control": "public, max-age=3600",
+      "content-length": Buffer.byteLength(codigo),
+      "x-anotador": VERSAO,
+      "x-anotador-norma": motor.versao,
+    });
+    res.end(codigo);
+    return true;
+  }
+  if (caminho === "/norma" && metodo === "GET") {
+    const motor = await norma(opcoes.fonte);
+    responderJson(res, 200, {
+      ok: true,
+      disponivel: motor !== null,
+      ...(motor ? { versao: motor.versao, origem: motor.origem } : {}),
+      ligadas: REGRAS_A_LIGAR,
+      naoLigadas: REGRAS_QUE_FICAM_FORA,
+    });
+    return true;
+  }
+  if (caminho === "/design/tokens" && metodo === "GET") {
+    if (!opcoes.fonte) {
+      responderJson(res, 200, { ok: false, erro: "sem pasta de código-fonte configurada" });
+      return true;
+    }
+    const { documento, ignorados } = paraDtcg(lerSistemaDeDesign(await lerProjeto(opcoes.fonte)));
+    responderJson(res, 200, { ok: true, documento, ignorados });
+    return true;
+  }
   if (caminho === "/design" && metodo === "GET") {
     if (!opcoes.fonte) {
       responderJson(res, 200, { ok: true, sistema: null, achados: [], erro: "sem pasta de código-fonte configurada" });
@@ -810,6 +868,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       agente: opcoes.agente,
       marca: marcaPeloNome(opcoes.ponte?.agente ?? opcoes.agente),
       modelo: rotuloDoModelo(opcoes.ponte),
+      norma: await norma(opcoes.fonte).then((m) => (m ? { versao: m.versao, ligar: Object.keys(REGRAS_A_LIGAR) } : null)).catch(() => null),
     });
     responderTexto(res, 200, codigo, "application/javascript; charset=utf-8");
     return true;
@@ -1118,6 +1177,7 @@ uso:
   anotador desconectar [--porta 3999]
   anotador fontes [--compact] [--forcar]        (instala a San Francisco da Apple nesta máquina)
   anotador design [--fonte dir] [--tudo]        (tokens do projeto e o que foge das próprias regras)
+  anotador design --tokens > tokens.json        (os mesmos tokens no formato do W3C, que o Figma lê)
   anotador avaliacoes [--porta 3999]            (pedidos de avaliação de página, com e sem parecer)
   anotador avaliacao <id> [--porta 3999]        (dossiê e, se houver, o parecer do agente)
   anotador saude [--porta 3999]
@@ -1173,6 +1233,7 @@ async function principal(): Promise<void> {
       "permitir-externo": { type: "boolean", default: false },
       compact: { type: "boolean", default: false },
       tudo: { type: "boolean", default: false },
+      tokens: { type: "boolean", default: false },
       forcar: { type: "boolean", default: false },
       ajuda: { type: "boolean", default: false },
     },
@@ -1218,6 +1279,14 @@ async function principal(): Promise<void> {
     return;
   }
   if (comando === "design") {
+    if (values.tokens) {
+      // Formato do W3C, que Figma, Style Dictionary e Tokens Studio já leem: o que
+      // foi medido no CSS volta para a ferramenta de design sem tradução manual.
+      const { documento, ignorados } = paraDtcg(lerSistemaDeDesign(await lerProjeto(fonte)));
+      console.log(JSON.stringify(documento, null, 2));
+      for (const i of ignorados) console.error(`  fora do arquivo: ${i.nome} — ${i.motivo}`);
+      return;
+    }
     const { sistema, achados } = analisarSistema(await lerProjeto(fonte));
     const porCategoria = new Map<string, number>();
     for (const t of sistema.tokens) porCategoria.set(t.categoria, (porCategoria.get(t.categoria) ?? 0) + 1);

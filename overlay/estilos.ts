@@ -391,6 +391,7 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-achado .col { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .an-achado .titulo { font-size: 12.5px; font-weight: 600; color: var(--an-texto); display: flex; align-items: center; gap: 7px; }
 .an-achado .cat { font-size: 10px; font-weight: 600; color: var(--an-marca-clara); background: var(--an-marca-fundo); border-radius: 999px; padding: 1px 7px; }
+.an-achado .an-selo { font-size: 9.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--an-texto-3); border: 1px solid var(--an-borda); border-radius: 999px; padding: 0 6px; flex: none; }
 .an-achado .sub { font-size: 11.5px; color: var(--an-texto-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .an-achado .evid { font-size: 11.5px; color: var(--an-texto-3); line-height: 1.45; }
 .an-achado .sugestao { font-size: 11.5px; color: var(--an-ok-claro); line-height: 1.45; }

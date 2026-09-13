@@ -243,3 +243,211 @@ export function analisarSistema(arquivos: ArquivoFonte[]): RelatorioDesign {
   achados.sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade] || a.regra.localeCompare(b.regra));
   return { sistema, achados };
 }
+
+// ---------------------------------------------------------------------------
+// EXPORTAÇÃO NO FORMATO DO W3C (Design Tokens Format Module, estável em 2025.10)
+// ---------------------------------------------------------------------------
+//
+// O que o anotador lê do CSS é a mesma coisa que o Figma, o Style Dictionary e o
+// Tokens Studio trocam entre si — só que em outro alfabeto. Emitir nesse formato
+// abre o caminho de volta: o que foi medido na página vira arquivo que a ferramenta
+// de design lê. Tokens que não cabem no formato saem na lista de ignorados, com o
+// motivo; inventar uma forma aproximada seria pior do que deixar de fora.
+
+export interface TokenIgnorado {
+  nome: string;
+  motivo: string;
+}
+
+export interface ExportacaoDtcg {
+  documento: Record<string, unknown>;
+  ignorados: TokenIgnorado[];
+}
+
+/** Grupo de primeiro nível por categoria; o nome do token vira a chave dentro dele. */
+const GRUPO_DTCG: Record<CategoriaToken, string> = {
+  cor: "cor",
+  espaco: "espaco",
+  texto: "texto",
+  raio: "raio",
+  sombra: "sombra",
+  fonte: "fonte",
+  outro: "outro",
+};
+
+const DESCRICAO_GRUPO: Record<string, string> = {
+  cor: "Cores declaradas no CSS do projeto",
+  espaco: "Medidas de espaçamento",
+  texto: "Escala tipográfica",
+  raio: "Raios de canto",
+  sombra: "Elevações",
+  fonte: "Famílias tipográficas",
+  outro: "Tokens que não se encaixam nas demais categorias",
+};
+
+function chaveDtcg(nome: string): string {
+  return nome.replace(/^--/, "").replace(/\./g, "-");
+}
+
+/** `16px` → {value:16,unit:"px"}; `1.5rem` → {value:1.5,unit:"rem"}. Outra unidade, nada. */
+function dimensaoDtcg(valor: string): { value: number; unit: "px" | "rem" } | null {
+  const v = valor.trim();
+  // Zero dispensa unidade no CSS e aparece assim em quase toda sombra.
+  if (/^-?0(\.0+)?$/.test(v)) return { value: 0, unit: "px" };
+  const m = /^(-?[\d.]+)(px|rem)$/.exec(v);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return null;
+  return { value: n, unit: m[2] as "px" | "rem" };
+}
+
+/** Alpha declarado em `rgba(...)` ou em hex de 8 dígitos; 1 quando não há. */
+function alphaDe(valor: string): number {
+  const v = valor.trim().toLowerCase();
+  const hex = /^#([0-9a-f]{8})$/.exec(v);
+  if (hex?.[1]) return Math.round((parseInt(hex[1].slice(6, 8), 16) / 255) * 1000) / 1000;
+  const rgba = /^rgba?\([^)]*?[\s,/]+([\d.]+%?)\s*\)$/.exec(v);
+  if (rgba?.[1]) {
+    const bruto = rgba[1];
+    const n = bruto.endsWith("%") ? Number(bruto.slice(0, -1)) / 100 : Number(bruto);
+    if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
+  }
+  return 1;
+}
+
+function corDtcg(valor: string): Record<string, unknown> | null {
+  const rgb = paraRgb(valor);
+  if (!rgb) return null;
+  const hex = "#" + rgb.map((c) => Math.round(c).toString(16).padStart(2, "0")).join("");
+  return {
+    colorSpace: "srgb",
+    components: rgb.map((c) => Math.round((c / 255) * 10000) / 10000),
+    alpha: alphaDe(valor),
+    hex,
+  };
+}
+
+/** Divide por vírgulas de topo, ignorando as que estão dentro de parênteses. */
+function partesDeTopo(valor: string): string[] {
+  const partes: string[] = [];
+  let nivel = 0;
+  let atual = "";
+  for (const c of valor) {
+    if (c === "(") nivel++;
+    else if (c === ")") nivel--;
+    if (c === "," && nivel === 0) {
+      partes.push(atual.trim());
+      atual = "";
+      continue;
+    }
+    atual += c;
+  }
+  if (atual.trim()) partes.push(atual.trim());
+  return partes;
+}
+
+/** `0 1px 2px rgba(0,0,0,.1)` → forma estruturada; o que não casar volta nulo. */
+function sombraDtcg(valor: string): Record<string, unknown> | null {
+  const camadas: Array<Record<string, unknown>> = [];
+  for (const parte of partesDeTopo(valor)) {
+    if (/^(none|inset)\b/.test(parte)) return null;
+    const cor = /(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|oklch\([^)]*\))\s*$/.exec(parte);
+    if (!cor?.[1]) return null;
+    const medidas = parte.slice(0, cor.index).trim().split(/\s+/).filter(Boolean);
+    if (medidas.length < 2 || medidas.length > 4) return null;
+    const dims = medidas.map(dimensaoDtcg);
+    if (dims.some((d) => d === null)) return null;
+    const corEstruturada = corDtcg(cor[1]);
+    if (!corEstruturada) return null;
+    camadas.push({
+      offsetX: dims[0],
+      offsetY: dims[1],
+      blur: dims[2] ?? { value: 0, unit: "px" },
+      spread: dims[3] ?? { value: 0, unit: "px" },
+      color: corEstruturada,
+    });
+  }
+  if (!camadas.length) return null;
+  return (camadas.length === 1 ? camadas[0] : camadas) as Record<string, unknown>;
+}
+
+function familiaDtcg(valor: string): string[] {
+  return partesDeTopo(valor).map((f) => f.replace(/^["']|["']$/g, "").trim()).filter(Boolean);
+}
+
+/**
+ * Traduz o sistema lido do CSS para o formato do W3C. Um token que aponta para outro
+ * com `var()` vira referência `{grupo.nome}`, que é como o formato expressa alias —
+ * assim a intenção de "esta cor É aquela" sobrevive à exportação.
+ */
+export function paraDtcg(sistema: SistemaDeDesign): ExportacaoDtcg {
+  const ignorados: TokenIgnorado[] = [];
+  const caminhoDe = new Map<string, string>();
+  for (const t of sistema.tokens) caminhoDe.set(t.nome, `${GRUPO_DTCG[t.categoria]}.${chaveDtcg(t.nome)}`);
+
+  const documento: Record<string, Record<string, unknown>> = {};
+  for (const t of sistema.tokens) {
+    const grupo = GRUPO_DTCG[t.categoria];
+    const bruto = t.valor.trim();
+    let tipo: string | null = null;
+    let valor: unknown = null;
+
+    const alias = /^var\(\s*(--[\w-]+)/.exec(bruto);
+    if (alias?.[1]) {
+      // Alias só se sustenta se o alvo também sair no arquivo; apontar para um token
+      // ausente geraria referência quebrada na ferramenta que for ler isto.
+      const destino = caminhoDe.get(alias[1]);
+      if (!destino) {
+        ignorados.push({ nome: t.nome, motivo: `aponta para ${alias[1]}, que nenhum arquivo lido declara` });
+        continue;
+      }
+      valor = `{${destino}}`;
+    } else if (t.categoria === "fonte" || /^--font-family/i.test(t.nome)) {
+      tipo = "fontFamily";
+      valor = familiaDtcg(bruto);
+    } else if (t.categoria === "sombra") {
+      tipo = "shadow";
+      valor = sombraDtcg(bruto);
+      if (!valor) {
+        ignorados.push({ nome: t.nome, motivo: "sombra que o formato não representa sem adivinhação: " + bruto });
+        continue;
+      }
+    } else if (t.rgb || paraRgb(bruto)) {
+      tipo = "color";
+      valor = corDtcg(bruto);
+      if (!valor) {
+        ignorados.push({ nome: t.nome, motivo: "cor que não consegui normalizar: " + bruto });
+        continue;
+      }
+    } else if (/^--font-weight/i.test(t.nome) && /^\d{3}$/.test(bruto)) {
+      tipo = "fontWeight";
+      valor = Number(bruto);
+    } else {
+      const dim = dimensaoDtcg(bruto);
+      if (dim) {
+        tipo = "dimension";
+        valor = dim;
+      } else if (/^-?[\d.]+$/.test(bruto)) {
+        tipo = "number";
+        valor = Number(bruto);
+      } else {
+        const medida = /^-?[\d.]+(em|%|vh|vw|ch|ex|pt|cm|mm|in)$/.test(bruto);
+        ignorados.push({
+          nome: t.nome,
+          motivo: medida
+            ? `o formato só aceita px e rem em medida; este vale ${bruto}`
+            : `valor composto, que o formato não tipa sem adivinhação: ${bruto}`,
+        });
+        continue;
+      }
+    }
+
+    documento[grupo] ??= { $description: DESCRICAO_GRUPO[grupo] ?? grupo };
+    const entrada: Record<string, unknown> = tipo ? { $type: tipo, $value: valor } : { $value: valor };
+    if (t.intencao) entrada["$description"] = t.intencao;
+    entrada["$extensions"] = { "dev.anotador": { css: t.nome, origem: `${t.arquivo}:${t.linha}` } };
+    documento[grupo]![chaveDtcg(t.nome)] = entrada;
+  }
+
+  return { documento: { $schema: "https://tr.designtokens.org/format/", ...documento }, ignorados };
+}

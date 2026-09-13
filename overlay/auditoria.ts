@@ -45,19 +45,36 @@ function descreverCurto(el: Element): string {
   return d + (t ? ` "${t}"` : "");
 }
 
+/**
+ * O ranqueamento geral premia texto visível, que é ótimo para achar no código e
+ * inútil para `querySelector` — e é `querySelector` que o painel usa para realçar o
+ * achado. Aqui vale o melhor candidato que o navegador saiba consultar; o texto só
+ * entra quando não existe nenhum.
+ */
 function melhorSeletor(el: Element): string | null {
   try {
-    return construirSeletores(el, el.ownerDocument)[0]?.valor ?? null;
+    const cands = construirSeletores(el, el.ownerDocument);
+    const consultavel = cands.find((c) => c.tipo === "data" || c.tipo === "id" || c.tipo === "css" || c.tipo === "aria");
+    return (consultavel ?? cands[0])?.valor ?? null;
   } catch {
     return null;
   }
 }
 
 // ---------- inspeção ----------
+/**
+ * O elemento de cada achado, guardado fora do objeto que vai serializado para o
+ * dossiê. Cruzar duas réguas pelo seletor não funciona — nem todo achado tem um que
+ * o navegador consulte —, e comparar o nó é exato.
+ */
+const elementoDoAchado = new WeakMap<AchadoAuditoria, Element>();
+
 function auditarPagina(): ResultadoAuditoria {
   const achados: AchadoAuditoria[] = [];
   const add = (a: Omit<AchadoAuditoria, "seletor" | "rect">, el: Element | null) => {
-    achados.push({ ...a, seletor: el ? melhorSeletor(el) : null, rect: el ? rectTopo(el) : null });
+    const achado: AchadoAuditoria = { ...a, seletor: el ? melhorSeletor(el) : null, rect: el ? rectTopo(el) : null };
+    if (el) elementoDoAchado.set(achado, el);
+    achados.push(achado);
   };
   const visiveis: Array<{ el: Element; r: DOMRect; cs: CSSStyleDeclaration }> = [];
   for (const el of document.querySelectorAll("body *")) {
@@ -270,7 +287,235 @@ function auditarPagina(): ResultadoAuditoria {
 
   const ordem = { alta: 0, media: 1, baixa: 2 };
   achados.sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade] || a.regra.localeCompare(b.regra));
+  for (const a of achados) a.origem = "regua";
   return { achados, medidos: visiveis.length, em: new Date().toISOString() };
+}
+
+// ---------------------------------------------------------------------------
+// MOTOR DE NORMAS EMPRESTADO DO PROJETO ANOTADO
+// ---------------------------------------------------------------------------
+//
+// A régua acima mede geometria — alinhamento, vãos, altura, transbordo — e nenhum
+// motor de acessibilidade mede isso. O axe-core mede o contrário: ARIA, semântica,
+// landmarks, tabelas. Quando o projeto anotado já tem o axe instalado, o servidor o
+// empresta e as duas réguas somam. Onde não tiver, nada muda: a régua própria basta.
+//
+// Um achado do motor só entra se a régua não tiver falado do mesmo elemento sobre o
+// mesmo assunto. A régua tem calibração que a norma não tem (link no meio de parágrafo
+// é exceção do próprio critério 2.5.8), então ela ganha o empate.
+
+const GRAVIDADE_NORMA: Record<string, AchadoAuditoria["gravidade"]> = {
+  critical: "alta",
+  serious: "alta",
+  moderate: "media",
+  minor: "baixa",
+};
+
+/** Assunto de cada regra, dos dois lados, para o empate ser detectável. */
+const ASSUNTO_NORMA: Record<string, string> = {
+  "color-contrast": "contraste",
+  "target-size": "toque",
+  label: "rotulo",
+  "form-field-multiple-labels": "rotulo",
+  "button-name": "nome",
+  "link-name": "nome",
+  "heading-order": "cabecalho",
+  "empty-heading": "cabecalho",
+};
+
+const ASSUNTO_REGUA: Record<string, string> = {
+  "contraste abaixo do mínimo": "contraste",
+  "alvo de toque pequeno": "toque",
+  "campo sem rótulo": "rotulo",
+  "botão sem nome": "nome",
+  "salto de nível": "cabecalho",
+  "hierarquia invertida": "cabecalho",
+};
+
+/** Nome em português das regras que de fato aparecem em aplicação React; o resto cai no texto do motor. */
+const ROTULO_NORMA: Record<string, string> = {
+  "aria-allowed-attr": "atributo ARIA que a função não aceita",
+  "aria-hidden-focus": "elemento escondido de leitor mas ainda focável",
+  "aria-input-field-name": "campo ARIA sem nome",
+  "aria-required-attr": "função ARIA sem atributo obrigatório",
+  "aria-required-children": "função ARIA sem os filhos que ela exige",
+  "aria-required-parent": "função ARIA fora do pai que ela exige",
+  "aria-valid-attr-value": "valor inválido em atributo ARIA",
+  "aria-roles": "função ARIA inexistente",
+  "button-name": "botão sem nome",
+  bypass: "sem caminho para pular a navegação",
+  "color-contrast": "contraste abaixo do mínimo",
+  "definition-list": "lista de definição malformada",
+  "document-title": "página sem título",
+  "duplicate-id-aria": "mesmo id usado por dois alvos de ARIA",
+  "empty-heading": "cabeçalho vazio",
+  "form-field-multiple-labels": "campo com mais de um rótulo",
+  "frame-title": "quadro embutido sem título",
+  "heading-order": "salto de nível de cabeçalho",
+  "html-has-lang": "página sem idioma declarado",
+  "html-lang-valid": "idioma declarado inválido",
+  "image-alt": "imagem sem texto alternativo",
+  "input-button-name": "botão de formulário sem nome",
+  "input-image-alt": "botão de imagem sem alternativa",
+  label: "campo sem rótulo",
+  "label-content-name-mismatch": "nome acessível não contém o rótulo visível",
+  "landmark-one-main": "página sem região principal",
+  "link-in-text-block": "link que só se distingue pela cor",
+  "link-name": "link sem nome",
+  list: "lista com filho que não é item",
+  listitem: "item de lista fora de lista",
+  "meta-viewport": "viewport que impede ampliar",
+  "nested-interactive": "controle dentro de outro controle",
+  "p-as-heading": "parágrafo em negrito fazendo as vezes de título",
+  region: "conteúdo fora de qualquer região",
+  "scrollable-region-focusable": "área rolável que o teclado não alcança",
+  "select-name": "seleção sem nome",
+  "svg-img-alt": "ícone SVG anunciado sem alternativa",
+  "table-fake-caption": "legenda de tabela feita com célula",
+  "target-size": "alvo de toque pequeno",
+  "td-has-header": "célula de dado sem cabeçalho",
+  "td-headers-attr": "célula apontando para cabeçalho inexistente",
+  "th-has-data-cells": "cabeçalho de tabela sem células",
+  "valid-lang": "idioma inválido em trecho do texto",
+};
+
+let carregandoNorma: Promise<boolean> | null = null;
+
+/**
+ * Baixa o motor uma vez por página. O `<script>` leva o nonce da página: sem ele,
+ * uma política de segurança estrita descarta a tag em silêncio, sem erro nenhum.
+ */
+function carregarNorma(): Promise<boolean> {
+  if (!CFG.norma) return Promise.resolve(false);
+  const janela = window as unknown as Record<string, unknown>;
+  if (janela["axe"]) return Promise.resolve(true);
+  carregandoNorma ??= new Promise<boolean>((resolver) => {
+    const script = document.createElement("script");
+    script.src = CFG.base + "/norma.js";
+    const nonce = String(janela["__ANOTADOR_NONCE"] ?? "");
+    if (nonce) script.nonce = nonce;
+    script.onload = () => resolver(Boolean(janela["axe"]));
+    script.onerror = () => resolver(false);
+    (document.head ?? document.documentElement).append(script);
+  });
+  return carregandoNorma;
+}
+
+/** Elementos que a régua própria já acusou, por assunto. */
+function jaFalamosDe(achados: AchadoAuditoria[]): Map<string, Set<Element>> {
+  const mapa = new Map<string, Set<Element>>();
+  for (const a of achados) {
+    const assunto = ASSUNTO_REGUA[a.regra];
+    if (!assunto) continue;
+    let el = elementoDoAchado.get(a) ?? null;
+    if (!el && a.seletor) {
+      try {
+        el = document.querySelector(a.seletor);
+      } catch {
+        el = null;
+      }
+    }
+    if (!el) continue;
+    if (!mapa.has(assunto)) mapa.set(assunto, new Set());
+    mapa.get(assunto)?.add(el);
+  }
+  return mapa;
+}
+
+/**
+ * Roda o motor e devolve só o que a régua não disse. As regras normativas que o motor
+ * entrega desligadas são ligadas aqui pelo nome; sem isso, `target-size` e outras seis
+ * ficariam mudas e o verde não significaria nada.
+ */
+async function auditarComNorma(daRegua: AchadoAuditoria[]): Promise<AchadoAuditoria[]> {
+  if (!(await carregarNorma())) return [];
+  const motor = (window as unknown as Record<string, { run?: unknown }>)["axe"];
+  const rodar = motor?.run as
+    | ((ctx: unknown, opc: unknown) => Promise<{ violations: Array<Record<string, unknown>> }>)
+    | undefined;
+  if (!rodar) return [];
+
+  const regras: Record<string, { enabled: boolean }> = {};
+  for (const id of CFG.norma?.ligar ?? []) regras[id] = { enabled: true };
+
+  let resultado: { violations: Array<Record<string, unknown>> };
+  try {
+    resultado = await rodar(
+      { exclude: [["#__anotador_host"]] },
+      {
+        runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] },
+        rules: regras,
+        resultTypes: ["violations"],
+      }
+    );
+  } catch {
+    return [];
+  }
+
+  const conhecidos = jaFalamosDe(daRegua);
+  const achados: AchadoAuditoria[] = [];
+  for (const v of resultado.violations) {
+    const id = String(v["id"] ?? "");
+    const nos = (v["nodes"] ?? []) as Array<{ target?: string[] }>;
+    const assunto = ASSUNTO_NORMA[id];
+    const elementos: Array<{ el: Element | null; seletor: string }> = [];
+    for (const no of nos) {
+      const seletor = no.target?.[0] ?? "";
+      let el: Element | null = null;
+      try {
+        el = seletor ? document.querySelector(seletor) : null;
+      } catch {
+        el = null;
+      }
+      if (assunto && el && conhecidos.get(assunto)?.has(el)) continue;
+      elementos.push({ el, seletor });
+    }
+    if (!elementos.length) continue;
+
+    const rotulo = ROTULO_NORMA[id] ?? String(v["help"] ?? id);
+    const gravidade = GRAVIDADE_NORMA[String(v["impact"] ?? "minor")] ?? "baixa";
+    // Três por regra bastam para agir; uma regra que acende em quarenta nós vira
+    // parede de texto e o painel inteiro deixa de ser lido.
+    for (const { el, seletor } of elementos.slice(0, 3)) {
+      const achado: AchadoAuditoria = {
+        regra: rotulo,
+        categoria: "acessibilidade",
+        gravidade,
+        alvo: el ? descreverCurto(el) : seletor,
+        evidencia: `${id} — ${String(v["description"] ?? "")}`.slice(0, 220),
+        seletor: el ? melhorSeletor(el) : seletor || null,
+        rect: el ? rectTopo(el) : null,
+        origem: "norma",
+        norma: id,
+      };
+      if (el) elementoDoAchado.set(achado, el);
+      achados.push(achado);
+    }
+    if (elementos.length > 3) {
+      achados.push({
+        regra: rotulo,
+        categoria: "acessibilidade",
+        gravidade: "baixa",
+        alvo: `e mais ${elementos.length - 3} elemento(s)`,
+        evidencia: `${id} — a mesma regra acende em ${elementos.length} lugares desta página`,
+        seletor: null,
+        rect: null,
+        origem: "norma",
+        norma: id,
+      });
+    }
+  }
+  return achados;
+}
+
+/** Junta as duas réguas na mesma medição, mantendo a ordem por gravidade. */
+async function completarComNorma(medicao: ResultadoAuditoria): Promise<boolean> {
+  const extras = await auditarComNorma(medicao.achados);
+  if (!extras.length) return false;
+  medicao.achados.push(...extras);
+  const ordem = { alta: 0, media: 1, baixa: 2 };
+  medicao.achados.sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade] || a.regra.localeCompare(b.regra));
+  return true;
 }
 
 /** Contexto que ajuda o agente a julgar sem adivinhar: estrutura, componentes e escala. */
@@ -359,6 +604,20 @@ async function alternarAvaliacao(): Promise<void> {
   ui.avaliacao.hidden = false;
   avaliacao.medicao = auditarPagina();
   renderizarAvaliacao();
+  medirComNormaEDepoisPintar();
+}
+
+/**
+ * A régua própria pinta na hora; o motor emprestado chega depois porque precisa baixar
+ * meio megabyte. Se o usuário mandou medir de novo nesse meio-tempo, o resultado velho
+ * é descartado em vez de sobrescrever o novo.
+ */
+function medirComNormaEDepoisPintar(): void {
+  const medicao = avaliacao.medicao;
+  if (!medicao) return;
+  void completarComNorma(medicao).then((mudou) => {
+    if (mudou && avaliacao.medicao === medicao) renderizarAvaliacao();
+  });
 }
 
 function fecharAvaliacao(): void {
@@ -427,6 +686,14 @@ function acompanharParecer(): void {
   }, 3000);
 }
 
+/** "25 elementos medidos · 13 pela régua · 5 pela norma" — sem motor, só a primeira metade. */
+function resumoDaMedicao(m: ResultadoAuditoria): string {
+  const daNorma = m.achados.filter((a) => a.origem === "norma").length;
+  if (!daNorma) return `${m.medidos} elementos medidos · ${m.achados.length} achado(s)`;
+  // Cabe numa linha só: o cabeçalho tem 400px e quebrar empurra a lista para baixo.
+  return `${m.medidos} elementos · ${m.achados.length - daNorma} da régua · ${daNorma} da norma`;
+}
+
 function linhaDeAchado(a: AchadoAuditoria): HTMLElement {
   const el = elementoDoSeletor(a.seletor);
   return h(
@@ -443,7 +710,19 @@ function linhaDeAchado(a: AchadoAuditoria): HTMLElement {
       },
     },
     h("span", { class: "sinal" }),
-    h("span", { class: "col" }, h("span", { class: "titulo" }, a.regra), h("span", { class: "sub" }, a.alvo), h("span", { class: "evid" }, a.evidencia))
+    h(
+      "span",
+      { class: "col" },
+      h(
+        "span",
+        { class: "titulo" },
+        a.regra,
+        // Selo só no que veio de fora: o padrão do painel é a régua da casa.
+        ...(a.origem === "norma" ? [h("span", { class: "an-selo", title: a.norma ?? "regra normativa" }, "norma")] : [])
+      ),
+      h("span", { class: "sub" }, a.alvo),
+      h("span", { class: "evid" }, a.evidencia)
+    )
   );
 }
 
@@ -502,7 +781,7 @@ function renderizarAvaliacao(): void {
       "div",
       { class: "tit" },
       "Avaliação da página",
-      h("span", { class: "sub" }, m ? `${m.medidos} elementos medidos · ${m.achados.length} achado(s)` : "medindo…")
+      h("span", { class: "sub" }, m ? resumoDaMedicao(m) : "medindo…")
     ),
     h("button", {
       class: "an-ico",
@@ -511,6 +790,7 @@ function renderizarAvaliacao(): void {
       onclick: () => {
         avaliacao.medicao = auditarPagina();
         renderizarAvaliacao();
+        medirComNormaEDepoisPintar();
       },
     }),
     h("button", { class: "an-ico", title: "Fechar", html: ICONES.fechar, onclick: fecharAvaliacao })
@@ -520,7 +800,11 @@ function renderizarAvaliacao(): void {
 
   const corpo = h("div", { class: "corpo" });
   if (m) {
-    corpo.append(h("div", { class: "secao" }, "Medido pela régua"));
+    // Os dois conjuntos ficam numa lista só, ordenada por gravidade, porque quem abre
+    // o painel quer decidir o que consertar primeiro — e não ler duas listas. O título
+    // então precisa cobrir as duas origens; o selo de cada linha diz de quem é o achado.
+    const daNorma = m.achados.filter((a) => a.origem === "norma").length;
+    corpo.append(h("div", { class: "secao" }, daNorma ? "Medido na página" : "Medido pela régua"));
     if (!m.achados.length) corpo.append(h("div", { class: "vazio" }, "Nada fora do lugar nas regras objetivas."));
     for (const a of m.achados) corpo.append(linhaDeAchado(a));
   }

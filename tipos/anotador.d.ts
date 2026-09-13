@@ -224,6 +224,10 @@ interface AchadoAuditoria {
   /** melhor seletor do elemento, para destacar e para achar no código */
   seletor: string | null;
   rect: Rect | null;
+  /** de onde veio o achado: a régua própria ou o motor de normas emprestado */
+  origem?: "regua" | "norma";
+  /** identificador da regra no motor de normas, quando a origem é ele */
+  norma?: string;
 }
 
 interface ResultadoAuditoria {
@@ -253,4 +257,6 @@ interface ConfigOverlay {
   marca: string;
   /** modelo escolhido para a ponte, quando houver */
   modelo: string | null;
+  /** axe-core achado no projeto anotado, e as regras desligadas que valem ligar */
+  norma: { versao: string; ligar: string[] } | null;
 }
