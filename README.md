@@ -148,7 +148,7 @@ O seletor lista os modelos que existem **na sua máquina** — os do Claude Code
 
 ![Seletor de modelo aberto, com os modelos do Claude Code e do Codex CLI agrupados por provedor](docs/imagens/modelos.png)
 
-As marcas vêm do [Simple Icons](https://simpleicons.org) (CC0), embutidas como traçado — sem dependência nova. A escolha não é enfeite: vira argumento na chamada do agente (`claude --model opus --effort high`, `codex exec -m gpt-6-astra -c model_reasoning_effort="high"`), fica gravada com a conexão e aparece no cabeçalho da conversa, para você saber quem respondeu.
+As marcas vêm do [Simple Icons](https://simpleicons.org) (CC0) e do [svgl](https://svgl.app) (MIT), embutidas como traçado — sem dependência nova. As marcas em si pertencem a seus donos e aqui só identificam o produto. A escolha não é enfeite: vira argumento na chamada do agente (`claude --model opus --effort high`, `codex exec -m gpt-6-astra -c model_reasoning_effort="high"`), fica gravada com a conexão e aparece no cabeçalho da conversa, para você saber quem respondeu.
 
 ![Cartão de agentes: Claude Code, Codex CLI e Antigravity instalados, sessões abertas do projeto e ponte automática](docs/imagens/agentes.png)
 

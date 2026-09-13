@@ -28,7 +28,7 @@ export const AGENTES: AgenteConhecido[] = [
   { id: "codex", nome: "Codex CLI", binario: "codex", como: "A ponte chama `codex exec` (ou `codex exec resume <sessão>`) a cada lote. Numa sessão interativa, peça para ler lotes/<id>.md e usar a API.", ponte: true, sessoes: true },
   { id: "gemini", nome: "Gemini CLI", binario: "gemini", como: "A ponte chama `gemini -p` a cada lote.", ponte: true, sessoes: false },
   { id: "opencode", nome: "OpenCode", binario: "opencode", como: "A ponte chama `opencode run` a cada lote.", ponte: true, sessoes: false },
-  { id: "antigravity", nome: "Antigravity", binario: "antigravity", como: "IDE sem linha de comando para agentes: abra a pasta do projeto e peça ao agente para ler lotes/<id>.md (ou ouvir ws://…/__anotador/eventos) e usar a API REST.", ponte: false, sessoes: false },
+  { id: "antigravity", nome: "Antigravity", binario: "antigravity", como: "O IDE agêntico do Google, movido pelos mesmos modelos Gemini. Não tem linha de comando para agentes: abra a pasta do projeto e peça ao agente de lá para ler lotes/<id>.md (ou ouvir ws://…/__anotador/eventos) e usar a API REST.", ponte: false, sessoes: false },
   { id: "cursor", nome: "Cursor", binario: "cursor", como: "Abra a pasta do projeto e peça ao agente para ler lotes/<id>.md e usar a API REST.", ponte: false, sessoes: false },
 ];
 
