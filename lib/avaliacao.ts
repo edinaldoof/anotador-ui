@@ -60,6 +60,10 @@ export interface RegistroAvaliacao {
   temParecer: boolean;
 }
 
+// Estas categorias julgam uma tela parada, que é tudo o que o anotador vê. As dez
+// heurísticas de Nielsen são o vocabulário consagrado e foram consideradas aqui, mas
+// metade delas julga interação ao longo do tempo — recuperação de erro, liberdade de
+// desfazer, visibilidade de progresso — e viraria categoria que nunca acende.
 const CATEGORIAS_PARECER = ["hierarquia", "espacamento", "contraste", "consistencia", "clareza", "intuitividade", "elegancia", "conteudo", "acessibilidade"];
 
 export function validarPedido(bruto: unknown): PedidoAvaliacao {
