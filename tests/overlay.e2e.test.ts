@@ -68,9 +68,10 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     assert.match(await pagina.avaliar<string>(`${noOverlay(".an-dica")}.textContent`), /^span "Salvar"/);
   });
 
-  test("usa a fonte da página: --font-filson primeiro, depois a do body", async () => {
+  test("tipografia: fonte da Apple primeiro, fonte da página como reserva", async () => {
     const fonte = await pagina.avaliar<string>(`getComputedStyle(${noOverlay(".an-barra")}).fontFamily`);
-    assert.match(fonte, /^"Filson Teste"/, "a Filson declarada pela página vence o system-ui do overlay");
+    assert.match(fonte, /^-apple-system/, "a fonte da Apple vem primeiro, para valer em iPhone, iPad e Mac");
+    assert.match(fonte, /"Filson Teste"/, "sem ela, a Filson declarada pela página é a reserva");
     const mono = await pagina.avaliar<string>(`getComputedStyle(${noOverlay(".an-dica")}).fontFamily`);
     assert.match(mono, /monospace/);
   });
@@ -174,7 +175,7 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     await clicarEm(noOverlay('.an-barra .an-ico[title^="Ocultar"]'));
     await esperarAte(() => visivel(".an-religar"));
     assert.equal(await visivel(".an-barra"), false);
-    assert.match(await pagina.avaliar<string>(`getComputedStyle(${noOverlay(".an-religar")}).fontFamily`), /^"Filson Teste"/, "fora do .an-raiz, ainda usa a fonte da página");
+    assert.match(await pagina.avaliar<string>(`getComputedStyle(${noOverlay(".an-religar")}).fontFamily`), /"Filson Teste"/, "fora do .an-raiz, a fonte da página continua na pilha");
     assert.equal(await pagina.avaliar<string>(`${noOverlay(".an-religar .n")}.textContent`), "1", "contador mostra a anotação pendente");
     const antes = await rectDe(noOverlay(".an-religar"));
     const centro = { x: antes.left + antes.width / 2, y: antes.top + antes.height / 2 };

@@ -4,13 +4,13 @@ const CSS_OVERLAY = `
 .an-raiz {
   position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
   font-size: 13px; line-height: 1.4; color: #e7e7e7;
-  font-family: var(--font-filson, var(--an-fonte-pagina, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif));
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", "Helvetica Neue", var(--font-filson, var(--an-fonte-pagina, system-ui)), "Segoe UI", Roboto, sans-serif;
 }
 [hidden] { display: none !important; }
 .arrastando, .arrastando * { cursor: grabbing !important; user-select: none !important; }
 button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; border: 0; background: transparent; }
-.mono { font-family: var(--font-mono, ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace); }
+.mono { font-family: "SF Mono", var(--font-mono, ui-monospace), "JetBrains Mono", Menlo, Consolas, monospace; }
 .an-alca { width: 22px; height: 30px; border-radius: 999px; display: grid; place-items: center; color: #8b918e; cursor: grab; touch-action: none; user-select: none; flex: none; }
 .an-alca:hover { color: #fff; background: #2c302f; }
 .an-alca svg { width: 16px; height: 16px; }
@@ -146,7 +146,7 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-religar {
   position: fixed; right: 14px; bottom: 14px; pointer-events: auto; display: flex; align-items: center; gap: 8px;
   padding: 6px 14px 6px 6px; background: #1f2221; border: 1px solid #343837; border-radius: 999px; color: #fff;
-  font-family: var(--font-filson, var(--an-fonte-pagina, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif));
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", "Helvetica Neue", var(--font-filson, var(--an-fonte-pagina, system-ui)), "Segoe UI", Roboto, sans-serif;
   font-size: 13px; font-weight: 700; line-height: 1; box-shadow: 0 8px 30px rgba(0,0,0,.35);
   cursor: grab; user-select: none; touch-action: none;
 }

@@ -97,6 +97,25 @@ Depois de conectar, o app abre em `http://localhost:3999/` com a barra do anotad
 
 A fila fica no `localStorage` até ser enviada: recarregar a página ou o HMR do framework não perde nada, e as prévias são reaplicadas.
 
+A interface usa a fonte da Apple (San Francisco) quando ela existe — em iPhone, iPad e Mac, ou no Linux e Windows com a SF Pro instalada. Onde não existe, cai na tipografia do próprio app que você está anotando e, por fim, na fonte do sistema. Os arquivos não vêm no repositório: a licença da Apple não permite redistribuir.
+
+<details>
+<summary>Instalar a San Francisco no Linux</summary>
+
+Baixe de [developer.apple.com/fonts](https://developer.apple.com/fonts/) e extraia a cadeia `dmg` → `pkg` → `Payload` (precisa do 7-Zip completo, `p7zip-full`):
+
+```bash
+for f in SF-Pro SF-Compact SF-Mono; do
+  curl -LO "https://devimages-cdn.apple.com/design/resources/download/$f.dmg"
+  7z e "$f.dmg" -o"$f" "*.pkg" -r && 7z x "$f"/*.pkg -o"$f/pkg"
+  (mkdir -p "$f/fontes" && cd "$f/fontes" && cpio -idm < ../pkg/Payload~)
+done
+mkdir -p ~/.local/share/fonts/apple-sf
+find SF-* -name "*.otf" -o -name "*.ttf" | xargs -I{} cp {} ~/.local/share/fonts/apple-sf/
+fc-cache -f ~/.local/share/fonts/apple-sf
+```
+</details>
+
 ## 3. O agente aplica e responde
 
 A barra segue o ciclo em tempo real — *aguardando* → *aplicando em…* → *perguntou* → *aplicado ✓* — e cada lote tem uma conversa própria: o agente explica o que vai fazer, pergunta quando algo é ambíguo (com opções clicáveis) e você responde sem sair da página.

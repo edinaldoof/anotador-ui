@@ -74,7 +74,11 @@ async function principal(): Promise<void> {
     // Janela alta nesta etapa: tudo fica acima da dobra, então clique e recorte usam as mesmas coordenadas.
     await pagina.definirViewport(Number(values.largura), 1560, 2);
     await pagina.navegar(origem + "/__anotador/", 30_000);
-    await esperarAte(async () => pagina.avaliar<boolean>(`document.getElementById("passo-1").classList.contains("feito") && document.querySelectorAll(".agente").length > 0`));
+    await esperarAte(async () =>
+      pagina.avaliar<boolean>(
+        `document.getElementById("passo-1").classList.contains("feito") && document.querySelectorAll(".agente").length > 0 && !/procurando/i.test(document.getElementById("rotulo-deteccao").textContent) && document.querySelectorAll("#chips .servidor, #chips .vazio").length > 0`
+      )
+    );
     await pagina.esperar(1500);
     const folga = 18;
     const recorteDe = async (seletor: string, comTopo = false): Promise<Rect> => {
