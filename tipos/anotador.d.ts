@@ -179,7 +179,11 @@ interface StatusLote {
   perguntasAbertas?: number;
 }
 
-type TipoMensagem = "nota" | "pergunta" | "escolha" | "resposta";
+/**
+ * `passo` é o progresso que o agente publica enquanto trabalha. Fica na conversa junto
+ * do resto para a pessoa ver o que está acontecendo agora, e não só o resultado.
+ */
+type TipoMensagem = "nota" | "pergunta" | "escolha" | "resposta" | "passo";
 
 interface Mensagem {
   id: string;

@@ -2,5 +2,6 @@ node_modules/
 *.log
 .tmp/
 prints/
+.playwright-cli/
 output/
 .DS_Store

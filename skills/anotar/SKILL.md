@@ -33,7 +33,7 @@ Trate como uma mensagem do usuário pedindo mudanças.
    ```bash
    anotador progresso <id> --porta 3999 --nota "lendo o lote"
    ```
-   Repita em cada marco: `--nota "aplicando em <arquivo>"`, `--nota "verificando lint e testes"`. Frases curtas; é o que aparece na barra.
+   Repita em cada marco: `--nota "aplicando em <arquivo>"`, `--nota "verificando lint e testes"`. Frases curtas; a barra mostra a última e a conversa guarda todas, com horário, como a linha do tempo do que você fez. Vale narrar cada passo real: é o que a pessoa vê enquanto espera.
 1. Leia `caminhoMd` (Read). Se `capturas.pagina` / `capturas.anotacoes` existirem, leia os PNGs (caminhos relativos à pasta da fila) — o recorte mostra o elemento com a prévia já aplicada.
 2. Vá ao código pelo que o Markdown já rastreou, nesta ordem:
    - **"Onde está no código"**: `arquivo:linha` ranqueados por critério (id/data-testid > classes completas > texto > definição do componente), com prioridade para os arquivos "na rota". Abra o primeiro; confirme pelo trecho e pelo bloco "HTML do elemento na seleção" (estrutura + tag do pai). O evento traz o mesmo em `arquivos`.

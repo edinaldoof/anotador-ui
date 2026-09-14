@@ -977,7 +977,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       }
       const autor = corpo["autor"] === "usuario" ? "usuario" : "agente";
       const tipo = String(corpo["tipo"] ?? (autor === "usuario" ? "resposta" : "nota"));
-      if (!["nota", "pergunta", "escolha", "resposta"].includes(tipo) || (autor === "usuario") !== (tipo === "resposta")) {
+      if (!["nota", "pergunta", "escolha", "resposta", "passo"].includes(tipo) || (autor === "usuario") !== (tipo === "resposta")) {
         responderJson(res, 400, { ok: false, erro: "tipo incompatível com o autor" });
         return true;
       }
@@ -1031,6 +1031,17 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
         if (status.estado === "em_andamento") {
           difusor.transmitir({ tipo: "progresso", id, nota });
           registrar(opcoes, `lote ${id} em andamento: ${nota}`);
+          // O progresso também entra na conversa, como passo: a barra mostra só o
+          // último, e quem abre o chat quer ver o caminho inteiro até aqui. Repetir a
+          // mesma nota não acrescenta linha.
+          if (nota) {
+            const conversa = await fila.conversa(id);
+            const ultimoPasso = [...conversa].reverse().find((m) => m.tipo === "passo");
+            if (ultimoPasso?.texto !== nota) {
+              const passo = await fila.registrarMensagem({ lote: id, autor: "agente", agente: opcoes.agente, tipo: "passo", texto: nota });
+              if (passo) difusor.transmitir({ tipo: "mensagem", id, mensagem: passo });
+            }
+          }
         }
         responderJson(res, 200, { ok: true, status });
         return true;

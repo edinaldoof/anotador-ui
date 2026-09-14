@@ -136,6 +136,10 @@ No campo da conversa, `/` abre os comandos do agente conectado, como a linha de 
 
 Só entra o que existe no disco. Comandos embutidos do terminal, como limpar ou compactar a sessão, ficam de fora de propósito: valem para a sessão do terminal, não para uma mensagem que chega pelo anotador, e oferecê-los prometeria um efeito que não acontece.
 
+O que o agente está fazendo aparece na própria conversa. Cada `anotador progresso` vira um passo na linha do tempo, com horário, e o último fica em destaque — a barra mostra só onde ele está agora, e o chat guarda o caminho até aqui.
+
+Na barra, ao lado dos modos, a marca de quem recebe as anotações abre a lista de agentes desta máquina: quem está ouvindo ao vivo, quem pode ser chamado por linha de comando e quem não está instalado. Trocar ali vale para os próximos lotes, sem sair da página. De outra máquina, a troca pede a chave da sessão, e o campo para colá-la aparece no próprio menu.
+
 ### Claude Code
 
 ```bash

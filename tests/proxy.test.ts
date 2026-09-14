@@ -117,6 +117,17 @@ test("lote enviado vira arquivo, evento no WebSocket e status que fecha o ciclo"
     const progresso = await pedir(proxy.origem + BASE + "/lotes/lote-proxy-0001/progresso", { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ nota: "aplicando em page.tsx" }) });
     assert.equal(progresso.status, 200);
     assert.deepEqual(JSON.parse(await ouvinte.proximo()), { tipo: "progresso", id: "lote-proxy-0001", nota: "aplicando em page.tsx" });
+    // O mesmo progresso entra na conversa como passo: a barra mostra o ponto atual e o
+    // chat guarda a sequência inteira, que é o que a pessoa lê enquanto espera.
+    const evPasso = JSON.parse(await ouvinte.proximo()) as EventoAnotador;
+    assert.equal(evPasso.tipo, "mensagem");
+    assert.equal(evPasso.mensagem?.tipo, "passo");
+    assert.equal(evPasso.mensagem?.texto, "aplicando em page.tsx");
+    assert.equal(evPasso.mensagem?.autor, "agente");
+
+    // Repetir a mesma nota não rende linha nova: só o evento de progresso sai.
+    await pedir(proxy.origem + BASE + "/lotes/lote-proxy-0001/progresso", { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ nota: "aplicando em page.tsx" }) });
+    assert.deepEqual(JSON.parse(await ouvinte.proximo()), { tipo: "progresso", id: "lote-proxy-0001", nota: "aplicando em page.tsx" });
     const andamento = JSON.parse((await pedir(proxy.origem + BASE + "/lotes/lote-proxy-0001/status")).corpo) as StatusLote;
     assert.equal(andamento.estado, "em_andamento");
     assert.equal(andamento.nota, "aplicando em page.tsx");
@@ -148,7 +159,9 @@ test("lote enviado vira arquivo, evento no WebSocket e status que fecha o ciclo"
     assert.equal(recado.status, 201, "recado livre do usuário não precisa apontar pergunta");
     assert.equal((JSON.parse(await ouvinte.proximo()) as EventoAnotador).mensagem?.responde, undefined);
     const conversa = JSON.parse((await pedir(proxy.origem + BASE + "/lotes/lote-proxy-0001/conversa")).corpo) as { mensagens: Mensagem[]; abertas: string[] };
-    assert.equal(conversa.mensagens.length, 4);
+    // Quatro falas mais o passo que o progresso registrou.
+    assert.equal(conversa.mensagens.length, 5);
+    assert.equal(conversa.mensagens.filter((m) => m.tipo === "passo").length, 1, "a nota repetida não virou passo duplicado");
     assert.deepEqual(conversa.abertas, []);
     assert.equal((JSON.parse((await pedir(proxy.origem + BASE + "/lotes/lote-proxy-0001/status")).corpo) as StatusLote).perguntasAbertas, undefined);
 

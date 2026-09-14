@@ -137,6 +137,8 @@ interface Ui {
   design: HTMLDivElement | null;
   btnAvaliar: HTMLButtonElement;
   avaliacao: HTMLDivElement | null;
+  btnAgente: HTMLButtonElement;
+  menuAgentes: HTMLDivElement | null;
 }
 
 interface OpcoesArrasto {
@@ -471,6 +473,11 @@ function montarBarra(raizUi: HTMLDivElement): void {
   ui.btnArvore = h("button", { class: "an-ico", title: "Estrutura de elementos: árvore para escolher o nível certo (Alt+R)", html: ICONES.arvore, onclick: () => alternarArvore() });
   ui.btnDesign = h("button", { class: "an-ico", title: "Sistema de design: o que a página pinta e o que o projeto declara (Alt+D)", html: ICONES.paleta, onclick: () => void alternarExplorador() });
   ui.btnAvaliar = h("button", { class: "an-ico", title: "Avaliar a página: régua objetiva e parecer do agente (Alt+E)", html: ICONES.lupa, onclick: () => void alternarAvaliacao() });
+  ui.btnAgente = h(
+    "button",
+    { class: "an-agente-atual", title: `Recebendo as anotações: ${AGENTE}. Clique para trocar de agente`, onclick: () => void alternarAgentes() },
+    h("span", { class: "marca", html: CFG.marca })
+  );
   const titulo = h("div", { class: "titulo" }, "Anotando ", h("span", { class: "url" }, "• " + location.host + location.pathname));
   ui.barra = h(
     "div",
@@ -485,6 +492,7 @@ function montarBarra(raizUi: HTMLDivElement): void {
     ui.btnArvore,
     ui.btnDesign,
     ui.btnAvaliar,
+    ui.btnAgente,
     h("div", { class: "an-modo" }, ui.modoSel, ui.modoNav),
     ui.btnEnviar,
     ui.estado
@@ -495,6 +503,171 @@ function montarBarra(raizUi: HTMLDivElement): void {
       if (!ui.fila.hidden) posicionarFila();
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// TROCAR DE AGENTE SEM SAIR DA PÁGINA
+// ---------------------------------------------------------------------------
+//
+// Quem está anotando quer saber quem vai receber o lote, e às vezes trocar antes de
+// enviar. Isso morava só na página de conexão, que obriga a sair do app e perder a
+// seleção. Aqui a barra mostra a marca de quem está na escuta e abre a lista.
+
+interface AgenteNoOverlay {
+  id: string;
+  nome: string;
+  instalado: boolean;
+  ponte: boolean;
+  marca: string;
+  como: string;
+}
+
+interface EstadoAgentes {
+  agentes: AgenteNoOverlay[];
+  ponte: { agente: string } | null;
+  ouvintes: Array<{ agente?: string; rotulo?: string }>;
+}
+
+/** A chave da sessão, quando a página foi aberta de outra máquina. */
+function chaveGuardada(): string | null {
+  try {
+    return localStorage.getItem("anotador-ui:chave");
+  } catch {
+    return null;
+  }
+}
+
+function guardarChave(valor: string): void {
+  try {
+    localStorage.setItem("anotador-ui:chave", valor);
+  } catch {
+    // navegação privada: a chave vale só para esta visita
+  }
+}
+
+async function pedirApi(caminho: string, corpo?: unknown): Promise<{ ok: boolean; status: number; dados: Record<string, unknown> }> {
+  const chave = chaveGuardada();
+  const cabecalhos: Record<string, string> = {};
+  if (chave) cabecalhos["x-anotador-chave"] = chave;
+  if (corpo !== undefined) cabecalhos["content-type"] = "application/json";
+  const r = await fetch(CFG.base + caminho, corpo === undefined ? { cache: "no-store", headers: cabecalhos } : { method: "POST", headers: cabecalhos, body: JSON.stringify(corpo) });
+  let dados: Record<string, unknown> = {};
+  try {
+    dados = (await r.json()) as Record<string, unknown>;
+  } catch {
+    dados = {};
+  }
+  return { ok: r.ok, status: r.status, dados };
+}
+
+function fecharAgentes(): void {
+  if (ui.menuAgentes) ui.menuAgentes.hidden = true;
+}
+
+async function alternarAgentes(): Promise<void> {
+  if (!ui.menuAgentes) {
+    ui.menuAgentes = h("div", { class: "an-agentes", hidden: true });
+    raiz?.append(ui.menuAgentes);
+  }
+  if (!ui.menuAgentes.hidden) {
+    fecharAgentes();
+    return;
+  }
+  ui.menuAgentes.hidden = false;
+  ui.menuAgentes.replaceChildren(h("div", { class: "an-agentes-vazio" }, "procurando agentes nesta máquina…"));
+  posicionarAgentes();
+  const { dados } = await pedirApi("/agentes");
+  renderizarAgentes(dados as unknown as EstadoAgentes);
+}
+
+function posicionarAgentes(): void {
+  if (!ui.menuAgentes || !ui.btnAgente) return;
+  const r = ui.btnAgente.getBoundingClientRect();
+  ui.menuAgentes.style.left = Math.max(8, Math.min(r.left, innerWidth - 320)) + "px";
+  ui.menuAgentes.style.top = r.bottom + 8 + "px";
+}
+
+function renderizarAgentes(estadoAgentes: EstadoAgentes): void {
+  if (!ui.menuAgentes) return;
+  const lista = Array.isArray(estadoAgentes.agentes) ? estadoAgentes.agentes : [];
+  const ouvindo = (estadoAgentes.ouvintes ?? []).map((o) => (o.agente ?? "").toLowerCase());
+  const ponte = estadoAgentes.ponte?.agente ?? null;
+
+  const itens = lista.map((a) => {
+    const escutando = ouvindo.some((o) => o.includes(a.id) || (a.id === "claude" && o.includes("claude")));
+    const situacao = escutando
+      ? "ouvindo agora, recebe o lote direto"
+      : ponte === a.id
+        ? "chamado por linha de comando a cada lote"
+        : a.instalado
+          ? a.ponte
+            ? "instalado; clique para passar os lotes a ele"
+            : "instalado, mas sem comando não interativo"
+          : "não encontrado nesta máquina";
+    const podeEscolher = a.instalado && a.ponte && !escutando;
+    const item = h(
+      "button",
+      {
+        type: "button",
+        class: "an-agente" + (escutando || ponte === a.id ? " ativo" : "") + (podeEscolher ? "" : " inerte"),
+        title: a.como,
+        disabled: !podeEscolher,
+        onclick: () => void escolherAgente(a),
+      },
+      h("span", { class: "marca", html: a.marca }),
+      h("span", { class: "col" }, h("span", { class: "nome" }, a.nome), h("span", { class: "sit" }, situacao)),
+      escutando ? h("span", { class: "selo-vivo" }, "ao vivo") : null
+    );
+    return item;
+  });
+
+  const desligar = ponte
+    ? [h("button", { type: "button", class: "an-agente apagar", onclick: () => void escolherAgente(null) }, h("span", { class: "col" }, h("span", { class: "nome" }, "Não chamar ninguém"), h("span", { class: "sit" }, "os lotes ficam na fila até alguém ouvir")))]
+    : [];
+  ui.menuAgentes.replaceChildren(h("div", { class: "an-agentes-topo" }, "Quem recebe as anotações"), ...itens, ...desligar);
+}
+
+async function escolherAgente(a: AgenteNoOverlay | null): Promise<void> {
+  const r = await pedirApi("/agente/ponte", { agente: a ? a.id : null });
+  if (r.status === 403) {
+    pedirChaveDeAcesso();
+    return;
+  }
+  if (!r.ok) {
+    avisar(String(r.dados["erro"] ?? "não consegui trocar o agente"), 6000);
+    return;
+  }
+  avisar(a ? `${a.nome} passa a receber os lotes` : "Nenhum agente será chamado automaticamente", 4000);
+  fecharAgentes();
+}
+
+/**
+ * De outra máquina, trocar de agente exige a chave que o anotador imprime ao subir.
+ * Pedir aqui evita mandar a pessoa até o terminal no meio da anotação.
+ */
+function pedirChaveDeAcesso(): void {
+  if (!ui.menuAgentes) return;
+  const campo = h("input", { type: "text", placeholder: "cole a chave aqui", spellcheck: "false" }) as HTMLInputElement;
+  const confirmar = h("button", { type: "button", class: "an-ok-pequeno" }, "Guardar");
+  confirmar.addEventListener("click", () => {
+    const valor = campo.value.trim();
+    if (!/^[0-9a-f]{32}$/.test(valor)) {
+      avisar("A chave tem 32 caracteres, só dígitos e letras de a a f", 5000);
+      return;
+    }
+    guardarChave(valor);
+    void alternarAgentes();
+    void alternarAgentes();
+  });
+  campo.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") confirmar.click();
+  });
+  ui.menuAgentes.replaceChildren(
+    h("div", { class: "an-agentes-topo" }, "Esta página foi aberta de outra máquina"),
+    h("div", { class: "an-agentes-aviso" }, "Trocar de agente daqui precisa da chave que o anotador imprimiu no terminal, na linha “de fora”."),
+    h("div", { class: "an-agentes-chave" }, campo, confirmar)
+  );
+  campo.focus();
 }
 
 // ---------- arrastar ----------
@@ -1749,7 +1922,7 @@ function renderizarConversa(): void {
   const painel = ui.conversa;
   if (!c || !painel) return;
   const respondidas = new Set(c.mensagens.filter((m) => m.responde).map((m) => m.responde));
-  const abertas = c.mensagens.filter((m) => m.autor === "agente" && m.tipo !== "nota" && !respondidas.has(m.id));
+  const abertas = c.mensagens.filter((m) => m.autor === "agente" && (m.tipo === "pergunta" || m.tipo === "escolha") && !respondidas.has(m.id));
   const rotuloEstado = c.lote.estado === "processado" ? "aplicado" : c.lote.estado === "em_andamento" ? "trabalhando" : `aguardando ${AGENTE}`;
   // Rolagem grudada embaixo: só acompanha se o usuário já estava no fim da conversa.
   const fluxoAnterior = painel.querySelector<HTMLDivElement>(".fluxo");
@@ -1775,10 +1948,16 @@ function renderizarConversa(): void {
   const usuarioRespondeu = new Map(c.mensagens.filter((m) => m.responde).map((m) => [m.responde ?? "", m] as const));
   for (const m of c.mensagens) {
     if (m.autor === "usuario" && m.responde) continue;
+    // Passo não é fala: é o agente dizendo em que ponto está. Vai numa linha fina, com
+    // horário, para a sequência ficar legível sem competir com o que ele escreveu.
+    if (m.tipo === "passo") {
+      fluxo.append(h("div", { class: "an-passo" }, h("span", { class: "ponto" }), h("span", { class: "texto" }, m.texto), h("span", { class: "quando" }, hora(m.em))));
+      continue;
+    }
     const corpo = h("div", { class: "corpo" });
     if (m.autor === "agente") corpo.append(h("div", { class: "quem" }, (m.agente || AGENTE) + " · " + hora(m.em)));
     corpo.append(h("div", { class: "balao" }, m.texto));
-    if (m.autor === "agente" && m.tipo !== "nota") {
+    if (m.autor === "agente" && (m.tipo === "pergunta" || m.tipo === "escolha")) {
       const resposta = usuarioRespondeu.get(m.id);
       if (resposta) {
         const escolhidas = resposta.opcoes?.length ? resposta.opcoes.join(", ") : "";

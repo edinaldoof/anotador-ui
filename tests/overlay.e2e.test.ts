@@ -216,6 +216,8 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     const progresso = await pedir(`${proxy.origem}${BASE}/lotes/${evento.id}/progresso`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ nota: "aplicando em pagina.html" }) });
     assert.equal(progresso.status, 200);
     assert.equal((JSON.parse(await ouvinte.proximo()) as EventoAnotador).tipo, "progresso", "o progresso também vira evento para o chat");
+    const evPasso = JSON.parse(await ouvinte.proximo()) as EventoAnotador;
+    assert.equal(evPasso.mensagem?.tipo, "passo", "e entra na conversa como passo da linha do tempo");
     await esperarAte(async () => /Claude: aplicando em pagina\.html/.test(await pagina.avaliar<string>(`${noOverlay(".an-estado")}.textContent`)), 12_000, 500);
     await clicarEm(noOverlay('.an-barra .an-ico[title^="Ver fila"]'));
     await esperarAte(() => visivel(".an-fila"), 8_000, 100, "lista de lotes abrir pelo ícone da barra");

@@ -515,7 +515,9 @@ export class Fila {
   async perguntasAbertas(id: string): Promise<Mensagem[]> {
     const mensagens = await this.conversa(id);
     const respondidas = new Set(mensagens.filter((m) => m.responde).map((m) => m.responde));
-    return mensagens.filter((m) => m.autor === "agente" && m.tipo !== "nota" && !respondidas.has(m.id));
+    // Listar o que pede resposta, em vez de excluir o que não pede: com a segunda forma
+    // um tipo novo entra na conta sozinho, e foi assim que `passo` virou pergunta aberta.
+    return mensagens.filter((m) => m.autor === "agente" && (m.tipo === "pergunta" || m.tipo === "escolha") && !respondidas.has(m.id));
   }
 
   async marcarProgresso(id: string, nota: string): Promise<StatusLote | null> {

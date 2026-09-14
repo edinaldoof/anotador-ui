@@ -253,6 +253,50 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-opcao:disabled { opacity: .5; cursor: default; }
 
 /* entrada: caixa única com a área de texto em cima e as ações embaixo */
+.an-barra .an-agente-atual {
+  display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 999px;
+  border: 1px solid var(--an-borda); background: var(--an-superficie); cursor: pointer; flex: none; padding: 0;
+}
+.an-barra .an-agente-atual:hover { background: var(--an-superficie-alta); border-color: var(--an-borda-forte); }
+.an-barra .an-agente-atual .marca { display: flex; width: 17px; height: 17px; }
+.an-barra .an-agente-atual .marca svg { width: 100%; height: 100%; }
+.an-agentes {
+  position: fixed; z-index: 2147483646; pointer-events: auto; width: 312px; max-height: 60vh; overflow-y: auto;
+  background: var(--an-fundo); border: 1px solid var(--an-borda); border-radius: 14px;
+  box-shadow: var(--an-sombra-alta); padding: 5px; display: flex; flex-direction: column; gap: 1px;
+}
+.an-agentes-topo { padding: 8px 9px 5px; font-size: 11.5px; font-weight: 600; color: var(--an-texto-2); }
+.an-agentes-vazio, .an-agentes-aviso { padding: 9px; font-size: 11.5px; color: var(--an-texto-3); line-height: 1.45; }
+.an-agente {
+  display: flex; align-items: center; gap: 10px; padding: 8px 9px; border: 0; border-radius: 10px;
+  background: transparent; cursor: pointer; text-align: left; font: inherit; color: var(--an-texto); width: 100%;
+}
+.an-agente:hover:not(.inerte) { background: var(--an-superficie); }
+.an-agente.inerte { cursor: default; opacity: 0.62; }
+.an-agente.ativo { background: var(--an-marca-fundo); }
+.an-agente .marca { display: flex; width: 20px; height: 20px; flex: none; }
+.an-agente .marca svg { width: 100%; height: 100%; }
+.an-agente .col { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.an-agente .nome { font-size: 12.5px; font-weight: 600; }
+.an-agente .sit { font-size: 11px; color: var(--an-texto-3); overflow: hidden; text-overflow: ellipsis; }
+.an-agente .selo-vivo { flex: none; font-size: 10px; font-weight: 600; color: var(--an-ok-claro); background: var(--an-ok-fundo); border-radius: 999px; padding: 2px 7px; }
+.an-agente.apagar { margin-top: 3px; border-top: 1px solid var(--an-borda); border-radius: 0 0 10px 10px; padding-top: 10px; }
+.an-agentes-chave { display: flex; gap: 6px; padding: 4px 9px 9px; }
+.an-agentes-chave input {
+  flex: 1; min-width: 0; height: 30px; border-radius: 8px; border: 1px solid var(--an-borda);
+  background: var(--an-superficie); color: var(--an-texto); padding: 0 9px; font-size: 12px; outline: 0;
+}
+.an-agentes-chave input:focus { border-color: var(--an-marca-clara); box-shadow: var(--an-foco); }
+.an-ok-pequeno {
+  height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--an-marca);
+  color: var(--an-sobre-cor); font-size: 12px; font-weight: 600; cursor: pointer; flex: none;
+}
+.an-conversa .an-passo { display: flex; align-items: baseline; gap: 8px; padding: 3px 12px 3px 14px; font-size: 11.5px; color: var(--an-texto-3); }
+.an-conversa .an-passo .ponto { width: 5px; height: 5px; border-radius: 999px; background: var(--an-borda-forte); flex: none; align-self: center; }
+.an-conversa .an-passo .texto { flex: 1; min-width: 0; }
+.an-conversa .an-passo:last-of-type .ponto { background: var(--an-marca-clara); }
+.an-conversa .an-passo:last-of-type .texto { color: var(--an-texto-2); }
+.an-conversa .an-passo .quando { flex: none; font-size: 10.5px; }
 .an-conversa .entrada {
   margin: 8px 10px 10px; border: 1px solid var(--an-borda); background: var(--an-superficie); border-radius: 18px;
   display: flex; flex-direction: column; overflow: hidden; cursor: text;
