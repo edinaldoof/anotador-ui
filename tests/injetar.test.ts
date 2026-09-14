@@ -5,6 +5,14 @@ import { cabecalhosParaAlvo, ehHtml, extrairNonce, filtrarCabecalhosResposta, in
 const alvo = new URL("http://localhost:3001");
 const publica = "http://192.168.3.19:3999";
 
+test("credenciais do Anotador não são encaminhadas ao app", () => {
+  const ctx = { alvo, origemPublica: publica };
+  const saida = cabecalhosParaAlvo({ cookie: "sessao_app=1; anotador_sessao=privada; tema=escuro", "x-anotador-chave": "privada" }, ctx);
+  assert.equal(saida.cookie, "sessao_app=1; tema=escuro");
+  assert.equal(saida["x-anotador-chave"], undefined);
+  assert.equal(cabecalhosParaAlvo({ cookie: "anotador_sessao=privada" }, ctx).cookie, undefined);
+});
+
 test("extrairNonce pega o nonce do primeiro script e aceita aspas simples", () => {
   assert.equal(extrairNonce('<head><script nonce="AbC+/==" src="x"></script></head>'), "AbC+/==");
   assert.equal(extrairNonce("<link nonce='q1' rel=preload><script nonce='q2'></script>"), "q2");

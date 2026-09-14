@@ -10,6 +10,7 @@ import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { BASE } from "../server.ts";
+import { Ponte } from "../lib/agentes.ts";
 import {
   CABECALHO_CHAVE,
   avaliarAcesso,
@@ -150,7 +151,10 @@ function ipDeRede(): string | null {
 
 // A prova que importa: o pedido que a versão anterior aceitava, feito de verdade, por
 // um endereço que não é o laço local. Sem esta, o teste acima só mede uma função pura.
-test("um pedido de outro endereço é barrado, e a chave o deixa passar", { skip: ipDeRede() ? false : "sem interface de rede nesta máquina" }, async () => {
+test("um pedido de outro endereço é barrado, e a chave o deixa passar", { skip: ipDeRede() ? false : "sem interface de rede nesta máquina" }, async (t) => {
+  // A verificação é da porta de acesso: nunca inicie um CLI de verdade ao executá-la
+  // numa máquina em que Claude/Codex esteja instalado.
+  t.mock.method(Ponte.prototype, "iniciar", async () => { throw new Error("ponte simulada pelo teste de acesso"); });
   const ip = ipDeRede() as string;
   const alvo = await criarAlvoFalso();
   const proxy = await criarProxy(alvo, { host: ip });
@@ -165,7 +169,7 @@ test("um pedido de outro endereço é barrado, e a chave o deixa passar", { skip
 
     const cru = await iniciar();
     assert.equal(cru.status, 403, "pedido sem cabeçalho nenhum, de outra máquina, não inicia agente");
-    assert.match(JSON.parse(cru.corpo).erro, /chave que o anotador imprimiu/);
+    assert.match(JSON.parse(cru.corpo).erro, /link de acesso/);
 
     const fingindo = await iniciar({ "sec-fetch-site": "same-origin", origin: origem, host: `${ip}:${proxy.porta}` });
     assert.equal(fingindo.status, 403, "declarar-se a própria página não basta: os cabeçalhos são do cliente");

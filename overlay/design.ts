@@ -243,7 +243,7 @@ function renderizarExplorador(): void {
     { class: "cab" },
     alca,
     h("span", { class: "an-ico", style: "background:var(--an-superficie-alta)", html: ICONES.paleta }),
-    h("div", { class: "tit" }, "Sistema de design", h("span", { class: "sub" }, resumo)),
+    h("div", { class: "tit" }, textoInterface("Sistema de design"), h("span", { class: "sub" }, resumo)),
     h("button", {
       class: "an-ico",
       title: "Medir a página de novo",
@@ -253,7 +253,7 @@ function renderizarExplorador(): void {
         renderizarExplorador();
       },
     }),
-    h("button", { class: "an-ico", title: "Fechar", html: ICONES.fechar, onclick: fecharExplorador })
+    h("button", { class: "an-ico", title: textoInterface("Fechar"), html: ICONES.fechar, onclick: fecharExplorador })
   );
   painel.append(cab);
   tornarArrastavel(painel, [alca, cab], "design");

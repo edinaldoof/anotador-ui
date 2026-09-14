@@ -62,6 +62,24 @@ export interface RegistroAvaliacao {
   temParecer: boolean;
 }
 
+export interface EstadoExecucaoAvaliacao {
+  fase: "preparando" | "aguardando" | "executando" | "falhou" | "sem_parecer" | "concluida";
+  agente: string | null;
+  atualizadoEm: string;
+  erro?: string;
+  esforco?: string | null;
+  modelo?: string | null;
+  execucao?: {
+    id: string;
+    iniciadoEm: string;
+    terminadoEm: string | null;
+    codigo: number | null;
+    modelo?: string | null;
+    sessao?: string | null;
+    pid?: number | null;
+  };
+}
+
 // Estas categorias julgam uma tela parada, que é tudo o que o anotador vê. As dez
 // heurísticas de Nielsen são o vocabulário consagrado e foram consideradas aqui, mas
 // metade delas julga interação ao longo do tempo — recuperação de erro, liberdade de
@@ -169,7 +187,7 @@ const SINAL = { alta: "⚠", media: "•", baixa: "·" } as const;
 
 export function gerarDossie(
   pedido: PedidoAvaliacao,
-  extras: { porta: number; sistema?: string | null; captura?: string | null; intencao?: IntencaoDeArquivo[]; contexto?: IntencaoDeArquivo | null }
+  extras: { porta: number; sistema?: string | null; captura?: string | null; intencao?: IntencaoDeArquivo[]; contexto?: IntencaoDeArquivo | null; respostaDireta?: boolean }
 ): string {
   const p = pedido.pagina;
   const linhas: string[] = [
@@ -234,12 +252,11 @@ export function gerarDossie(
     "",
     "**Onde o julgamento depende da intenção, pergunte em vez de afirmar.** Layout se mede; propósito não. Duas opções lado a lado podem ser dois públicos diferentes, e não uma escolha mal explicada; um campo a mais pode ser exigência legal; uma tela densa pode servir a quem passa o dia nela. Antes de apontar, procure a resposta na seção de intenção acima e no contexto de produto. Se não estiver lá, mande uma `pergunta` com opções — ela aparece para quem abriu a página, e a resposta volta para você.",
     "",
-    "Devolva assim:",
-    "",
-    "```bash",
-    `curl -s -X POST http://127.0.0.1:${extras.porta}/__anotador/avaliacoes/${pedido.id}/parecer \\`,
-    `  -H 'content-type: application/json' -d @parecer.json`,
-    "```",
+    ...(extras.respostaDireta ? ["Devolva o objeto JSON abaixo como sua resposta final. O Anotador recebe e salva essa resposta diretamente: não use HTTP, curl nem arquivos temporários para entregá-la. Não altere o código do projeto ao avaliar."] : [
+      "Devolva assim:", "", "```bash",
+      `curl -s -X POST http://127.0.0.1:${extras.porta}/__anotador/avaliacoes/${pedido.id}/parecer \\`,
+      `  -H 'content-type: application/json' -d @parecer.json`, "```",
+    ]),
     "",
     "```json",
     JSON.stringify(
@@ -268,6 +285,7 @@ export function gerarDossie(
 
 export class Avaliacoes {
   readonly dir: string;
+  private readonly escritasEstado = new Map<string, Promise<void>>();
 
   constructor(base: string) {
     this.dir = join(base, "avaliacoes");
@@ -330,10 +348,32 @@ export class Avaliacoes {
     }
   }
 
+  async registrarEstado(id: string, estado: EstadoExecucaoAvaliacao): Promise<void> {
+    const destino = this.caminho(id, "estado.json");
+    const anterior = this.escritasEstado.get(id) ?? Promise.resolve();
+    const atual = anterior.catch(() => undefined).then(async () => {
+      if (!(await this.ler(id))) throw new Error("avaliação não encontrada");
+      const salvo = await this.lerEstado(id);
+      // Uma consulta iniciada antes da saída do processo não reabre a execução.
+      if (salvo && Date.parse(salvo.atualizadoEm) > Date.parse(estado.atualizadoEm)) return;
+      if (salvo?.execucao?.id === estado.execucao?.id && salvo?.execucao?.sessao && estado.execucao && !estado.execucao.sessao) estado.execucao.sessao = salvo.execucao.sessao;
+      await gravarAtomico(destino, JSON.stringify(estado, null, 2));
+    });
+    this.escritasEstado.set(id, atual);
+    try { await atual; }
+    finally { if (this.escritasEstado.get(id) === atual) this.escritasEstado.delete(id); }
+  }
+
+  async lerEstado(id: string): Promise<EstadoExecucaoAvaliacao | null> {
+    try {
+      return JSON.parse(await readFile(this.caminho(id, "estado.json"), "utf8")) as EstadoExecucaoAvaliacao;
+    } catch { return null; }
+  }
+
   async listar(limite = 20): Promise<RegistroAvaliacao[]> {
     let nomes: string[] = [];
     try {
-      nomes = (await readdir(this.dir)).filter((n) => n.endsWith(".json") && !n.endsWith(".parecer.json"));
+      nomes = (await readdir(this.dir)).filter((n) => n.endsWith(".json") && !n.endsWith(".parecer.json") && !n.endsWith(".estado.json"));
     } catch {
       return [];
     }

@@ -50,7 +50,7 @@ describe("modelos e comando da ponte", () => {
     assert.equal(claude[claude.length - 1], "oi", "a mensagem continua sendo o último argumento");
 
     const codex = comandoDaPonte("codex", null, "oi", { modelo: "gpt-6-astra", esforco: "high" }) ?? [];
-    assert.deepEqual(codex.slice(0, 3), ["codex", "exec", "--full-auto"]);
+    assert.deepEqual(codex.slice(0, 4), ["codex", "exec", "--sandbox", "workspace-write"]);
     assert.equal(codex[codex.indexOf("-m") + 1], "gpt-6-astra");
     assert.ok(codex.includes('model_reasoning_effort="high"'), `o esforço do Codex vai como override de config: ${codex.join(" ")}`);
 
@@ -59,7 +59,7 @@ describe("modelos e comando da ponte", () => {
     assert.equal(retomada[retomada.indexOf("resume") + 1], "019f-abc");
 
     assert.deepEqual(comandoDaPonte("gemini", null, "oi", { modelo: "gemini-3" })?.slice(0, 3), ["gemini", "-m", "gemini-3"]);
-    assert.equal(comandoDaPonte("antigravity", null, "oi"), null, "IDE sem linha de comando não tem ponte");
+    assert.deepEqual(comandoDaPonte("antigravity", null, "oi")?.slice(0, 3), ["agy", "--mode", "accept-edits"], "Antigravity usa o CLI agy, não o executável gráfico");
     const semEscolha = comandoDaPonte("claude", null, "oi") ?? [];
     assert.ok(!semEscolha.includes("--model") && !semEscolha.includes("--effort"), "sem escolha, nada é imposto");
   });
@@ -69,7 +69,7 @@ describe("modelos e comando da ponte", () => {
     assert.ok(claude.length >= 3);
     assert.ok(claude.every((m) => m.esforcos.includes("high")), "todo modelo do Claude aceita esforço alto");
     assert.equal(claude.filter((m) => m.padrao).length, 1, "exatamente um marcado como padrão");
-    assert.equal(modelosDe("antigravity").length, 0);
+    assert.ok(Array.isArray(modelosDe("antigravity")), "Antigravity usa o catálogo disponibilizado pelo CLI");
     assert.match(marcaDe("codex"), /^<svg/, "o Codex usa a marca da OpenAI");
     assert.equal(marcaDe("codex"), marcaDe("openai"));
     assert.notEqual(marcaDe("claude"), marcaDe("generico"));
@@ -268,8 +268,11 @@ describe("servidor sem alvo e página de conexão", () => {
     );
     assert.ok(Array.isArray(r.sessoes));
     assert.equal(r.ponte, null);
-    const ruim = await pedir(`${proxy.origem}${BASE}/agente/ponte`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ agente: "antigravity" }) });
-    assert.equal(ruim.status, 400, "Antigravity não tem ponte por linha de comando");
+    const ruim = await pedir(`${proxy.origem}${BASE}/agente/ponte`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ agente: "cursor" }) });
+    assert.equal(ruim.status, 400, "aplicativo sem CLI compatível não tem ponte por linha de comando");
+    const antigravity = r.agentes.find((a) => a.id === "antigravity");
+    const selecionar = await pedir(`${proxy.origem}${BASE}/agente/ponte`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ agente: "antigravity" }) });
+    assert.equal(selecionar.status, antigravity?.instalado && antigravity.ponte ? 200 : 400, "o Antigravity pode ser selecionado quando seu CLI está instalado");
     const desliga = await pedir(`${proxy.origem}${BASE}/agente/ponte`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ agente: null }) });
     assert.equal(desliga.status, 200);
     if (r.agentes.some((a) => a.id === "claude" && a.instalado)) {
@@ -278,6 +281,10 @@ describe("servidor sem alvo e página de conexão", () => {
       const ponte = (JSON.parse(inventado.corpo) as { ponte: { modelo: string | null; esforco: string | null } }).ponte;
       assert.equal(ponte.modelo, null, "modelo desconhecido não entra na linha de comando");
       assert.equal(ponte.esforco, null);
+      const sessaoAlheia = await pedir(`${proxy.origem}${BASE}/agente/ponte`, { metodo:"POST",corpo:JSON.stringify({agente:"claude",sessao:"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}) });
+      assert.equal(sessaoAlheia.status,400,"a ponte também recusa sessão sem vínculo com agente e projeto");
+      assert.match(JSON.parse(sessaoAlheia.corpo).erro,/não pertence ao agente e projeto/);
+      assert.deepEqual(JSON.parse((await pedir(`${proxy.origem}${BASE}/agentes`)).corpo).ponte,ponte,"erro não substitui a ponte selecionada");
       await pedir(`${proxy.origem}${BASE}/agente/ponte`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ agente: null }) });
     }
     const iniciarRuim = await pedir(`${proxy.origem}${BASE}/agente/iniciar`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ agente: "cursor" }) });

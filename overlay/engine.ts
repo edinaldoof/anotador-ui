@@ -171,12 +171,17 @@ function caminhoShadow(el: Element): string[] {
   let guarda = 0;
   while (guarda++ < 8) {
     const raiz = no.getRootNode();
-    if (!(raiz instanceof ShadowRoot)) break;
+    if (!ehShadowRoot(raiz)) break;
     const raizDoHost = raiz.host.getRootNode();
     caminho.unshift(seletorCurto(raiz.host, consultavel(raizDoHost) ? raizDoHost : document));
     no = raiz.host;
   }
   return caminho;
+}
+
+function ehShadowRoot(no: Node): no is ShadowRoot {
+  const janela = no.ownerDocument?.defaultView as (Window & typeof globalThis) | null | undefined;
+  return !!janela && no instanceof janela.ShadowRoot;
 }
 
 function contarCasamentos(sel: string, raiz: ParentNode): number {
@@ -192,7 +197,7 @@ function contarCasamentos(sel: string, raiz: ParentNode): number {
 function construirSeletores(el: Element, doc: Document): Seletor[] {
   const raizBruta = el.getRootNode();
   const raiz: Document | ShadowRoot = consultavel(raizBruta) ? raizBruta : doc;
-  const emShadow = raiz instanceof ShadowRoot;
+  const emShadow = ehShadowRoot(raiz);
   const cands: Seletor[] = [];
   const vistos = new Set<string>();
   const tag = el.tagName.toLowerCase();
@@ -413,19 +418,111 @@ function rectTopo(el: Element): Rect {
   return rect;
 }
 
-// Localiza de novo um elemento salvo (reload/HMR) testando os candidatos em ordem.
-function localizarPorSeletores(seletores: Seletor[]): Element | null {
+// A mesma leitura de layout usada na extração, limitada ao contexto do clique.
+// Os valores são uma fotografia da seleção, antes de qualquer edição no overlay.
+const ESTILOS_CONTEXTO_VISUAL = [
+  "display", "position", "box-sizing", "width", "height", "min-width", "max-width", "min-height", "max-height",
+  "overflow-x", "overflow-y", "flex-direction", "flex-wrap", "flex-grow", "flex-shrink", "flex-basis",
+  "align-items", "align-self", "justify-content", "grid-template-columns", "grid-template-rows", "gap",
+  "padding", "margin", "border-width", "border-color", "border-radius", "box-shadow",
+  "color", "background-color", "font-family", "font-size", "font-weight", "line-height", "letter-spacing", "white-space",
+];
+
+function capturarContextoVisual(el: Element): ContextoVisualAnotacao {
+  const nos: NoContextoVisual[] = [];
+  const relacoes: NoContextoVisual["relacao"][] = ["alvo", "pai", "avo"];
+  let atual: Element | null = el;
+  for (const relacao of relacoes) {
+    if (!atual || atual.tagName === "HTML" || atual.id === "__anotador_host") break;
+    const estilo = atual.ownerDocument.defaultView?.getComputedStyle(atual);
+    if (!estilo) break;
+    const estilos: Record<string, string> = {};
+    for (const propriedade of ESTILOS_CONTEXTO_VISUAL) estilos[propriedade] = estilo.getPropertyValue(propriedade).slice(0, 400);
+    nos.push({
+      relacao,
+      tag: atual.tagName.toLowerCase(),
+      seletor: construirSeletores(atual, atual.ownerDocument)[0] ?? null,
+      framePath: caminhoFrames(atual),
+      shadowPath: caminhoShadow(atual),
+      rect: rectTopo(atual),
+      clientWidth: atual.clientWidth,
+      clientHeight: atual.clientHeight,
+      scrollWidth: atual.scrollWidth,
+      scrollHeight: atual.scrollHeight,
+      estilos,
+    });
+    atual = paiEstrutural(atual);
+  }
+  return {
+    url: location.href,
+    capturadoEm: new Date().toISOString(),
+    viewport: { largura: innerWidth, altura: innerHeight, dpr: devicePixelRatio || 1, scrollX, scrollY },
+    nos,
+  };
+}
+
+// O contexto é parte da identidade: um seletor igual no documento pai não é
+// substituto para um elemento de iframe ou shadow root que deixou de existir.
+// O formato salvo representa frames, seguidos pelos hosts do shadow final.
+function raizDosSeletores(framePath: readonly string[], shadowPath: readonly string[]): Document | ShadowRoot | null {
+  if (!Array.isArray(framePath) || !Array.isArray(shadowPath) || framePath.length > 8 || shadowPath.length > 8) return null;
+  let raiz: Document | ShadowRoot = document;
+  try {
+    for (const seletor of framePath) {
+      if (typeof seletor !== "string" || !seletor) return null;
+      const frames: NodeListOf<Element> = raiz.querySelectorAll(seletor);
+      if (frames.length !== 1) return null;
+      const frame: Element | undefined = frames[0];
+      if (!frame || !frame.isConnected || !["IFRAME", "FRAME"].includes(frame.tagName)) return null;
+      const filho: Document | null = (frame as HTMLIFrameElement).contentDocument;
+      if (!filho?.documentElement) return null;
+      raiz = filho;
+    }
+    for (const seletor of shadowPath) {
+      if (typeof seletor !== "string" || !seletor) return null;
+      const hosts: NodeListOf<Element> = raiz.querySelectorAll(seletor);
+      if (hosts.length !== 1) return null;
+      const host: Element | undefined = hosts[0];
+      if (!host?.isConnected || !host.shadowRoot) return null;
+      raiz = host.shadowRoot;
+    }
+    return raiz;
+  } catch {
+    // Seletor inválido ou frame inacessível: não buscar no contexto externo.
+    return null;
+  }
+}
+
+// Um elemento pode continuar conectado ao documento de um iframe já removido.
+function elementoNoContexto(el: Element, framePath: readonly string[] = [], shadowPath: readonly string[] = []): boolean {
+  return el.isConnected && el.getRootNode() === raizDosSeletores(framePath, shadowPath);
+}
+
+// Localiza de novo um elemento salvo (reload/HMR), exigindo unicidade atual.
+// `unico` descreve a captura original; a página pode ter mudado desde então.
+function localizarPorSeletores(seletores: Seletor[], framePath: readonly string[] = [], shadowPath: readonly string[] = []): Element | null {
+  const raiz = raizDosSeletores(framePath, shadowPath);
+  if (!raiz) return null;
   for (const c of seletores) {
     try {
       if (c.tipo === "xpath") {
-        const r = document.evaluate(c.valor, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
-        if (r.singleNodeValue instanceof Element) return r.singleNodeValue;
+        // XPath não é produzido para shadow roots e não pode escapar deles.
+        if (raiz.nodeType !== Node.DOCUMENT_NODE) continue;
+        const doc = raiz as Document;
+        const r = doc.evaluate(c.valor, doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+        const no = r.snapshotLength === 1 ? r.snapshotItem(0) : null;
+        if (no?.nodeType === Node.ELEMENT_NODE && no.getRootNode() === raiz) return no as Element;
       } else if (c.tipo === "texto") {
-        for (const cand of document.querySelectorAll(c.tag || "*")) {
-          if (textoProprio(cand) === c.valor) return cand;
+        let encontrado: Element | null = null;
+        let ambiguo = false;
+        for (const cand of raiz.querySelectorAll(c.tag || "*")) {
+          if (textoProprio(cand) !== c.valor) continue;
+          if (encontrado) { ambiguo = true; break; }
+          encontrado = cand;
         }
+        if (encontrado && !ambiguo) return encontrado;
       } else {
-        const els = document.querySelectorAll(c.valor);
+        const els = raiz.querySelectorAll(c.valor);
         if (els.length === 1) return els[0] ?? null;
       }
     } catch {
@@ -447,7 +544,7 @@ function noEstrutural(el: Element): boolean {
 function paiEstrutural(el: Element): Element | null {
   if (el.parentElement) return el.parentElement;
   const raiz = el.getRootNode();
-  if (raiz instanceof ShadowRoot) return raiz.host;
+  if (ehShadowRoot(raiz)) return raiz.host;
   if (el.tagName === "BODY" || el.tagName === "HTML") {
     let frame: Element | null = null;
     try {
@@ -537,41 +634,98 @@ function componenteDono(el: Element): string | null {
 interface ElementosNaArea {
   /** inteiramente dentro do retângulo, em ordem de documento */
   contidos: Element[];
+  /** Alvos visuais que cruzam a região, sem repetir seus ancestrais contêineres. */
+  elementos: Array<{ el: Element; rect: Rect; intersecao: "inteiro" | "parcial" }>;
   /** cruzam a borda do retângulo sem caber nele */
   parciais: number;
   /** varredura interrompida por tamanho da página */
   truncado: boolean;
 }
 
-// Elementos com caixa inteiramente dentro do retângulo (coordenadas do viewport), descendo em shadow roots abertos.
+// Coordenadas CSS do viewport superior; bordas e escala dos iframes fazem parte da transformação.
+function rectDaArea(el: Element): Rect {
+  const r = el.getBoundingClientRect();
+  const rect = { left: r.left, top: r.top, width: r.width, height: r.height };
+  let win: Window | null = el.ownerDocument.defaultView;
+  for (let n = 0; win && win !== window && n < 10; n++) {
+    let frame: HTMLElement | null;
+    try { frame = win.frameElement as HTMLElement | null; } catch { break; }
+    if (!frame) break;
+    const caixa = frame.getBoundingClientRect();
+    const escalaX = frame.offsetWidth ? caixa.width / frame.offsetWidth : 1;
+    const escalaY = frame.offsetHeight ? caixa.height / frame.offsetHeight : 1;
+    rect.left = caixa.left + (frame.clientLeft + rect.left) * escalaX;
+    rect.top = caixa.top + (frame.clientTop + rect.top) * escalaY;
+    rect.width *= escalaX;
+    rect.height *= escalaY;
+    win = win.parent;
+  }
+  return rect;
+}
+
+function parteVisivelNaArea(el: Element, rect: Rect): Rect {
+  let esquerda = rect.left, topo = rect.top, direita = rect.left + rect.width, baixo = rect.top + rect.height;
+  let pai = paiEstrutural(el);
+  for (let n = 0; pai && n < 100; n++, pai = paiEstrutural(pai)) {
+    const estilo = pai.ownerDocument.defaultView?.getComputedStyle(pai);
+    const frame = pai.tagName === "IFRAME" || pai.tagName === "FRAME";
+    const cortaX = frame || /^(hidden|clip|auto|scroll)$/.test(estilo?.overflowX ?? "");
+    const cortaY = frame || /^(hidden|clip|auto|scroll)$/.test(estilo?.overflowY ?? "");
+    if (!cortaX && !cortaY) continue;
+    const r = rectDaArea(pai), caixa = pai as HTMLElement;
+    const sx = caixa.offsetWidth ? r.width / caixa.offsetWidth : 1, sy = caixa.offsetHeight ? r.height / caixa.offsetHeight : 1;
+    const x = r.left + caixa.clientLeft * sx, y = r.top + caixa.clientTop * sy;
+    if (cortaX) { esquerda = Math.max(esquerda, x); direita = Math.min(direita, x + caixa.clientWidth * sx); }
+    if (cortaY) { topo = Math.max(topo, y); baixo = Math.min(baixo, y + caixa.clientHeight * sy); }
+  }
+  return {left: esquerda, top: topo, width: Math.max(0, direita-esquerda), height: Math.max(0, baixo-topo)};
+}
+
+// Varre a mesma região em DOM, shadow roots e frames acessíveis. O limite é explícito.
 function elementosNaArea(area: Rect, ignorar: Ignorar, limite = 20000): ElementosNaArea {
   const direita = area.left + area.width;
   const baixo = area.top + area.height;
   const contidos: Element[] = [];
+  const cruzados: ElementosNaArea["elementos"] = [];
   let parciais = 0;
   let visitados = 0;
   let truncado = false;
-  const visitar = (raiz: ParentNode): void => {
-    for (const el of Array.from(raiz.children)) {
+  const visitar = (filhos: Element[]): void => {
+    for (const el of filhos) {
       if (truncado) return;
       if (++visitados > limite) {
         truncado = true;
         return;
       }
       if (!noEstrutural(el) || ignorar(el)) continue;
-      const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) {
-        const dentro = r.left >= area.left - 1 && r.top >= area.top - 1 && r.right <= direita + 1 && r.bottom <= baixo + 1;
-        const cruza = r.left < direita && r.right > area.left && r.top < baixo && r.bottom > area.top;
-        if (dentro) contidos.push(el);
+      const r = rectDaArea(el);
+      const visivel = parteVisivelNaArea(el, r);
+      const estilo = el.ownerDocument.defaultView?.getComputedStyle(el);
+      if (r.width > 0 && r.height > 0 && estilo?.visibility !== "hidden" && estilo?.visibility !== "collapse" && estilo?.display !== "none") {
+        const dentro = r.left >= area.left - .25 && r.top >= area.top - .25 && r.left + r.width <= direita + .25 && r.top + r.height <= baixo + .25;
+        const cruza = visivel.width > 0 && visivel.height > 0 && visivel.left < direita && visivel.left + visivel.width > area.left && visivel.top < baixo && visivel.top + visivel.height > area.top;
+        if (dentro && cruza) contidos.push(el);
         else if (cruza) parciais++;
+        if (cruza && el.tagName !== "BODY" && el.tagName !== "HTML") cruzados.push({ el, rect: r, intersecao: dentro ? "inteiro" : "parcial" });
       }
-      if (el.shadowRoot) visitar(el.shadowRoot);
-      visitar(el);
+      visitar(filhosEstruturais(el));
     }
   };
-  visitar(document.body);
-  return { contidos, parciais, truncado };
+  visitar(Array.from(document.body.children));
+  const comDescendentes = new Set<Element>();
+  const interativos = new Set(cruzados.filter(({el}) => el.matches(INTERATIVO)).map(({el}) => el));
+  for (const {el} of cruzados) {
+    let pai = paiEstrutural(el);
+    for (let n = 0; pai && n < 100; n++, pai = paiEstrutural(pai)) comDescendentes.add(pai);
+  }
+  const elementos = cruzados.filter(({ el }) => {
+    // Um botão com span é um alvo só; blocos com texto próprio e mídia também são alvos.
+    let pai = paiEstrutural(el);
+    for (let n = 0; pai && n < 100; n++, pai = paiEstrutural(pai)) if (interativos.has(pai)) return false;
+    if (el.matches(INTERATIVO) || textoDireto(el) || /^(IMG|VIDEO|CANVAS|SVG|INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return true;
+    return !comDescendentes.has(el) && filhosEstruturais(el).length === 0;
+  });
+  return { contidos, elementos, parciais, truncado };
 }
 
 // Ancestral comum mais próximo (pelo pai estrutural).

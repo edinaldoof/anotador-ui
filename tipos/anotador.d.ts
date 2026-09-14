@@ -85,6 +85,29 @@ interface Rect {
   height: number;
 }
 
+interface NoContextoVisual {
+  relacao: "alvo" | "pai" | "avo";
+  tag: string;
+  seletor: Seletor | null;
+  framePath: string[];
+  shadowPath: string[];
+  /** Medidas do viewport superior, no momento da seleção. */
+  rect: Rect;
+  clientWidth: number;
+  clientHeight: number;
+  scrollWidth: number;
+  scrollHeight: number;
+  estilos: Record<string, string>;
+}
+
+interface ContextoVisualAnotacao {
+  url: string;
+  capturadoEm: string;
+  viewport: ViewportLote;
+  /** Somente o alvo e até dois ancestrais visuais; não varre a página. */
+  nos: NoContextoVisual[];
+}
+
 interface ElementoAnotado {
   seletores: Seletor[];
   meta: MetaElemento;
@@ -95,6 +118,7 @@ interface ElementoAnotado {
   /** rect em coordenadas do documento (para recortes de captura) */
   rectPagina?: Rect | null;
   computado: Record<string, string>;
+  contextoVisual?: ContextoVisualAnotacao;
   /** elemento exato clicado, quando o snap subiu para o interativo */
   interno?: { seletores: Seletor[]; meta: MetaElemento };
   localizado?: boolean;
@@ -119,6 +143,40 @@ interface Anotacao {
   alteracoes: AlteracaoEstilo[];
   texto: AlteracaoTexto | null;
   criadaEm: string;
+  /** Prints manuais resolvidos pelo servidor antes de gravar/enviar o lote. */
+  anexos?: AnexoImagem[];
+  /** Região desenhada pelo usuário: a caixa não se expande ao ancestral DOM. */
+  area?: AreaAnotada;
+}
+
+interface ElementoArea {
+  seletores: Seletor[];
+  meta: MetaElemento;
+  framePath: string[];
+  shadowPath: string[];
+  /** Caixa observada no viewport superior no momento da seleção. */
+  rect: Rect;
+  intersecao: "inteiro" | "parcial";
+}
+
+interface AreaAnotada {
+  rectPagina: Rect;
+  viewport: ViewportLote;
+  /** Até 100 referências observadas na região; não inclui o conteúdo fora dela. */
+  elementos: ElementoArea[];
+  truncado: boolean;
+}
+
+interface AnexoImagem {
+  id: string;
+  anotacaoId: string;
+  paginaUrl: string;
+  capturadoEm: string;
+  largura: number;
+  altura: number;
+  viewport: ViewportLote;
+  /** Caminho absoluto canônico gerado pelo servidor, nunca aceito do cliente. */
+  caminho: string;
 }
 
 interface ViewportLote {
@@ -177,6 +235,8 @@ interface StatusLote {
   processadoEm?: string;
   /** perguntas do Claude ainda sem resposta */
   perguntasAbertas?: number;
+  /** Estado real do processo que recebeu o lote; não indica conclusão das alterações. */
+  execucao?: { id: string; agente: string; modelo: string | null; iniciadoEm: string; terminadoEm: string | null; codigo: number | null; erro?: string };
 }
 
 /**
@@ -203,6 +263,8 @@ interface Mensagem {
 }
 
 interface EventoAnotador {
+  /** Prints manuais resolvidos pelo servidor, com caminhos absolutos. */
+  imagens?: string[];
   tipo: "ola" | "lote" | "progresso" | "processado" | "mensagem" | "conexao" | "avaliacao" | "parecer";
   nome?: string;
   /** app conectado (ola, conexao); null quando desconectou */
@@ -252,6 +314,8 @@ interface ResumoArvore {
 }
 
 interface ConfigOverlay {
+  /** O mesmo endereço também oferece HTTPS para a janela de ditado. */
+  https?: boolean;
   base: string;
   capturas: boolean;
   nome: string;

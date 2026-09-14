@@ -9,26 +9,93 @@
 //
 // A regra agora tem duas portas. Pedido da própria máquina passa, porque quem já está
 // na máquina não precisa do anotador para nada. Pedido de fora precisa da chave da
-// sessão, que só aparece na URL impressa no terminal.
+// sessão ou de um navegador autorizado por um convite. O convite abre uma sessão
+// HttpOnly: a pessoa não precisa copiar uma chave do terminal nem guardá-la no JS.
 //
 // O cabeçalho de origem continua sendo exigido no caminho local, e é ele que barra
 // falsificação de requisição entre sítios: uma página maliciosa aberta no navegador
 // não consegue forjar `Sec-Fetch-Site`, e o cabeçalho da chave é customizado, o que
 // obriga o navegador a pedir permissão antes de enviá-lo, permissão que este servidor
-// nunca concede.
+// nunca concede. A sessão em cookie também exige a mesma origem, pois o navegador
+// envia cookies automaticamente. Estar na rede local não identifica a pessoa.
 //
 // Ressalva conhecida: atrás de um proxy reverso na mesma máquina (o caso de
 // `--publico`), todo pedido chega como local. Não dá para consertar aqui, porque
 // `X-Forwarded-For` é escrito pelo cliente; nesse arranjo quem controla o acesso é o
 // proxy, e o README diz isso.
 
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { IncomingMessage } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 
 export const CABECALHO_CHAVE = "x-anotador-chave";
+export const COOKIE_SESSAO = "anotador_sessao";
 const FORMATO = /^[0-9a-f]{32}$/;
+const VIDA_CONVITE_SEGUNDOS = 15 * 60;
+const VIDA_SESSAO_SEGUNDOS = 30 * 24 * 60 * 60;
+type Proposito = "convite" | "sessao";
+
+/** Tokens têm propósitos separados; um convite nunca funciona como sessão. */
+function assinarToken(proposito: Proposito, chave: string, duracao: number): string {
+  const dados = Buffer.from(JSON.stringify({
+    versao: 1,
+    proposito,
+    exp: Math.floor(Date.now() / 1000) + duracao,
+    nonce: randomBytes(16).toString("base64url"),
+  })).toString("base64url");
+  const assinatura = createHmac("sha256", chave).update(`anotador-ui/acesso/v1\0${proposito}\0${dados}`).digest("base64url");
+  return `${dados}.${assinatura}`;
+}
+
+function tokenConfere(token: unknown, chave: string, proposito: Proposito): boolean {
+  if (typeof token !== "string" || token.length > 1024) return false;
+  const partes = /^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/.exec(token);
+  if (!partes) return false;
+  const dados = partes[1] as string;
+  const assinatura = createHmac("sha256", chave).update(`anotador-ui/acesso/v1\0${proposito}\0${dados}`).digest("base64url");
+  if (!chaveConfere(partes[2], assinatura)) return false;
+  try {
+    const conteudo = JSON.parse(Buffer.from(dados, "base64url").toString("utf8")) as Record<string, unknown>;
+    return conteudo !== null && conteudo["versao"] === 1 && conteudo["proposito"] === proposito
+      && typeof conteudo["exp"] === "number" && Number.isSafeInteger(conteudo["exp"])
+      && conteudo["exp"] > Math.floor(Date.now() / 1000)
+      && typeof conteudo["nonce"] === "string" && /^[A-Za-z0-9_-]{22}$/.test(conteudo["nonce"]);
+  } catch {
+    return false;
+  }
+}
+
+/** Compartilhável por 15 minutos; pode ser usado mais de uma vez nesse prazo. */
+export function criarConvite(chave: string): string {
+  return assinarToken("convite", chave, VIDA_CONVITE_SEGUNDOS);
+}
+
+export function conviteConfere(token: unknown, chave: string): boolean {
+  return tokenConfere(token, chave, "convite");
+}
+
+export function sessaoConfere(token: unknown, chave: string): boolean {
+  return tokenConfere(token, chave, "sessao");
+}
+
+/** Só chamar depois de validar uma credencial, convite ou pedido da própria máquina. */
+export function definirSessaoNavegador(req: IncomingMessage, res: ServerResponse, chave: string): void {
+  const token = assinarToken("sessao", chave, VIDA_SESSAO_SEGUNDOS);
+  const cifrado = (req.socket as { encrypted?: boolean }).encrypted === true;
+  const cookie = `${COOKIE_SESSAO}=${token}; Path=/__anotador; HttpOnly; SameSite=Strict; Max-Age=${VIDA_SESSAO_SEGUNDOS}${cifrado ? "; Secure" : ""}`;
+  const atuais = res.getHeader("set-cookie");
+  res.setHeader("set-cookie", [...(Array.isArray(atuais) ? atuais : atuais ? [String(atuais)] : []), cookie]);
+}
+
+function sessaoDoCookie(headers: Record<string, unknown>): string | null {
+  const cookie = headers["cookie"];
+  if (typeof cookie !== "string") return null;
+  const valores = cookie.split(";").map((parte) => parte.trim()).filter((parte) => parte.startsWith(COOKIE_SESSAO + "="));
+  // Cookies repetidos são ambíguos (por exemplo, um Path diferente); recusá-los evita
+  // que a interpretação do servidor dependa da ordem escolhida pelo navegador.
+  return valores.length === 1 ? (valores[0] as string).slice(COOKIE_SESSAO.length + 1) : null;
+}
 
 /** Só o que o sistema operacional resolve para a própria máquina. */
 export function daPropriaMaquina(ip: string | undefined): boolean {
@@ -73,14 +140,19 @@ export function avaliarAcesso(pedido: PedidoAvaliado, chave: string): { ok: true
     return mesmaOrigem(pedido.headers) ? { ok: true } : { ok: false, motivo: "origem-cruzada" };
   }
   const dada = pedido.headers[CABECALHO_CHAVE];
+  if (chaveConfere(dada, chave)) return { ok: true };
+  const sessao = sessaoDoCookie(pedido.headers);
+  if (sessaoConfere(sessao, chave)) {
+    return mesmaOrigem(pedido.headers) ? { ok: true } : { ok: false, motivo: "origem-cruzada" };
+  }
   if (dada === undefined || dada === "") return { ok: false, motivo: "sem-chave" };
-  return chaveConfere(dada, chave) ? { ok: true } : { ok: false, motivo: "chave-errada" };
+  return { ok: false, motivo: "chave-errada" };
 }
 
 export const RECUSAS: Record<Recusa, string> = {
   "origem-cruzada": "este pedido não veio da página de conexão",
-  "sem-chave": "de fora desta máquina, use a URL com a chave que o anotador imprimiu ao iniciar",
-  "chave-errada": "chave inválida; a URL com a chave certa está na saída do anotador",
+  "sem-chave": "este navegador ainda não está conectado; abra um link de acesso compartilhado pelo responsável pelo anotador",
+  "chave-errada": "acesso inválido ou expirado; abra um novo link de acesso",
 };
 
 export function autorizado(req: IncomingMessage, chave: string): boolean {

@@ -130,6 +130,7 @@ class Canal {
 export interface OpcoesNavegador {
   caminho?: string | null;
   timeoutMs?: number;
+  mostrarBarrasRolagem?: boolean;
 }
 
 const TECLAS: Record<string, { code: string; keyCode: number; text?: string }> = {
@@ -201,7 +202,14 @@ export class Pagina {
     this.carregou = new Promise((r) => (this.resolverCarga = r));
     const resposta = await this.canal.enviar("Page.navigate", { url }, this.sessionId);
     if (resposta["errorText"]) throw new Error("navegação falhou: " + String(resposta["errorText"]));
-    await Promise.race([this.carregou, new Promise<void>((_, rej) => setTimeout(() => rej(new Error("tempo esgotado carregando " + url)), timeoutMs))]);
+    let temporizador: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([this.carregou, new Promise<void>((_, rej) => {
+        temporizador = setTimeout(() => rej(new Error("tempo esgotado carregando " + url)), timeoutMs);
+      })]);
+    } finally {
+      if (temporizador) clearTimeout(temporizador);
+    }
   }
 
   async avaliar<T = unknown>(expressao: string): Promise<T> {
@@ -319,7 +327,7 @@ export class Navegador {
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-extensions",
-        "--hide-scrollbars",
+        ...(opcoes.mostrarBarrasRolagem ? [] : ["--hide-scrollbars"]),
         "--window-size=1400,900",
         "about:blank",
       ],
@@ -383,6 +391,11 @@ export class Navegador {
     const pagina = new Pagina(this.canal, String(anexado["sessionId"]), targetId);
     await pagina.preparar();
     return pagina;
+  }
+
+  /** Só afeta esta instância temporária, para renderizar apps com certificado próprio. */
+  async ignorarErrosCertificado(): Promise<void> {
+    await this.canal.enviar("Security.setIgnoreCertificateErrors", { ignore: true });
   }
 
   async fechar(): Promise<void> {

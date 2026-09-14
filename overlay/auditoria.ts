@@ -604,6 +604,14 @@ interface EstadoAvaliacao {
   enviando: boolean;
   parecer: { agente: string; resumo: string; itens: ItemParecerOverlay[]; perguntas?: PerguntaOverlay[] } | null;
   erro: string | null;
+  foco: string;
+  conversa: ConversaAvaliacaoUI | null;
+  execucao: {
+    fase: "preparando" | "aguardando" | "executando" | "falhou" | "sem_parecer" | "concluida";
+    agente: string | null;
+    erro?: string;
+    atualizadoEm: string;
+  } | null;
 }
 
 interface PerguntaOverlay {
@@ -622,8 +630,12 @@ interface ItemParecerOverlay {
   comoAplicar?: string;
 }
 
-const avaliacao: EstadoAvaliacao = { aberto: false, medicao: null, id: null, enviando: false, parecer: null, erro: null };
-let sondaParecer: ReturnType<typeof setInterval> | null = null;
+const avaliacao: EstadoAvaliacao = { aberto: false, medicao: null, id: null, enviando: false, parecer: null, erro: null, foco: "", execucao: null, conversa: null };
+const chaveUltimaAvaliacao = () => "anotador-ui:avaliacao:" + CFG.nome + ":" + location.pathname;
+let sondaParecer: ReturnType<typeof setTimeout> | null = null;
+let consultaParecer: AbortController | null = null;
+let geracaoParecer = 0;
+let verificandoAgenteAvaliacao = false;
 
 function elementoDoSeletor(seletor: string | null | undefined): ElementoEstilizavel | null {
   if (!seletor) return null;
@@ -646,10 +658,37 @@ async function alternarAvaliacao(): Promise<void> {
     ui.avaliacao = h("div", { class: "an-avaliacao" });
     raiz?.append(ui.avaliacao);
   }
+  // O painel reaberto deve receber cliques mesmo quando o chat ficou aberto por cima.
+  raiz?.append(ui.avaliacao);
   ui.avaliacao.hidden = false;
   avaliacao.medicao = auditarPagina();
+  verificandoAgenteAvaliacao = true;
   renderizarAvaliacao();
   medirComNormaEDepoisPintar();
+  if (avaliacao.id && !avaliacao.parecer) acompanharParecer();
+  try {
+    await sincronizarAgenteAtual();
+    if (!avaliacao.id) {
+      try {
+        const salvo = localStorage.getItem(chaveUltimaAvaliacao());
+        if (salvo && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(salvo)) avaliacao.id = salvo;
+      } catch { /* preferência opcional */ }
+      if (!avaliacao.id) {
+        const resposta = await pedirApi("/avaliacoes");
+        const registros = resposta.dados.avaliacoes;
+        if (resposta.ok && Array.isArray(registros)) {
+          const ultimo = registros.find((r: { url?: string }) => { try { const url = r.url && new URL(r.url); return url && url.pathname === location.pathname && url.host === location.host; } catch { return false; } });
+          if (ultimo && typeof ultimo.id === "string") avaliacao.id = ultimo.id;
+        }
+      }
+      if (avaliacao.id) acompanharParecer();
+    }
+  } catch (erro) {
+    avaliacao.erro = erro instanceof Error ? erro.message : String(erro);
+  } finally {
+    verificandoAgenteAvaliacao = false;
+    renderizarAvaliacao();
+  }
 }
 
 /**
@@ -670,19 +709,24 @@ function fecharAvaliacao(): void {
   ui.btnAvaliar.classList.remove("ativo");
   if (ui.avaliacao) ui.avaliacao.hidden = true;
   limparRealces();
-  if (sondaParecer) clearInterval(sondaParecer);
-  sondaParecer = null;
+  pararAcompanhamentoParecer();
 }
 
 async function pedirParecer(foco: string): Promise<void> {
-  if (avaliacao.enviando || !avaliacao.medicao) return;
+  if (avaliacao.enviando || verificandoAgenteAvaliacao || !avaliacao.medicao || avaliacaoEmAndamento()) return;
   avaliacao.enviando = true;
+  pararAcompanhamentoParecer();
+  avaliacao.id = null;
+  avaliacao.execucao = null;
+  avaliacao.conversa = null;
+  avaliacao.foco = foco;
   avaliacao.erro = null;
   avaliacao.parecer = null;
   renderizarAvaliacao();
   try {
     const contexto = { ...contextoDaPagina(), medidos: avaliacao.medicao.medidos };
     const corpo = {
+      agenteEsperado: AGENTE,
       pagina: {
         url: location.href,
         caminho: location.pathname,
@@ -695,11 +739,16 @@ async function pedirParecer(foco: string): Promise<void> {
       foco: foco || null,
       instantaneo: CFG.capturas ? instantaneoHtml([]) : null,
     };
-    const resp = await fetch(CFG.base + "/avaliacoes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpo) });
-    if (!resp.ok) throw new Error("HTTP " + resp.status);
-    avaliacao.id = ((await resp.json()) as { id: string }).id;
-    avisar(`Pedido de parecer enviado a ${AGENTE}.`);
+    const resp = await pedirApi("/avaliacoes", corpo, AbortSignal.timeout(30_000));
+    if (resp.status === 409) await sincronizarAgenteAtual();
+    if (!resp.ok) throw new Error(typeof resp.dados.erro === "string" ? traduzirInterface(resp.dados.erro) : "HTTP " + resp.status);
+    if (typeof resp.dados.id !== "string") throw new Error(traduzirInterface("O servidor não confirmou o pedido de avaliação."));
+    avaliacao.id = resp.dados.id;
+    avaliacao.conversa = (resp.dados.conversa as ConversaAvaliacaoUI | null) ?? null;
+    try { localStorage.setItem(chaveUltimaAvaliacao(), avaliacao.id); } catch { /* memória continua disponível */ }
+    avisar(traduzirInterface("Pedido de parecer enviado a {agente}.", { agente: typeof resp.dados.agente === "string" ? resp.dados.agente : AGENTE }));
     acompanharParecer();
+    if (avaliacao.conversa && await abrirChatDaAvaliacao(avaliacao.conversa)) fecharAvaliacao();
   } catch (erro) {
     avaliacao.erro = erro instanceof Error ? erro.message : String(erro);
   } finally {
@@ -709,36 +758,73 @@ async function pedirParecer(foco: string): Promise<void> {
 }
 
 function acompanharParecer(): void {
-  if (sondaParecer) clearInterval(sondaParecer);
+  pararAcompanhamentoParecer();
+  if (!avaliacao.aberto || !avaliacao.id || avaliacao.parecer) return;
+  const id = avaliacao.id;
+  const geracao = geracaoParecer;
   const inicio = Date.now();
-  sondaParecer = setInterval(() => {
-    if (!avaliacao.id || Date.now() - inicio > 20 * 60 * 1000) {
-      if (sondaParecer) clearInterval(sondaParecer);
-      sondaParecer = null;
+  const atual = () => geracao === geracaoParecer && avaliacao.id === id && avaliacao.aberto;
+  const consultar = async () => {
+    sondaParecer = null;
+    if (!atual()) return;
+    if (Date.now() - inicio > 20 * 60 * 1000) {
+      avaliacao.erro = traduzirInterface("O parecer ainda não chegou. Consulte novamente para verificar o retorno.");
+      renderizarAvaliacao();
       return;
     }
-    void fetch(CFG.base + "/avaliacoes/" + encodeURIComponent(avaliacao.id), { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((corpo: { parecer?: EstadoAvaliacao["parecer"] } | null) => {
-        if (!corpo?.parecer) return;
-        avaliacao.parecer = corpo.parecer;
-        if (sondaParecer) clearInterval(sondaParecer);
-        sondaParecer = null;
-        avisar(`${corpo.parecer.agente} respondeu: ${corpo.parecer.itens.length} ponto(s).`, 6000);
+    const controlador = new AbortController();
+    consultaParecer = controlador;
+    const timeout = setTimeout(() => controlador.abort(), 15_000);
+    try {
+      const resp = await pedirApi("/avaliacoes/" + encodeURIComponent(id), undefined, controlador.signal);
+      if (!atual()) return;
+      if (resp.status === 404) {
+        avaliacao.id = null; avaliacao.conversa = null; avaliacao.execucao = null;
+        try { localStorage.removeItem(chaveUltimaAvaliacao()); } catch { /* preferência opcional */ }
+        renderizarAvaliacao(); return;
+      }
+      if (!resp.ok) throw new Error(typeof resp.dados.erro === "string" ? resp.dados.erro : "HTTP " + resp.status);
+      const corpo = resp.dados as { parecer?: EstadoAvaliacao["parecer"]; estado?: EstadoAvaliacao["execucao"]; conversa?: ConversaAvaliacaoUI | null };
+      const antes = JSON.stringify([avaliacao.parecer, avaliacao.execucao, avaliacao.erro, avaliacao.conversa]);
+      avaliacao.parecer = corpo.parecer ?? null;
+      avaliacao.execucao = corpo.estado ?? null;
+      avaliacao.conversa = corpo.conversa ?? avaliacao.conversa;
+      avaliacao.erro = null;
+      if (avaliacao.parecer) {
+        avisar(`${avaliacao.parecer.agente} respondeu: ${avaliacao.parecer.itens.length} ponto(s).`, 6000);
         renderizarAvaliacao();
-      })
-      .catch(() => undefined);
-  }, 3000);
+        return;
+      }
+      if (JSON.stringify([avaliacao.parecer, avaliacao.execucao, avaliacao.erro, avaliacao.conversa]) !== antes) renderizarAvaliacao();
+      if (avaliacao.execucao?.fase === "falhou" || avaliacao.execucao?.fase === "sem_parecer") return;
+      sondaParecer = setTimeout(() => void consultar(), 3000);
+    } catch (erro) {
+      if (!atual()) return;
+      avaliacao.erro = traduzirInterface("Não foi possível consultar o parecer: {erro}", { erro: controlador.signal.aborted ? traduzirInterface("o servidor demorou para responder") : erro instanceof Error ? erro.message : String(erro) });
+      renderizarAvaliacao();
+    } finally {
+      clearTimeout(timeout);
+      if (consultaParecer === controlador) consultaParecer = null;
+    }
+  };
+  void consultar();
+}
+
+function pararAcompanhamentoParecer(): void {
+  geracaoParecer++;
+  if (sondaParecer) clearTimeout(sondaParecer);
+  sondaParecer = null;
+  consultaParecer?.abort();
+  consultaParecer = null;
 }
 
 /** "25 elementos medidos, 13 da régua e 5 da norma" — sem motor, só a primeira metade. */
-function resumoDaMedicao(m: ResultadoAuditoria): string {
+function resumoDaMedicao(m: ResultadoAuditoria): TextoInterface {
   const daNorma = m.achados.filter((a) => a.origem === "norma").length;
   const daRegua = m.achados.length - daNorma;
-  const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
-  if (!daNorma) return `${m.medidos} elementos medidos, ${plural(m.achados.length, "achado", "achados")}`;
+  if (!daNorma) return textoInterface(m.achados.length === 1 ? "{elementos} elementos medidos, {achados} achado" : "{elementos} elementos medidos, {achados} achados", { elementos: m.medidos, achados: m.achados.length });
   // Cabe numa linha só: o cabeçalho tem 400px e quebrar empurra a lista para baixo.
-  return `${m.medidos} elementos, ${plural(daRegua, "achado", "achados")} da régua e ${daNorma} da norma`;
+  return textoInterface(daRegua === 1 ? "{elementos} elementos, {achados} achado da régua e {norma} da norma" : "{elementos} elementos, {achados} achados da régua e {norma} da norma", { elementos: m.medidos, achados: daRegua, norma: daNorma });
 }
 
 function linhaDeAchado(a: AchadoAuditoria): HTMLElement {
@@ -818,7 +904,7 @@ function renderizarAvaliacao(): void {
   if (!painel) return;
   const m = avaliacao.medicao;
   painel.textContent = "";
-  const alca = h("span", { class: "an-alca", html: ICONES.alca, title: "Arrastar" });
+  const alca = h("span", { class: "an-alca", html: ICONES.alca, title: textoInterface("Arrastar") });
   const cab = h(
     "div",
     { class: "cab" },
@@ -827,12 +913,12 @@ function renderizarAvaliacao(): void {
     h(
       "div",
       { class: "tit" },
-      "Avaliação da página",
-      h("span", { class: "sub" }, m ? resumoDaMedicao(m) : "medindo…")
+      textoInterface("Avaliação da página"),
+      h("span", { class: "sub" }, m ? resumoDaMedicao(m) : textoInterface("medindo…"))
     ),
     h("button", {
       class: "an-ico",
-      title: "Medir de novo",
+      title: textoInterface("Medir de novo"),
       html: ICONES.recarregar,
       onclick: () => {
         avaliacao.medicao = auditarPagina();
@@ -840,9 +926,18 @@ function renderizarAvaliacao(): void {
         medirComNormaEDepoisPintar();
       },
     }),
-    h("button", { class: "an-ico", title: "Fechar", html: ICONES.fechar, onclick: fecharAvaliacao })
+    h("button", { class: "an-ico", title: textoInterface("Fechar"), html: ICONES.fechar, onclick: fecharAvaliacao })
   );
   painel.append(cab);
+  if (avaliacao.conversa) {
+    const conversa = avaliacao.conversa;
+    const nome = conversa.agente === "claude" ? "Claude Code" : conversa.agente === "codex" ? "Codex CLI" : conversa.agente;
+    const sessao = conversa.sessaoExterna || conversa.id;
+    painel.append(h("button", { type: "button", class: "an-avaliacao-chat", title: textoInterface("Abrir conversa da avaliação"), onclick: () => void abrirConversaAvaliacao() },
+      h("span", { class: "an-ico", html: ICONE_CHAT }),
+      h("span", { class: "an-avaliacao-chat-info" }, h("strong", null, nome + (conversa.modelo ? " · " + conversa.modelo : "")), h("span", { title: sessao }, textoInterface(conversa.sessaoExterna ? "Sessão {id}" : "Conversa {id}", { id: sessao.slice(0, 8) }))),
+      h("span", { class: "an-avaliacao-chat-acao" }, textoInterface("Abrir chat"))));
+  }
   tornarArrastavel(painel, [alca, cab], "avaliacao");
 
   const corpo = h("div", { class: "corpo" });
@@ -851,14 +946,14 @@ function renderizarAvaliacao(): void {
     // o painel quer decidir o que consertar primeiro — e não ler duas listas. O título
     // então precisa cobrir as duas origens; o selo de cada linha diz de quem é o achado.
     const daNorma = m.achados.filter((a) => a.origem === "norma").length;
-    corpo.append(h("div", { class: "secao" }, daNorma ? "Medido na página" : "Medido pela régua"));
-    if (!m.achados.length) corpo.append(h("div", { class: "vazio" }, "Nada fora do lugar nas regras objetivas."));
+    corpo.append(h("div", { class: "secao" }, textoInterface(daNorma ? "Medido na página" : "Medido pela régua")));
+    if (!m.achados.length) corpo.append(h("div", { class: "vazio" }, textoInterface("Nada fora do lugar nas regras objetivas.")));
     for (const a of m.achados) corpo.append(linhaDeAchado(a));
   }
 
   if (avaliacao.parecer) {
     const p = avaliacao.parecer;
-    corpo.append(h("div", { class: "secao" }, `Parecer de ${p.agente}`));
+    corpo.append(h("div", { class: "secao" }, textoInterface("Parecer de {agente}", { agente: p.agente })));
     if (p.resumo) corpo.append(h("div", { class: "resumo" }, p.resumo));
     // O agente pergunta quando o julgamento depende da intenção do produto, que nenhuma medida revela.
     (p.perguntas ?? []).forEach((q, i) => {
@@ -868,7 +963,7 @@ function renderizarAvaliacao(): void {
       } else {
         const grupo = h("div", { class: "opcoes" });
         for (const o of q.opcoes) grupo.append(h("button", { class: "an-opcao", onclick: () => void responderPergunta(i, o) }, h("span", { class: "mira" }), o));
-        const campo = h("input", { type: "text", placeholder: "ou escreva a resposta…" });
+        const campo = h("input", { type: "text", placeholder: textoInterface("ou escreva a resposta…") });
         campo.addEventListener("keydown", (e) => {
           if (e.key === "Enter" && campo.value.trim()) void responderPergunta(i, campo.value.trim());
         });
@@ -876,28 +971,48 @@ function renderizarAvaliacao(): void {
       }
       corpo.append(bloco);
     });
-    if (!p.itens.length) corpo.append(h("div", { class: "vazio" }, "Sem apontamentos além do que já foi medido."));
+    if (!p.itens.length) corpo.append(h("div", { class: "vazio" }, textoInterface("Sem apontamentos além do que já foi medido.")));
     for (const i of p.itens) corpo.append(linhaDeParecer(i));
   } else if (avaliacao.id) {
-    corpo.append(h("div", { class: "aguardando" }, `Aguardando ${AGENTE} olhar a página…`));
+    const execucao = avaliacao.execucao;
+    const agente = execucao?.agente ?? AGENTE;
+    const terminal = execucao?.fase === "falhou" || execucao?.fase === "sem_parecer";
+    if (execucao?.fase === "falhou") {
+      corpo.append(h("div", { class: "erro", role: "status" }, textoInterface("O agente não concluiu a avaliação."), execucao.erro ? h("p", null, execucao.erro) : null));
+    } else if (execucao?.fase === "sem_parecer") {
+      corpo.append(h("div", { class: "aguardando", role: "status" }, textoInterface("O agente encerrou a execução sem devolver um parecer.")));
+    } else if (!avaliacao.erro) {
+      const mensagem = execucao?.fase === "preparando" ? "Preparando o dossiê da página…" : execucao?.fase === "executando" ? "{agente} está avaliando a página…" : "Pedido enviado. Aguardando o parecer de {agente}…";
+      corpo.append(h("div", { class: "aguardando", role: "status" }, textoInterface(mensagem, { agente })));
+    }
+    if (terminal || avaliacao.erro) corpo.append(h("button", { class: "an-btn an-avaliacao-consultar", onclick: acompanharParecer }, textoInterface("Consultar novamente")));
   }
   painel.append(corpo);
 
-  const campo = h("input", { type: "text", placeholder: `O que ${AGENTE} deve olhar com atenção? (opcional)` });
+  const campo = h("input", { type: "text", placeholder: textoInterface("O que {agente} deve olhar com atenção? (opcional)", { agente: AGENTE }) });
+  campo.value = avaliacao.foco;
+  campo.addEventListener("input", () => { avaliacao.foco = campo.value; });
   const botao = h(
     "button",
     {
       class: "an-btn primario",
-      disabled: avaliacao.enviando || !m,
-      onclick: () => void pedirParecer(campo.value.trim()),
+      disabled: avaliacao.enviando || verificandoAgenteAvaliacao || !m || avaliacaoEmAndamento() && !avaliacao.conversa,
+      onclick: () => avaliacaoEmAndamento() ? void abrirConversaAvaliacao() : void pedirParecer(campo.value.trim()),
     },
-    avaliacao.enviando ? "Enviando…" : avaliacao.parecer ? "Pedir de novo" : `Pedir parecer a ${AGENTE}`
+    textoInterface(verificandoAgenteAvaliacao ? "Conferindo agente…" : avaliacao.enviando ? "Enviando…" : avaliacaoEmAndamento() ? "Acompanhar no chat" : avaliacao.parecer || avaliacao.execucao?.fase === "falhou" || avaliacao.execucao?.fase === "sem_parecer" ? "Pedir de novo" : "Pedir parecer a {agente}", { agente: AGENTE })
   );
   campo.addEventListener("keydown", (e) => {
     if (e.key === "Enter") void pedirParecer(campo.value.trim());
   });
   painel.append(h("div", { class: "rodape" }, campo, botao));
   if (avaliacao.erro) painel.append(h("div", { class: "erro" }, avaliacao.erro));
+}
+
+function avaliacaoEmAndamento(): boolean {
+  return !!avaliacao.id && !avaliacao.parecer && !["falhou", "sem_parecer"].includes(avaliacao.execucao?.fase ?? "preparando");
+}
+async function abrirConversaAvaliacao(): Promise<void> {
+  if (avaliacao.conversa && await abrirChatDaAvaliacao(avaliacao.conversa)) fecharAvaliacao();
 }
 
 async function responderPergunta(indice: number, resposta: string): Promise<void> {

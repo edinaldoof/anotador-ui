@@ -6,9 +6,10 @@
 // próprio navegador sugere — marcar a origem numa flag do Chrome — não existe no
 // celular e some a cada atualização do navegador.
 //
-// Servir HTTPS resolve de vez. O certificado é autoassinado e gerado aqui mesmo com o
-// openssl do sistema: na primeira visita o navegador avisa, você aceita uma vez, e a
-// partir daí o microfone funciona como em qualquer site.
+// HTTPS permite solicitar o microfone nos navegadores compatíveis. O certificado
+// é autoassinado e gerado aqui com openssl; o navegador pode pedir aceite na primeira
+// visita. A permissão do dispositivo e a disponibilidade do serviço de voz continuam
+// sob controle do navegador.
 
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";

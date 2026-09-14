@@ -10,9 +10,9 @@
 // mensagem que chega pelo anotador, e oferecê-los seria prometer um efeito que não
 // acontece.
 
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { IdAgente } from "./agentes.ts";
 
 export interface ComandoDeAgente {
@@ -20,16 +20,23 @@ export interface ComandoDeAgente {
   nome: string;
   descricao: string;
   /** de quem é: do repositório aberto, da conta desta máquina ou de um plugin ligado */
-  origem: "projeto" | "usuário" | "plugin";
+  origem: "projeto" | "usuário" | "plugin" | "nativo";
   /** como está declarado: uma habilidade ou um comando avulso */
-  tipo: "skill" | "comando";
+  tipo: "skill" | "comando" | "workflow" | "nativo";
   arquivo: string;
+  suporte: "chat" | "terminal";
+  motivo?: string;
 }
+
+/** Raízes injetáveis nos testes, sem alterar o ambiente ou as configurações pessoais. */
+export interface OpcoesDescoberta { casa?: string; claudeHome?: string; codexHome?: string }
+const LIMITE_ARQUIVO = 512 * 1024;
+const nomeSeguro = (nome: string): boolean => /^[\p{L}\p{N}][\p{L}\p{N}_.:-]{0,199}$/u.test(nome) && !nome.includes("..");
 
 interface Lugar {
   dir: string;
   origem: ComandoDeAgente["origem"];
-  tipo: "skill" | "comando";
+  tipo: "skill" | "comando" | "workflow";
   /** skills são pastas com um arquivo dentro; comandos são arquivos soltos */
   arquivoDaPasta?: string;
   extensao?: string;
@@ -37,8 +44,13 @@ interface Lugar {
   prefixo?: string;
 }
 
-function lugaresDe(agente: IdAgente, fonte: string | null): Lugar[] {
-  const casa = homedir();
+function casas(opcoes: OpcoesDescoberta) {
+  const casa = opcoes.casa ?? homedir();
+  return { casa, claude: opcoes.claudeHome ?? process.env["CLAUDE_CONFIG_DIR"] ?? join(casa, ".claude"), codex: opcoes.codexHome ?? process.env["CODEX_HOME"] ?? join(casa, ".codex") };
+}
+
+function lugaresDe(agente: IdAgente, fonte: string | null, opcoes: OpcoesDescoberta): Lugar[] {
+  const { casa, claude, codex } = casas(opcoes);
   const doProjeto = (rel: string): string | null => (fonte ? join(fonte, rel) : null);
   const lista: Array<Lugar | null> = [];
   const par = (relProjeto: string, absUsuario: string, tipo: Lugar["tipo"], extras: Partial<Lugar> = {}) => {
@@ -48,14 +60,38 @@ function lugaresDe(agente: IdAgente, fonte: string | null): Lugar[] {
   };
 
   if (agente === "claude") {
-    par(".claude/skills", join(casa, ".claude", "skills"), "skill", { arquivoDaPasta: "SKILL.md" });
-    par(".claude/commands", join(casa, ".claude", "commands"), "comando", { extensao: ".md" });
+    par(".claude/skills", join(claude, "skills"), "skill", { arquivoDaPasta: "SKILL.md" });
+    par(".claude/commands", join(claude, "commands"), "comando", { extensao: ".md" });
   } else if (agente === "codex") {
-    par(".codex/prompts", join(casa, ".codex", "prompts"), "comando", { extensao: ".md" });
+    par(".agents/skills", join(casa, ".agents", "skills"), "skill", { arquivoDaPasta: "SKILL.md" });
+    par(".codex/skills", join(codex, "skills"), "skill", { arquivoDaPasta: "SKILL.md" });
+    lista.push({ dir: join(codex, "skills", ".system"), origem: "usuário", tipo: "skill", arquivoDaPasta: "SKILL.md" });
+    par(".codex/prompts", join(codex, "prompts"), "comando", { extensao: ".md" });
   } else if (agente === "gemini") {
     par(".gemini/commands", join(casa, ".gemini", "commands"), "comando", { extensao: ".toml" });
+    par(".gemini/skills", join(casa, ".gemini", "skills"), "skill", { arquivoDaPasta: "SKILL.md" });
   } else if (agente === "opencode") {
     par(".opencode/command", join(casa, ".config", "opencode", "command"), "comando", { extensao: ".md" });
+    par(".opencode/commands", join(casa, ".config", "opencode", "commands"), "comando", { extensao: ".md" });
+    par(".opencode/skills", join(casa, ".config", "opencode", "skills"), "skill", { arquivoDaPasta: "SKILL.md" });
+  } else if (agente === "antigravity") {
+    // Confirmado nas instruções agy-customizations distribuídas com o CLI e em
+    // https://antigravity.google/docs/migration/workflows-to-skills
+    for (const raiz of [".agents", ".agent", "_agents", "_agent"]) {
+      if (fonte) {
+        lista.push({ dir: join(fonte, raiz, "skills"), origem: "projeto", tipo: "skill", arquivoDaPasta: "SKILL.md" });
+        lista.push({ dir: join(fonte, raiz, "workflows"), origem: "projeto", tipo: "workflow", extensao: ".md" });
+      }
+    }
+    for (const raiz of [join(casa, ".gemini", "config"), join(casa, ".gemini", "antigravity")]) {
+      lista.push({ dir: join(raiz, "skills"), origem: "usuário", tipo: "skill", arquivoDaPasta: "SKILL.md" });
+      lista.push({ dir: join(raiz, raiz.endsWith("antigravity") ? "global_workflows" : "workflows"), origem: "usuário", tipo: "workflow", extensao: ".md" });
+    }
+    // São SKILL.md reais distribuídos com o CLI, não uma lista presumida de
+    // comandos interativos. A invocação no chat expande o arquivo encontrado.
+    lista.push({ dir: join(casa, ".gemini", "antigravity-cli", "builtin", "skills"), origem: "nativo", tipo: "skill", arquivoDaPasta: "SKILL.md" });
+  } else if (agente === "cursor") {
+    par(".cursor/commands", join(casa, ".cursor", "commands"), "comando", { extensao: ".md" });
   }
   return lista.filter((l): l is Lugar => l !== null);
 }
@@ -83,7 +119,20 @@ function nomeDeclarado(texto: string): string | null {
   return n?.[1]?.trim().replace(/^["']|["']$/g, "") ?? null;
 }
 
-async function lerLugar(lugar: Lugar): Promise<ComandoDeAgente[]> {
+async function arquivoTexto(arquivo: string): Promise<{ arquivo: string; texto: string } | null> {
+  try {
+    const canonico = await realpath(arquivo);
+    const info = await stat(canonico);
+    if (!info.isFile() || info.size > LIMITE_ARQUIVO) return null;
+    return { arquivo: canonico, texto: await readFile(canonico, "utf8") };
+  } catch { return null; }
+}
+
+async function lerLugar(lugar: Lugar, visitados = new Set<string>(), profundidade = 0, caminhoNome = ""): Promise<ComandoDeAgente[]> {
+  if (profundidade > 8) return [];
+  const raiz = await realpath(lugar.dir).catch(() => null);
+  if (!raiz || visitados.has(raiz)) return [];
+  visitados.add(raiz);
   let entradas: string[];
   try {
     entradas = await readdir(lugar.dir);
@@ -93,25 +142,33 @@ async function lerLugar(lugar: Lugar): Promise<ComandoDeAgente[]> {
   const achados: ComandoDeAgente[] = [];
   for (const entrada of entradas.sort()) {
     if (entrada.startsWith(".")) continue;
-    const caminho = join(lugar.dir, entrada);
+    const caminho = join(raiz, entrada);
     if (lugar.arquivoDaPasta) {
-      const arquivo = join(caminho, lugar.arquivoDaPasta);
-      const info = await stat(arquivo).catch(() => null);
-      if (!info?.isFile()) continue;
-      const texto = await readFile(arquivo, "utf8").catch(() => "");
-      achados.push({ nome: (lugar.prefixo ?? "") + (nomeDeclarado(texto) ?? entrada), descricao: descricaoDe(texto), origem: lugar.origem, tipo: lugar.tipo, arquivo });
+      const lido = await arquivoTexto(join(caminho, lugar.arquivoDaPasta));
+      if (!lido) {
+        if ((await stat(caminho).catch(() => null))?.isDirectory()) achados.push(...await lerLugar({ ...lugar, dir: caminho }, visitados, profundidade + 1));
+        continue;
+      }
+      const nome = (lugar.prefixo ?? "") + (nomeDeclarado(lido.texto) ?? entrada);
+      if (nomeSeguro(nome) && !/^user-invocable:\s*false\s*$/m.test(lido.texto)) achados.push({ nome, descricao: descricaoDe(lido.texto), origem: lugar.origem, tipo: lugar.tipo, arquivo: lido.arquivo, suporte: "chat" });
+      continue;
+    }
+    if ((await stat(caminho).catch(() => null))?.isDirectory()) {
+      achados.push(...await lerLugar({ ...lugar, dir: caminho }, visitados, profundidade + 1, caminhoNome + entrada + ":"));
       continue;
     }
     if (lugar.extensao && !entrada.endsWith(lugar.extensao)) continue;
-    const info = await stat(caminho).catch(() => null);
-    if (!info?.isFile()) continue;
-    const texto = await readFile(caminho, "utf8").catch(() => "");
+    const lido = await arquivoTexto(caminho);
+    if (!lido) continue;
+    const nome = (lugar.prefixo ?? "") + caminhoNome + (nomeDeclarado(lido.texto) ?? entrada.slice(0, entrada.length - (lugar.extensao?.length ?? 0)));
+    if (!nomeSeguro(nome)) continue;
     achados.push({
-      nome: (lugar.prefixo ?? "") + (nomeDeclarado(texto) ?? entrada.slice(0, entrada.length - (lugar.extensao?.length ?? 0))),
-      descricao: descricaoDe(texto),
+      nome,
+      descricao: descricaoDe(lido.texto),
       origem: lugar.origem,
       tipo: lugar.tipo,
-      arquivo: caminho,
+      arquivo: lido.arquivo,
+      suporte: "chat",
     });
   }
   return achados;
@@ -134,34 +191,85 @@ export function idPeloNome(nome: string): IdAgente | null {
  * cada um mora, no cache, que guarda mais de uma versão do mesmo plugin lado a lado —
  * vale a pasta modificada por último, que é a que a versão instalada escreveu.
  */
-async function lugaresDePlugins(): Promise<Lugar[]> {
-  const casa = homedir();
-  let ligados: string[];
-  try {
-    const cfg = JSON.parse(await readFile(join(casa, ".claude", "settings.json"), "utf8")) as { enabledPlugins?: Record<string, boolean> };
-    ligados = Object.entries(cfg.enabledPlugins ?? {}).filter(([, ligado]) => ligado).map(([id]) => id);
-  } catch {
-    return [];
-  }
-  const lugares: Lugar[] = [];
-  for (const id of ligados) {
-    const [plugin, mercado] = id.split("@");
-    if (!plugin || !mercado) continue;
-    const base = join(casa, ".claude", "plugins", "cache", mercado, plugin);
-    let versoes: string[];
-    try {
-      versoes = await readdir(base);
-    } catch {
+async function json(arquivo: string): Promise<Record<string, any>> {
+  try { const lido = await arquivoTexto(arquivo); const dado = lido ? JSON.parse(lido.texto) : null; return dado && typeof dado === "object" && !Array.isArray(dado) ? dado : {}; }
+  catch { return {}; }
+}
+
+/** Lê somente flags de plugins do TOML; nunca executa a configuração do usuário. */
+async function pluginsCodex(arquivo: string): Promise<Record<string, boolean>> {
+  const texto = (await arquivoTexto(arquivo))?.texto ?? "";
+  const flags: Record<string, boolean> = {};
+  let plugin: string | null = null;
+  let secaoPlugins = false;
+  for (const linha of texto.split(/\r?\n/)) {
+    if (/^\s*\[/.test(linha)) {
+      plugin = /^\s*\[\s*plugins\.(?:"([^"]+)"|'([^']+)'|([\w@-]+))\s*\]/.exec(linha)?.slice(1).find(Boolean) ?? null;
+      secaoPlugins = /^\s*\[\s*plugins\s*\]/.test(linha);
       continue;
     }
-    const datadas = await Promise.all(
-      versoes.map(async (v) => ({ v, em: (await stat(join(base, v)).catch(() => null))?.mtimeMs ?? 0 }))
-    );
-    const recente = datadas.sort((a, b) => b.em - a.em)[0];
-    if (!recente) continue;
-    const raiz = join(base, recente.v);
-    lugares.push({ dir: join(raiz, "skills"), origem: "plugin", tipo: "skill", arquivoDaPasta: "SKILL.md", prefixo: plugin + ":" });
-    lugares.push({ dir: join(raiz, "commands"), origem: "plugin", tipo: "comando", extensao: ".md", prefixo: plugin + ":" });
+    const ligado = /^\s*enabled\s*=\s*(true|false)\s*(?:#.*)?$/.exec(linha);
+    if (plugin && ligado) flags[plugin] = ligado[1] === "true";
+    const inline = secaoPlugins ? /^\s*["']([^"']+)["']\s*=\s*\{\s*enabled\s*=\s*(true|false)\s*\}/.exec(linha) : null;
+    if (inline) flags[inline[1]!] = inline[2] === "true";
+  }
+  return flags;
+}
+
+async function versaoPlugin(base: string): Promise<string | null> {
+  const versoes = await readdir(base).catch(() => []);
+  const datadas = await Promise.all(versoes.map(async (v) => ({ v, info: await stat(join(base, v)).catch(() => null) })));
+  const recente = datadas.filter((v) => v.info?.isDirectory()).sort((a, b) => b.info!.mtimeMs - a.info!.mtimeMs)[0];
+  return recente ? join(base, recente.v) : null;
+}
+
+async function lugaresDePlugins(agente: IdAgente, fonte: string | null, opcoes: OpcoesDescoberta): Promise<Lugar[]> {
+  const { casa, claude, codex } = casas(opcoes);
+  let ligados: Record<string, boolean> = {};
+  if (agente === "claude") {
+    for (const arquivo of [join(claude, "settings.json"), ...(fonte ? [join(fonte, ".claude", "settings.json"), join(fonte, ".claude", "settings.local.json")] : [])]) {
+      const cfg = await json(arquivo);
+      if (cfg["enabledPlugins"] && typeof cfg["enabledPlugins"] === "object") Object.assign(ligados, cfg["enabledPlugins"]);
+    }
+  } else if (agente === "codex") {
+    ligados = { ...await pluginsCodex(join(codex, "config.toml")), ...(fonte ? await pluginsCodex(join(fonte, ".codex", "config.toml")) : {}) };
+  } else if (agente === "antigravity") {
+    const lugares: Lugar[] = [];
+    const raizes = [...(fonte ? [".agents", ".agent", "_agents", "_agent"].map((p) => join(fonte, p)) : []), join(casa, ".gemini", "config")];
+    for (const raiz of raizes) {
+      const cfg = await json(join(raiz, "config.json"));
+      for (const nome of await readdir(join(raiz, "plugins")).catch(() => [])) {
+        if (!nomeSeguro(nome)) continue;
+        const pasta = join(raiz, "plugins", nome);
+        const manifesto = await json(join(pasta, "plugin.json"));
+        if (!Object.keys(manifesto).length) continue;
+        const ligado = cfg["plugins"]?.[nome]?.enabled;
+        if (ligado === false || ligado !== true && manifesto["disabled"] === true) continue;
+        lugares.push({ dir: join(pasta, "skills"), origem: "plugin", tipo: "skill", arquivoDaPasta: "SKILL.md", prefixo: nome + ":" });
+      }
+    }
+    return lugares;
+  } else return [];
+  const registro = agente === "claude" ? await json(join(claude, "plugins", "installed_plugins.json")) : {};
+  const lugares: Lugar[] = [];
+  for (const [id, ligado] of Object.entries(ligados)) {
+    if (ligado !== true) continue;
+    const [plugin, mercado] = id.split("@");
+    if (!plugin || !mercado || !nomeSeguro(plugin) || !nomeSeguro(mercado)) continue;
+    const base = join(agente === "claude" ? claude : codex, "plugins", "cache", mercado, plugin);
+    const instalacoes = registro["plugins"]?.[id];
+    const instalada = Array.isArray(instalacoes) ? instalacoes.find((v: any) => v.scope === "project" && v.projectPath === fonte) ?? instalacoes.find((v: any) => v.scope === "user") : null;
+    const raiz = typeof instalada?.installPath === "string" ? instalada.installPath as string : await versaoPlugin(base);
+    if (!raiz) continue;
+    const manifesto = await json(join(raiz, agente === "claude" ? ".claude-plugin" : ".codex-plugin", "plugin.json"));
+    const skills = ["./skills", ...(typeof manifesto["skills"] === "string" ? [manifesto["skills"]] : Array.isArray(manifesto["skills"]) ? manifesto["skills"].filter((v: unknown) => typeof v === "string") : [])];
+    for (const p of new Set<string>(skills)) {
+      const dir = resolve(raiz, p);
+      const rel = relative(resolve(raiz), dir);
+      if (isAbsolute(rel) || rel === ".." || rel.startsWith("../")) continue;
+      lugares.push({ dir, origem: "plugin", tipo: "skill", arquivoDaPasta: "SKILL.md", prefixo: plugin + ":" });
+    }
+    if (agente === "claude") lugares.push({ dir: join(raiz, "commands"), origem: "plugin", tipo: "comando", extensao: ".md", prefixo: plugin + ":" });
   }
   return lugares;
 }
@@ -171,14 +279,41 @@ async function lugaresDePlugins(): Promise<Lugar[]> {
  * ganha do da conta quando os dois declaram o mesmo nome, que é a ordem de precedência
  * dos próprios CLIs.
  */
-export async function descobrirComandos(agente: IdAgente, fonte: string | null): Promise<ComandoDeAgente[]> {
-  const lugares = [...lugaresDe(agente, fonte), ...(agente === "claude" ? await lugaresDePlugins() : [])];
-  const listas = await Promise.all(lugares.map(lerLugar));
+export async function descobrirComandos(agente: IdAgente, fonte: string | null, opcoes: OpcoesDescoberta = {}): Promise<ComandoDeAgente[]> {
+  const lugares = [...lugaresDe(agente, fonte, opcoes), ...await lugaresDePlugins(agente, fonte, opcoes)];
+  const listas = await Promise.all(lugares.map((lugar) => lerLugar(lugar)));
   const porNome = new Map<string, ComandoDeAgente>();
   for (const c of listas.flat()) {
     const existente = porNome.get(c.nome);
-    if (existente && existente.origem === "projeto") continue;
+    if (existente) continue;
     porNome.set(c.nome, c);
   }
   return [...porNome.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+/** Expande somente comandos descobertos no servidor. Nenhum caminho vem do cliente. */
+export async function expandirComandoChat(texto: string, agente: IdAgente, fonte: string | null, opcoes: OpcoesDescoberta = {}): Promise<string | null> {
+  const pedido = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(texto.trim());
+  if (!pedido || !nomeSeguro(pedido[1]!)) return null;
+  const comando = (await descobrirComandos(agente, fonte, opcoes)).find((c) => c.nome === pedido[1] && c.suporte === "chat");
+  if (!comando) return null;
+  const lido = await arquivoTexto(comando.arquivo);
+  if (!lido || lido.arquivo !== comando.arquivo) throw new Error("O arquivo deste comando mudou ou não está mais disponível. Atualize a lista.");
+  const argumentos = pedido[2]?.trim() ?? "";
+  let corpo = lido.texto.replace(/^---\r?\n[\s\S]*?\r?\n---\s*/, "").trim();
+  if (comando.arquivo.endsWith(".toml")) {
+    const triplo = /^prompt\s*=\s*(?:"""([\s\S]*?)"""|'''([\s\S]*?)''')/m.exec(lido.texto);
+    const simples = /^prompt\s*=\s*("(?:[^"\\]|\\.)*"|'[^']*')\s*$/m.exec(lido.texto);
+    if (triplo) corpo = triplo[1] ?? triplo[2] ?? "";
+    else if (simples?.[1]) { try { corpo = simples[1].startsWith('"') ? JSON.parse(simples[1]) as string : simples[1].slice(1, -1); } catch { corpo = ""; } }
+    else corpo = "";
+    if (!corpo.trim()) throw new Error("O comando não possui um prompt TOML válido.");
+  }
+  const palavras = argumentos.match(/"[^"]*"|'[^']*'|\S+/g)?.map((s) => s.replace(/^["']|["']$/g, "")) ?? [];
+  corpo = corpo.replace(/\$ARGUMENTS\b|\{\{args\}\}|\$([1-9])\b/g, (marcador, indice: string | undefined) => indice ? palavras[Number(indice) - 1] ?? "" : argumentos);
+  const referencia = `O usuário invocou /${comando.nome}${argumentos ? " " + argumentos : ""}.\nArquivo do comando: ${comando.arquivo}\nResolva referências relativas a partir de ${dirname(comando.arquivo)}.`;
+  const conteudo = Buffer.byteLength(corpo) <= 60 * 1024 ? `\n\nInstruções do comando:\n${corpo}` : "\n\nLeia o arquivo do comando indicado acima e siga suas instruções.";
+  const resultado = referencia + conteudo + (argumentos ? `\n\nArgumentos fornecidos pelo usuário:\n${argumentos}` : "");
+  if (Buffer.byteLength(resultado) > 80 * 1024) throw new Error("Os argumentos deste comando são longos demais.");
+  return resultado;
 }

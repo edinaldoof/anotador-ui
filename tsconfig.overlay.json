@@ -19,7 +19,9 @@
     "tipos/navegador.d.ts",
     "overlay/engine.ts",
     "overlay/estilos.ts",
+    "overlay/controles.ts",
     "overlay/ui.ts",
+    "overlay/chat.ts",
     "overlay/auditoria.ts",
     "overlay/design.ts"
   ]

@@ -45,3 +45,25 @@ test("viewport não persiste números não finitos ou medidas negativas", () => 
   const pedido = validarPedido({ pagina: { ...pagina, viewport: { largura: "Infinity", altura: -1, dpr: Infinity } } });
   assert.deepEqual(pedido.pagina.viewport, { largura: 0, altura: 0, dpr: 1 });
 });
+
+test("estado da execução persiste em ordem, fica isolado do pedido e aceita parecer após falha", async () => {
+  const base = await mkdtemp(join(tmpdir(), "anotador-avaliacao-estado-"));
+  try {
+    const avaliacoes = new Avaliacoes(base);
+    const pedido = validarPedido({ pagina, id: "avaliacao-estado-0001" });
+    await avaliacoes.gravar(pedido, "Dossiê");
+    assert.equal(await avaliacoes.lerEstado(pedido.id), null);
+    await Promise.all([
+      avaliacoes.registrarEstado(pedido.id, { fase: "executando", agente: "claude", atualizadoEm: "2026-09-14T10:00:00Z" }),
+      avaliacoes.registrarEstado(pedido.id, { fase: "falhou", agente: "claude", atualizadoEm: "2026-09-14T10:00:01Z", erro: "A autenticação do agente expirou." }),
+    ]);
+    const reabertas = new Avaliacoes(base);
+    assert.equal((await reabertas.lerEstado(pedido.id))?.fase, "falhou");
+    assert.equal((await reabertas.listar()).length, 1, "estado não vira uma avaliação extra");
+    await reabertas.gravarParecer(pedido.id, { agente: "claude", em: "2026-09-14T10:00:02Z", resumo: "Retorno recebido", perguntas: [], itens: [] });
+    assert.equal((await reabertas.lerParecer(pedido.id))?.resumo, "Retorno recebido");
+    assert.equal((await reabertas.listar())[0]?.temParecer, true);
+    await assert.rejects(reabertas.registrarEstado("avaliacao-inexistente", { fase: "falhou", agente: null, atualizadoEm: "agora" }), /não encontrada/);
+    await assert.rejects(reabertas.registrarEstado("../escape", { fase: "falhou", agente: null, atualizadoEm: "agora" }), /id inválido/);
+  } finally { await rm(base, { recursive: true, force: true }); }
+});

@@ -2,11 +2,12 @@
 // desenvolvimento e entrega as anotações ao chat do Claude Code.
 
 import { createServer, request as pedidoHttp, type IncomingMessage, type ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
 import { createServer as createServerTls } from "node:https";
 import { createServer as createServerTcp, type Socket } from "node:net";
 import { request as pedidoHttps } from "node:https";
 import * as modulo from "node:module";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { homedir, networkInterfaces } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -15,14 +16,21 @@ import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
-import { Ponte, detectarAgentes, mensagemDeAbertura, mensagemParaLote, modelosDe, sessoesClaude, sessoesCodex, type IdAgente } from "./lib/agentes.ts";
-import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, motivoDaRecusa } from "./lib/acesso.ts";
+import { Ponte, detectarAgentes, atualizarModelosAntigravity, mensagemDeAbertura, mensagemParaLote, modelosDe, sessoesClaude, sessoesCodex, type IdAgente } from "./lib/agentes.ts";
+import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, chaveConfere, criarConvite, conviteConfere, definirSessaoNavegador, mesmaOrigem, motivoDaRecusa } from "./lib/acesso.ts";
 import { descobrirComandos, idPeloNome } from "./lib/comandos.ts";
+import { ChatAgentes, ErroChat } from "./lib/chat.ts";
+import { saidaPublicaAvaliacao } from "./lib/avaliacao-conversa.ts";
+import { serializar } from "./lib/persistencia.ts";
+import { lerLimitesConta } from "./lib/limites.ts";
+import { sessoesExternasChat, ID_SESSAO_NATIVA } from "./lib/chat-sessoes.ts";
 import { parTls, temOpenssl } from "./lib/tls.ts";
 import { Avaliacoes, gerarDossie, validarParecer, validarPedido } from "./lib/avaliacao.ts";
 import { capturarAvaliacao, capturarLote } from "./lib/captura.ts";
-import { encontrarChromium } from "./lib/cdp.ts";
+import { Navegador, encontrarChromium } from "./lib/cdp.ts";
 import { paginaConexao } from "./lib/conexao.ts";
+import { scriptIdiomas, injetarIdiomasHtml } from "./lib/idiomas.ts";
+import { extrairDesign } from "./lib/extracao.ts";
 import { analisarSistema, lerSistemaDeDesign, paraDtcg } from "./lib/design.ts";
 import { REGRAS_A_LIGAR, REGRAS_QUE_FICAM_FORA, localizarNorma, type MotorNorma } from "./lib/norma.ts";
 import { RegistroConexoes, pastaBase } from "./lib/conexoes.ts";
@@ -30,6 +38,9 @@ import { marcaPeloNome } from "./lib/marcas.ts";
 import { PORTAS_COMUNS, alvoPermitido, detectarServidores, sondar, type Sondagem } from "./lib/deteccao.ts";
 import { estadoDasFontes, instalarFontes, tamanhoInstalado } from "./lib/fontes.ts";
 import { Fila, idSeguro, validarLote } from "./lib/fila.ts";
+import { ErroAnexo, idAnexoSeguro, normalizarPaginaAnexo } from "./lib/anexos.ts";
+import { Continuacoes, ErroContinuacao, hostContinuacao, PAGINA_RETOMADA } from "./lib/continuacao.ts";
+import { capacidadeTranscricao, preaquecerTranscricao, transcreverAudio, ErroTranscricao, MAX_CORPO_TRANSCRICAO } from "./lib/transcricao.ts";
 import { analisarLote, arquivosProvaveis, contextoDeProduto, intencaoDaRota, lerProjeto } from "./lib/fonte.ts";
 import { cabecalhosParaAlvo, ehHtml, extrairNonce, filtrarCabecalhosResposta, injetarScript } from "./lib/injetar.ts";
 import { Difusor, ehPedidoWs, type InfoOuvinte } from "./lib/ws.ts";
@@ -37,7 +48,7 @@ import { Difusor, ehPedidoWs, type InfoOuvinte } from "./lib/ws.ts";
 export const BASE = "/__anotador";
 const RAIZ = dirname(fileURLToPath(import.meta.url));
 const LIMITE_CORPO = 12 * 1024 * 1024;
-const ARQUIVOS_OVERLAY = ["engine.ts", "estilos.ts", "ui.ts", "auditoria.ts", "design.ts"];
+const ARQUIVOS_OVERLAY = ["engine.ts", "estilos.ts", "controles.ts", "ui.ts", "chat.ts", "auditoria.ts", "design.ts"];
 
 type RemovedorDeTipos = (codigo: string, opcoes?: { mode?: "strip" | "transform" }) => string;
 const removerTipos = (modulo as unknown as { stripTypeScriptTypes?: RemovedorDeTipos }).stripTypeScriptTypes;
@@ -121,12 +132,13 @@ let cacheOverlay: { assinatura: string; codigo: string } | null = null;
 export async function montarOverlay(cfg: ConfigOverlay): Promise<string> {
   if (!removerTipos) throw new Error("este Node não expõe module.stripTypeScriptTypes (exige Node >= 22.13)");
   const caminhos = ARQUIVOS_OVERLAY.map((f) => join(RAIZ, "overlay", f));
-  const estatisticas = await Promise.all(caminhos.map((c) => stat(c)));
+  const estatisticas = await Promise.all([...caminhos, join(RAIZ, "lib", "idiomas.js")].map((c) => stat(c)));
   const assinatura = JSON.stringify(cfg) + "|" + estatisticas.map((s) => s.mtimeMs).join(",");
   if (cacheOverlay && cacheOverlay.assinatura === assinatura) return cacheOverlay.codigo;
   const fontes = await Promise.all(caminhos.map((c) => readFile(c, "utf8")));
   const js = fontes.map((ts, i) => `// ---- ${ARQUIVOS_OVERLAY[i]} ----\n` + removerTipos(ts, { mode: "strip" })).join("\n");
   const codigo =
+    await scriptIdiomas() + "\n" +
     `(() => {\n"use strict";\nif (window.__anotadorCarregado) return;\nwindow.__ANOTADOR_CFG = ${JSON.stringify(cfg)};\n` +
     // O nonce da página chega pela própria tag deste script: quem injeta o overlay já o
     // copiou. Sem isso, um <script> criado depois esbarra no CSP e some sem erro visível.
@@ -316,6 +328,9 @@ function tunelarWs(req: IncomingMessage, socket: Duplex, cabeca: Buffer, alvo: U
 // ---------- API da fila ----------
 interface ContextoApi {
   fila: Fila;
+  /** Instantâneos dos prints avulsos, removidos assim que a renderização termina. */
+  capturasAvulsas: Map<string, string>;
+  continuacoes: Continuacoes;
   /** chave desta sessão; pedido de fora da máquina precisa apresentá-la */
   chave: string;
   avaliacoes: Avaliacoes;
@@ -339,6 +354,77 @@ async function lerJson(req: IncomingMessage, limite = 64 * 1024): Promise<Record
   if (!bruto.trim()) return {};
   const valor = JSON.parse(bruto) as unknown;
   return valor && typeof valor === "object" ? (valor as Record<string, unknown>) : {};
+}
+
+async function sessaoDoAgente(agente: string, valor: unknown, fonte: string | null): Promise<string | null> {
+  if (valor === undefined || valor === null || valor === "") return null;
+  if (typeof valor !== "string" || !ID_SESSAO_NATIVA.test(valor)) throw new Error("Identificador de sessão inválido.");
+  const sessoes = await sessoesExternasChat(fonte);
+  if (!sessoes.some((s) => s.agente === agente && s.id === valor)) throw new Error("Esta sessão não pertence ao agente e projeto escolhidos.");
+  return valor;
+}
+
+function validarCaptura(corpo: Record<string, unknown>): { instantaneo: string; viewport: { largura: number; altura: number; dpr: number; scrollX: number; scrollY: number } } {
+  const instantaneo = corpo["instantaneo"];
+  if (typeof instantaneo !== "string" || !instantaneo.trim()) throw new Error("envie o instantâneo HTML da página");
+  if (Buffer.byteLength(instantaneo) > 8 * 1024 * 1024) throw new Error("instantâneo grande demais (máximo de 8 MB)");
+  const pagina = corpo["pagina"] as Record<string, unknown> | null | undefined;
+  const viewport = pagina?.["viewport"] as Record<string, unknown> | null | undefined;
+  if (!pagina || typeof pagina !== "object" || !viewport || typeof viewport !== "object") throw new Error("envie a página e as dimensões do viewport");
+  let url: URL;
+  try {
+    if (typeof pagina["url"] !== "string") throw new Error();
+    url = new URL(pagina["url"]);
+  } catch {
+    throw new Error("URL da página inválida");
+  }
+  if (!["http:", "https:"].includes(url.protocol)) throw new Error("a URL da página deve usar HTTP ou HTTPS");
+  if (typeof pagina["caminho"] !== "string" || !pagina["caminho"].startsWith("/")) throw new Error("caminho da página inválido");
+  const largura = viewport["largura"];
+  const altura = viewport["altura"];
+  const dpr = viewport["dpr"] ?? 1;
+  const scrollX = viewport["scrollX"] ?? 0;
+  const scrollY = viewport["scrollY"] ?? 0;
+  if (typeof largura !== "number" || !Number.isInteger(largura) || largura < 1 || largura > 4096 ||
+      typeof altura !== "number" || !Number.isInteger(altura) || altura < 1 || altura > 4096 ||
+      typeof dpr !== "number" || !Number.isFinite(dpr) || dpr <= 0 || dpr > 4) {
+    throw new Error("viewport inválido: largura e altura entre 1 e 4096, dpr maior que 0 e até 4");
+  }
+  if (typeof scrollX !== "number" || !Number.isFinite(scrollX) || typeof scrollY !== "number" || !Number.isFinite(scrollY)) {
+    throw new Error("posição de rolagem inválida: scrollX e scrollY devem ser números finitos");
+  }
+  return { instantaneo, viewport: { largura, altura, dpr: Math.min(2, dpr), scrollX, scrollY } };
+}
+
+async function renderizarCaptura(url: string, viewport: { largura: number; altura: number; dpr: number; scrollX: number; scrollY: number }, chrome: string, certificadoProprio: boolean): Promise<Buffer> {
+  const navegador = await Navegador.abrir({ caminho: chrome, timeoutMs: 10_000 });
+  let temporizador: NodeJS.Timeout | undefined;
+  try {
+    if (certificadoProprio) await navegador.ignorarErrosCertificado();
+    const renderizar = async () => {
+      const pagina = await navegador.novaPagina();
+      await pagina.definirViewport(viewport.largura, viewport.altura, viewport.dpr);
+      await pagina.navegar(url, 10_000);
+      await Promise.race([
+        pagina.avaliar("document.fonts ? document.fonts.ready.then(() => true) : true"),
+        pagina.esperar(1000),
+      ]);
+      await pagina.avaliar(`new Promise((resolver) => {
+        window.scrollTo({ left: ${viewport.scrollX}, top: ${viewport.scrollY}, behavior: "instant" });
+        requestAnimationFrame(() => requestAnimationFrame(() => resolver(true)));
+      })`);
+      return pagina.capturar({ alemDoViewport: false });
+    };
+    return await Promise.race([
+      renderizar(),
+      new Promise<never>((_resolver, rejeitar) => {
+        temporizador = setTimeout(() => rejeitar(new Error("tempo esgotado ao gerar o print")), 20_000);
+      }),
+    ]);
+  } finally {
+    if (temporizador) clearTimeout(temporizador);
+    await navegador.fechar();
+  }
 }
 
 function ipsDaRede(): string[] {
@@ -438,6 +524,7 @@ async function saude(ctx: ContextoApi): Promise<Record<string, unknown>> {
     ouvintes: difusor.tamanho,
     quemOuve: difusor.ouvintes(),
     capturas: opcoes.capturas,
+    https: opcoes.https === true,
     norma: motor ? { versao: motor.versao, origem: motor.origem, ligadas: Object.keys(REGRAS_A_LIGAR).length } : null,
     ponte: opcoes.ponte ?? null,
     app,
@@ -463,7 +550,12 @@ function resumoLote(lote: Lote): string {
 }
 
 async function processarLote(ctx: ContextoApi, lote: Lote, origemPublica: string): Promise<void> {
-  const { fila, difusor, opcoes } = ctx;
+  const { fila, difusor } = ctx;
+  // A preparação pode demorar. Trocar a conexão ou o agente nesse intervalo
+  // só vale para os próximos lotes, sem redirecionar o pedido já recebido.
+  const opcoes: OpcoesServidor = { ...ctx.opcoes, ponte: ctx.opcoes.ponte ? { ...ctx.opcoes.ponte } : null };
+  // Fila.gravar substitui os IDs recebidos pelos metadados do armazenamento.
+  const imagens = lote.anotacoes.flatMap((a) => (a.anexos ?? []).map((anexo) => anexo.caminho));
   let arquivos: string[] = [];
   if (opcoes.fonte) {
     try {
@@ -483,7 +575,7 @@ async function processarLote(ctx: ContextoApi, lote: Lote, origemPublica: string
     await fila.anexarCapturas(lote.id, capturas);
     if (capturas.erro) registrar(opcoes, `capturas do lote ${lote.id}: ${capturas.erro}`);
   }
-  const entregues = difusor.transmitir({
+  const entregues = opcoes.ponte?.modelo ? 0 : difusor.transmitir({
     tipo: "lote",
     id: lote.id,
     quantidade: lote.anotacoes.length,
@@ -491,13 +583,15 @@ async function processarLote(ctx: ContextoApi, lote: Lote, origemPublica: string
     resumo: resumoLote(lote),
     caminhoMd: fila.caminhoMd(lote.id),
     capturas,
+    ...(imagens.length ? { imagens } : {}),
     arquivos,
-  });
+  }, opcoes.ponte?.agente);
   registrar(
     opcoes,
     `lote ${lote.id}: ${lote.anotacoes.length} anotação(ões) em ${lote.pagina.caminho}${arquivos.length ? ` → ${arquivos.join(", ")}` : ""} — ${entregues} ouvinte(s) avisado(s); md em ${fila.caminhoMd(lote.id)}`
   );
   if (entregues === 0 && opcoes.ponte) {
+    const iniciadoEm = new Date().toISOString();
     try {
       await ctx.ponte.iniciar({
         agente: opcoes.ponte.agente,
@@ -506,16 +600,29 @@ async function processarLote(ctx: ContextoApi, lote: Lote, origemPublica: string
         esforco: opcoes.ponte.esforco ?? null,
         fonte: opcoes.fonte,
         motivo: `lote ${lote.id.slice(0, 8)} sem ninguém ouvindo`,
-        mensagem: mensagemParaLote({ porta: ctx.porta(), nome: opcoes.nome, alvo: opcoes.alvo, fonte: opcoes.fonte, raizFerramenta: RAIZ }, { id: lote.id, caminhoMd: fila.caminhoMd(lote.id), resumo: resumoLote(lote) }),
+        loteId: lote.id,
+        aoAtualizar: async (execucao) => {
+          await fila.registrarExecucao(lote.id, { id: execucao.id, agente: execucao.agente, modelo: execucao.modelo ?? null, iniciadoEm: execucao.iniciadoEm, terminadoEm: execucao.terminadoEm, codigo: execucao.codigo, ...(execucao.erro ? { erro: execucao.erro } : {}) });
+        },
+        imagens,
+        mensagem: mensagemParaLote({ porta: ctx.porta(), nome: opcoes.nome, alvo: opcoes.alvo, fonte: opcoes.fonte, raizFerramenta: RAIZ }, { id: lote.id, caminhoMd: fila.caminhoMd(lote.id), resumo: resumoLote(lote), imagens }),
       });
     } catch (erro) {
+      // Falhas antes do spawn não passam por aoAtualizar. O lote continua
+      // recebido/salvo, mas sua conversa precisa mostrar que o agente não abriu.
+      await fila.registrarExecucao(lote.id, {
+        id: randomUUID(), agente: opcoes.ponte.agente, modelo: opcoes.ponte.modelo ?? null,
+        iniciadoEm, terminadoEm: new Date().toISOString(), codigo: -1,
+        erro: "Não foi possível iniciar o agente nesta máquina. As anotações continuam salvas. Confira a conexão do agente e tente novamente.",
+      });
       registrar(opcoes, `ponte não iniciou: ${erro instanceof Error ? erro.message : String(erro)}`);
     }
   }
 }
 
 async function processarAvaliacao(ctx: ContextoApi, pedido: Parameters<typeof gerarDossie>[0], origemPublica: string): Promise<void> {
-  const { avaliacoes, difusor, opcoes } = ctx;
+  const { avaliacoes, difusor } = ctx;
+  const opcoes = { ...ctx.opcoes, ponte: ctx.opcoes.ponte ? { ...ctx.opcoes.ponte } : null };
   let captura: string | null = null;
   if (opcoes.capturas && pedido.instantaneo) {
     const caminhoInstantaneo = `${BASE}/avaliacoes/${pedido.id}/instantaneo`;
@@ -524,36 +631,126 @@ async function processarAvaliacao(ctx: ContextoApi, pedido: Parameters<typeof ge
     const r = await capturarAvaliacao(destino, pedido.pagina.viewport, { urlsInstantaneo: urls, chrome: opcoes.chrome });
     captura = r.caminho;
     if (r.erro) registrar(opcoes, `captura da avaliação ${pedido.id}: ${r.erro}`);
-    if (captura) await avaliacoes.gravar(pedido, gerarDossie(pedido, await extrasDoDossie(opcoes.fonte, pedido.pagina.caminho, ctx.porta(), captura)));
+    if (captura) await avaliacoes.gravar(pedido, gerarDossie(pedido, { ...await extrasDoDossie(opcoes.fonte, pedido.pagina.caminho, ctx.porta(), captura), respostaDireta: !!opcoes.ponte }));
   }
-  const entregues = difusor.transmitir({
+  // Cada avaliação com ponte tem uma execução própria, identificada no chat.
+  const entregues = opcoes.ponte ? 0 : difusor.transmitir({
     tipo: "avaliacao",
     id: pedido.id,
     quantidade: pedido.achados.length,
     url: pedido.pagina.url,
     caminhoMd: avaliacoes.caminhoMd(pedido.id),
     resumo: `avaliação de ${pedido.pagina.caminho || pedido.pagina.url}${pedido.foco ? ` · foco: ${pedido.foco}` : ""}`,
-  });
+  }, idPeloNome(opcoes.agente) ?? undefined);
   registrar(opcoes, `avaliação ${pedido.id} de ${pedido.pagina.caminho}: ${pedido.achados.length} achado(s) medido(s) — ${entregues} ouvinte(s)`);
+  if (entregues > 0) await avaliacoes.registrarEstado(pedido.id, { fase: "aguardando", agente: opcoes.ponte?.agente ?? opcoes.agente, atualizadoEm: new Date().toISOString() });
   if (entregues === 0 && opcoes.ponte) {
     try {
       await ctx.ponte.iniciar({
         agente: opcoes.ponte.agente,
-        sessao: opcoes.ponte.sessao,
+        sessao: null,
+        saidaEstruturada: true,
+        imagens: captura ? [captura] : [],
         modelo: opcoes.ponte.modelo ?? null,
         esforco: opcoes.ponte.esforco ?? null,
         fonte: opcoes.fonte,
         motivo: `avaliação ${pedido.id.slice(0, 8)} sem ninguém ouvindo`,
+        aoAtualizar: async (execucao) => {
+          await avaliacoes.registrarEstado(pedido.id, {
+            fase: !execucao.terminadoEm ? "executando" : execucao.codigo === 0 ? "sem_parecer" : "falhou",
+            agente: execucao.agente, atualizadoEm: new Date().toISOString(),
+            esforco: opcoes.ponte?.esforco ?? null,
+            ...(execucao.erro ? { erro: execucao.erro.replace(/executar o lote/g, "avaliar a página").replace(/As anotações continuam salvas/g, "O pedido de avaliação continua salvo") } : {}),
+            execucao: { id: execucao.id, iniciadoEm: execucao.iniciadoEm, terminadoEm: execucao.terminadoEm, codigo: execucao.codigo, modelo: execucao.modelo ?? null, sessao: execucao.sessao, pid: execucao.pid },
+          });
+          await sincronizarAvaliacaoChat(ctx, pedido.id);
+        },
         mensagem: [
           `Um pedido de avaliação de página chegou do anotador-ui (projeto "${opcoes.nome}").`,
           `Leia o dossiê em ${avaliacoes.caminhoMd(pedido.id)} — ele traz o que já foi medido, a estrutura da página, o sistema de design e${captura ? " a captura da tela" : " (sem captura)"}.`,
-          `Julgue o que a medição não alcança e devolva o parecer por POST em http://127.0.0.1:${ctx.porta()}${BASE}/avaliacoes/${pedido.id}/parecer, no formato que o próprio dossiê descreve.`,
+          "Julgue o que a medição não alcança. A resposta final deve ser somente o objeto JSON de parecer descrito no dossiê (resumo, itens, perguntas). O Anotador recebe a saída diretamente; não faça POST nem grave o resultado em outro arquivo. Esta é uma avaliação: não altere o código do projeto.",
         ].join("\n\n"),
       });
     } catch (erro) {
       registrar(opcoes, `ponte não iniciou para a avaliação: ${erro instanceof Error ? erro.message : String(erro)}`);
+      await avaliacoes.registrarEstado(pedido.id, { fase: "falhou", agente: opcoes.ponte.agente, atualizadoEm: new Date().toISOString(), erro: "Não foi possível iniciar o agente para avaliar a página. Verifique a conexão do agente e tente novamente." });
     }
-  }
+  } else if (!entregues) await avaliacoes.registrarEstado(pedido.id, { fase: "falhou", agente: null, atualizadoEm: new Date().toISOString(), erro: "Nenhum agente está conectado para receber esta avaliação. Escolha um agente no menu do Anotador." });
+}
+
+const extracoesAtivas = new WeakSet<ContextoApi>();
+const chatsPorContexto = new WeakMap<ContextoApi, { pasta: string; fonte: string | null; servico: ChatAgentes }>();
+
+function chatDoContexto(ctx: ContextoApi): ChatAgentes {
+  const atual = chatsPorContexto.get(ctx);
+  if (atual?.pasta === ctx.fila.dir && atual.fonte === ctx.opcoes.fonte) return atual.servico;
+  const servico = new ChatAgentes(ctx.fila.dir, ctx.opcoes.fonte);
+  chatsPorContexto.set(ctx, { pasta: ctx.fila.dir, fonte: ctx.opcoes.fonte, servico });
+  return servico;
+}
+
+async function sincronizarAvaliacaoChat(ctx: ContextoApi, id: string) {
+  return serializar(ctx.avaliacoes.dir + "/chat:" + id, async () => {
+    const pedido = await ctx.avaliacoes.ler(id);
+    let estado = await ctx.avaliacoes.lerEstado(id);
+    const agente = estado?.agente && idPeloNome(estado.agente);
+    if (!pedido || !estado || !agente) return null;
+    const bruto = estado.execucao ? await ctx.ponte.lerSaidaAvaliacao(estado.execucao.id, agente) : "";
+    const saida = saidaPublicaAvaliacao(agente, bruto);
+    if (saida.sessao && estado.execucao && estado.execucao.sessao !== saida.sessao) {
+      estado.execucao.sessao = saida.sessao;
+      await ctx.avaliacoes.registrarEstado(id, estado);
+      estado = await ctx.avaliacoes.lerEstado(id) ?? estado;
+    }
+    // Recupera uma execução interrompida sem iniciar outro agente ao consultar.
+    if (estado.execucao?.pid && !estado.execucao.terminadoEm) {
+      let vivo = true;
+      try { process.kill(estado.execucao.pid, 0); } catch { vivo = false; }
+      if (!vivo) {
+        estado.fase = saida.parecer ? "sem_parecer" : "falhou";
+        estado.execucao.terminadoEm = new Date().toISOString();
+        estado.erro = "A execução foi interrompida. As mensagens disponíveis foram preservadas.";
+        await ctx.avaliacoes.registrarEstado(id, estado);
+      }
+    }
+    let parecer = await ctx.avaliacoes.lerParecer(id);
+    if (!parecer && saida.parecer) {
+      parecer = saida.parecer;
+      await ctx.avaliacoes.gravarParecer(id, parecer);
+      ctx.difusor.transmitir({ tipo: "parecer", id, quantidade: parecer.itens.length, resumo: parecer.resumo });
+    }
+    if (parecer && (!estado.execucao || estado.execucao.terminadoEm || estado.fase === "falhou" || estado.fase === "sem_parecer") && estado.fase !== "concluida") {
+      estado.fase = "concluida"; delete estado.erro;
+      estado.atualizadoEm = new Date().toISOString();
+      await ctx.avaliacoes.registrarEstado(id, estado);
+    }
+    return chatDoContexto(ctx).sincronizarAvaliacao(pedido, estado, agente, { ...saida, sessao: saida.sessao ?? estado.execucao?.sessao ?? null, bruto }, parecer);
+  });
+}
+
+async function atualizarConversaVinculada(ctx: ContextoApi, id: string, agente?: string) {
+  const chat = chatDoContexto(ctx);
+  const conversa = await chat.obter(id, agente);
+  if (conversa.avaliacao?.acompanhando) await sincronizarAvaliacaoChat(ctx, conversa.avaliacao.id);
+  return chat.obter(id, agente);
+}
+
+function referenciaConversaAvaliacao(conversa: Awaited<ReturnType<typeof sincronizarAvaliacaoChat>>) {
+  return conversa ? { id: conversa.id, agente: conversa.agente, modelo: conversa.modelo, sessaoExterna: conversa.sessaoExterna ?? null } : null;
+}
+
+async function lerPedidoChat(req: IncomingMessage): Promise<Record<string, unknown>> {
+  try {
+    const corpo = await lerJson(req);
+    if (Array.isArray(corpo)) throw new Error();
+    return corpo;
+  } catch { throw new ErroChat("Pedido de conversa inválido ou grande demais."); }
+}
+
+function destinoDeAcesso(valor: unknown): string {
+  if (typeof valor !== "string" || !valor.startsWith("/") || valor.startsWith("//") || /[\\\r\n]/.test(valor)) return BASE + "/";
+  const destino = new URL(valor, "http://anotador.local");
+  return destino.origin === "http://anotador.local" ? destino.pathname + destino.search + destino.hash : BASE + "/";
 }
 
 async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ctx: ContextoApi): Promise<boolean> {
@@ -561,7 +758,216 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
   const caminho = url.pathname.slice(BASE.length) || "/";
   const metodo = req.method ?? "GET";
 
+  if (caminho === "/chat" || caminho.startsWith("/chat/")) {
+    res.setHeader("cache-control", "no-store");
+    if (!autorizado(req, ctx.chave) || !mesmaOrigem(req.headers)) {
+      responderJson(res, 403, { ok: false, erro: "Conecte este navegador ao Anotador para acessar suas conversas." });
+      return true;
+    }
+    try {
+      if (caminho === "/chat/limites") {
+        if (metodo !== "GET") throw new ErroChat("Método não permitido para consultar os limites da conta.", 405);
+        const agente = url.searchParams.get("agente");
+        if (!agente || !["claude", "codex", "gemini", "opencode", "antigravity", "cursor"].includes(agente)) throw new ErroChat("Escolha um agente válido.");
+        responderJson(res, 200, { ok: true, ...await lerLimitesConta(agente) });
+        return true;
+      }
+      if (caminho === "/chat/comandos" && metodo === "GET") {
+        const agente = url.searchParams.get("agente");
+        if (!agente || !["claude", "codex", "gemini", "opencode", "antigravity", "cursor"].includes(agente)) throw new ErroChat("Escolha um agente válido.");
+        responderJson(res, 200, { ok: true, comandos: await descobrirComandos(agente as IdAgente, opcoes.fonte) });
+        return true;
+      }
+      const chat = chatDoContexto(ctx);
+      if (caminho === "/chat/catalogo" && metodo === "GET") {
+        responderJson(res, 200, { ok: true, ...await chat.catalogo() });
+      } else if (caminho === "/chat/sessoes" && metodo === "GET") {
+        const agente = url.searchParams.get("agente") ?? undefined;
+        responderJson(res, 200, { ok: true, sessoes: await chat.listar(agente) });
+      } else if (caminho === "/chat/sessoes" && metodo === "POST") {
+        const corpo = await lerPedidoChat(req);
+        if (typeof corpo["agente"] !== "string") throw new ErroChat("Escolha um agente válido.");
+        for (const campo of ["modelo", "esforco", "sessaoExterna"]) {
+          if (corpo[campo] !== undefined && corpo[campo] !== null && typeof corpo[campo] !== "string") throw new ErroChat(`O campo ${campo} é inválido.`);
+        }
+        const conversa = await chat.criar({ agente: corpo["agente"], modelo: corpo["modelo"] as string | null | undefined, esforco: corpo["esforco"] as string | null | undefined, sessaoExterna: corpo["sessaoExterna"] as string | null | undefined });
+        responderJson(res, 201, { ok: true, conversa });
+      } else {
+        const partes = /^\/chat\/sessoes\/([^/]+)(?:\/(mensagens|configuracao))?$/.exec(caminho);
+        if (!partes) throw new ErroChat("Caminho de conversa não encontrado.", 404);
+        const id = decodeURIComponent(partes[1]!);
+        if (!idSeguro(id)) throw new ErroChat("Identificador de conversa inválido.");
+        if (!partes[2] && metodo === "GET") {
+          const agente = url.searchParams.get("agente") ?? undefined;
+          responderJson(res, 200, { ok: true, conversa: await atualizarConversaVinculada(ctx, id, agente) });
+        } else if (partes[2] === "mensagens" && metodo === "POST") {
+          const corpo = await lerPedidoChat(req);
+          if (typeof corpo["texto"] !== "string") throw new ErroChat("Escreva uma mensagem para enviar.");
+          if (corpo["agente"] !== undefined && typeof corpo["agente"] !== "string") throw new ErroChat("Escolha um agente válido.");
+          await atualizarConversaVinculada(ctx, id, corpo["agente"] as string | undefined);
+          responderJson(res, 200, { ok: true, conversa: await chat.enviar(id, corpo["texto"], corpo["agente"] as string | undefined) });
+        } else if (partes[2] === "configuracao" && metodo === "POST") {
+          const corpo = await lerPedidoChat(req);
+          for (const campo of ["modelo", "esforco"]) {
+            if (corpo[campo] !== undefined && corpo[campo] !== null && typeof corpo[campo] !== "string") throw new ErroChat(`O campo ${campo} é inválido.`);
+          }
+          if (corpo["agente"] !== undefined && typeof corpo["agente"] !== "string") throw new ErroChat("Escolha um agente válido.");
+          await atualizarConversaVinculada(ctx, id, corpo["agente"] as string | undefined);
+          responderJson(res, 200, { ok: true, conversa: await chat.configurar(id, { modelo: corpo["modelo"] as string | null | undefined, esforco: corpo["esforco"] as string | null | undefined }, corpo["agente"] as string | undefined) });
+        } else {
+          throw new ErroChat("Método não permitido para esta conversa.", 405);
+        }
+      }
+    } catch (erro) {
+      const status = erro instanceof ErroChat ? erro.status : erro instanceof SyntaxError || erro instanceof URIError ? 400 : 500;
+      responderJson(res, status, { ok: false, erro: erro instanceof Error ? erro.message : "Não foi possível acessar a conversa." });
+    }
+    return true;
+  }
+
+  if (caminho === "/voz/capacidade" || caminho === "/voz/transcrever") {
+    res.setHeader("cache-control", "no-store");
+    if (!autorizado(req, ctx.chave) || !mesmaOrigem(req.headers)) {
+      responderJson(res, 403, { ok: false, erro: motivoDaRecusa(req, ctx.chave) || "Este pedido não veio da página do Anotador." });
+      return true;
+    }
+    if (caminho === "/voz/capacidade" && metodo === "GET") {
+      const capacidade = await capacidadeTranscricao();
+      responderJson(res, 200, { ok: true, ...capacidade });
+      if (capacidade.disponivel) void preaquecerTranscricao().catch(() => undefined);
+      return true;
+    }
+    if (caminho !== "/voz/transcrever" || metodo !== "POST") {
+      responderJson(res, 405, { ok: false, erro: "Método não permitido para o microfone." });
+      return true;
+    }
+    const abortar = new AbortController();
+    const cancelar = (): void => { if (!res.writableEnded) abortar.abort(); };
+    res.on("close", cancelar);
+    try {
+      if (String(req.headers["content-type"] ?? "").split(";", 1)[0]?.trim().toLowerCase() !== "application/json") throw new ErroTranscricao("Envie a gravação no formato esperado pelo Anotador.", 400);
+      const pedido = await lerJson(req, MAX_CORPO_TRANSCRICAO);
+      const resultado = await transcreverAudio(pedido, { signal: abortar.signal });
+      if (!res.destroyed) responderJson(res, 200, { ok: true, ...resultado });
+    } catch (erro) {
+      if (!res.destroyed) responderJson(res, erro instanceof ErroTranscricao ? erro.status : erro instanceof SyntaxError ? 400 : 500, {
+        ok: false, erro: erro instanceof ErroTranscricao ? erro.message : erro instanceof SyntaxError ? "Não consegui ler a gravação enviada." : "Não consegui transcrever a gravação. Tente novamente.",
+      });
+    } finally { res.off("close", cancelar); }
+    return true;
+  }
+
+  if (caminho === "/voz/continuar" && metodo === "POST") {
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("referrer-policy", "no-referrer");
+    if (!autorizado(req, ctx.chave)) {
+      responderJson(res, 403, { ok: false, erro: motivoDaRecusa(req, ctx.chave) });
+      return true;
+    }
+    if (!opcoes.https) {
+      responderJson(res, 503, { ok: false, erro: "O endereço seguro do Anotador ainda não está disponível para liberar o microfone." });
+      return true;
+    }
+    try {
+      hostContinuacao(req.headers.host);
+      const cifrado = (req.socket as { encrypted?: boolean }).encrypted === true;
+      const endereco = new URL(`${cifrado ? "https" : "http"}://${req.headers.host}`);
+      const porta = endereco.port || (cifrado ? "443" : "80");
+      endereco.protocol = "https:";
+      endereco.port = porta;
+      const host = hostContinuacao(endereco.host);
+      const corpo = await lerJson(req, 4 * 1024 * 1024 + 65_536);
+      const token = ctx.continuacoes.criar(corpo, host);
+      responderJson(res, 200, { ok: true, url: `https://${host}${BASE}/voz/retomar#${token}` });
+    } catch (erro) {
+      responderJson(res, erro instanceof ErroContinuacao ? erro.status : 400, { ok: false, erro: erro instanceof Error ? erro.message : "Não consegui preservar o rascunho para continuar." });
+    }
+    return true;
+  }
+  if (caminho === "/voz/retomar" && (metodo === "GET" || metodo === "POST")) {
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("referrer-policy", "no-referrer");
+    res.setHeader("x-content-type-options", "nosniff");
+    if ((req.socket as { encrypted?: boolean }).encrypted !== true) {
+      responderJson(res, 426, { ok: false, erro: "Abra o endereço HTTPS para continuar com suas anotações e liberar o microfone." });
+      return true;
+    }
+    if (metodo === "GET") {
+      res.setHeader("content-security-policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'");
+      responderTexto(res, 200, PAGINA_RETOMADA, "text/html; charset=utf-8");
+      return true;
+    }
+    if (!mesmaOrigem(req.headers)) {
+      responderJson(res, 403, { ok: false, erro: "Retome o ditado pela página do Anotador." });
+      return true;
+    }
+    try {
+      const corpo = await lerJson(req, 4096);
+      const estado = ctx.continuacoes.consumir(corpo["token"], hostContinuacao(req.headers.host));
+      definirSessaoNavegador(req, res, ctx.chave);
+      responderJson(res, 200, { ok: true, ...estado });
+    } catch (erro) {
+      responderJson(res, erro instanceof ErroContinuacao ? erro.status : 400, { ok: false, erro: erro instanceof Error ? erro.message : "Não foi possível retomar o ditado." });
+    }
+    return true;
+  }
+
+  if (caminho === "/acesso/sessao" && (metodo === "GET" || metodo === "POST")) {
+    if (!autorizado(req, ctx.chave)) {
+      responderJson(res, 403, { ok: false, erro: "Conecte este navegador pelo link de acesso compartilhado por quem iniciou o Anotador." });
+      return true;
+    }
+    // GET confirma o cookie recebido sem emitir credenciais nem renovar a sessão.
+    if (metodo === "POST") definirSessaoNavegador(req, res, ctx.chave);
+    responderJson(res, 200, { ok: true });
+    return true;
+  }
+  if (caminho === "/acesso/link" && metodo === "POST") {
+    if (!autorizado(req, ctx.chave)) {
+      responderJson(res, 403, { ok: false, erro: "Este navegador precisa estar conectado para compartilhar o acesso." });
+      return true;
+    }
+    let corpo: Record<string, unknown>;
+    try { corpo = await lerJson(req); }
+    catch { responderJson(res, 400, { ok: false, erro: "Pedido de acesso inválido." }); return true; }
+    const parametros = new URLSearchParams({ convite: criarConvite(ctx.chave), voltar: destinoDeAcesso(corpo["voltar"]) });
+    responderJson(res, 200, { ok: true, caminho: BASE + "/acesso?" + parametros.toString(), expiraEm: new Date(Date.now() + 15 * 60_000).toISOString() });
+    return true;
+  }
+  if (caminho === "/acesso" && metodo === "GET") {
+    res.setHeader("referrer-policy", "no-referrer");
+    if (!conviteConfere(url.searchParams.get("convite"), ctx.chave)) {
+      responderTexto(res, 403, '<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conectar navegador</title><body style="font:16px system-ui;max-width:540px;margin:10vh auto;padding:24px"><h1>Este link de acesso expirou</h1><p>Peça um novo link a quem compartilhou o Anotador.</p><a href="' + BASE + '/">Voltar à conexão</a></body></html>', "text/html; charset=utf-8");
+      return true;
+    }
+    definirSessaoNavegador(req, res, ctx.chave);
+    res.writeHead(303, { location: destinoDeAcesso(url.searchParams.get("voltar")), "cache-control": "no-store" });
+    res.end();
+    return true;
+  }
   if (caminho === "/" && metodo === "GET") {
+    // O cookie Secure emitido por HTTPS não é enviado na versão HTTP do menu.
+    // Navegar para a mesma origem segura reutiliza a sessão; a API/CLI continua
+    // disponível em HTTP na própria máquina.
+    if (opcoes.https && !(req.socket as { encrypted?: boolean }).encrypted) {
+      const destino = new URL(BASE + "/" + url.search, origemPublicaDe(req, opcoes));
+      destino.protocol = "https:";
+      res.writeHead(302, { location: destino.href, "cache-control": "no-store", "referrer-policy": "no-referrer" });
+      res.end();
+      return true;
+    }
+    if (url.searchParams.has("chave")) {
+      res.setHeader("referrer-policy", "no-referrer");
+      if (!chaveConfere(url.searchParams.get("chave"), ctx.chave)) {
+        responderTexto(res, 403, "Link de acesso inválido. Peça um novo link a quem compartilhou o Anotador.");
+        return true;
+      }
+      definirSessaoNavegador(req, res, ctx.chave);
+      url.searchParams.delete("chave");
+      res.writeHead(303, { location: BASE + "/" + url.search, "cache-control": "no-store" });
+      res.end();
+      return true;
+    }
     if (!url.pathname.endsWith("/")) {
       res.writeHead(302, { location: BASE + "/" + url.search });
       res.end();
@@ -574,18 +980,154 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     responderJson(res, 200, await saude(ctx));
     return true;
   }
-  if (caminho === "/avaliacoes" && metodo === "POST") {
-    let pedido;
+  if (caminho === "/microfone" && metodo === "GET") {
+    res.setHeader("referrer-policy", "no-referrer");
+    responderTexto(res, 200, await readFile(join(RAIZ, "lib", "microfone.html"), "utf8"), "text/html; charset=utf-8");
+    return true;
+  }
+  if ((caminho === "/extrair" || caminho === "/extrair/") && metodo === "GET") {
+    responderTexto(res, 200, await injetarIdiomasHtml(await readFile(join(RAIZ, "lib", "extracao.html"), "utf8")), "text/html; charset=utf-8");
+    return true;
+  }
+  if ((caminho === "/extrair" || caminho === "/extrair/") && metodo === "POST") {
+    if (!autorizado(req, ctx.chave)) {
+      responderJson(res, 403, { ok: false, erro: motivoDaRecusa(req, ctx.chave) });
+      return true;
+    }
+    let alvo: URL;
     try {
-      pedido = validarPedido(JSON.parse((await lerCorpo(req)).toString("utf8")));
+      const corpo = await lerJson(req);
+      const texto = typeof corpo["url"] === "string" ? corpo["url"].trim() : "";
+      if (!texto) throw new Error("Informe a URL do site.");
+      alvo = new URL(/^[a-z][\w+.-]*:/i.test(texto) ? texto : "https://" + texto);
+      if (!["http:", "https:"].includes(alvo.protocol) || alvo.username || alvo.password) throw new Error("Use uma URL HTTP ou HTTPS sem credenciais.");
+      if (alvo.href.length > 4000) throw new Error("A URL é longa demais (limite de 4.000 caracteres).");
+    } catch (erro) {
+      responderJson(res, 400, { ok: false, erro: erro instanceof Error ? erro.message : "URL inválida" });
+      return true;
+    }
+    if (extracoesAtivas.has(ctx)) {
+      responderJson(res, 409, { ok: false, erro: "Uma extração já está em andamento. Aguarde a conclusão." });
+      return true;
+    }
+    extracoesAtivas.add(ctx);
+    try {
+      const resultado = await extrairDesign(alvo.href, { chrome: opcoes.chrome ?? encontrarChromium() });
+      if (!res.destroyed) responderJson(res, 200, { ok: true, resultado });
+    } catch (erro) {
+      if (!res.destroyed) responderJson(res, 502, { ok: false, erro: erro instanceof Error ? erro.message : "Não foi possível extrair o design deste site." });
+    } finally {
+      extracoesAtivas.delete(ctx);
+    }
+    return true;
+  }
+  const capturaTemporaria = /^\/captura\/([\w-]+)\/instantaneo$/.exec(caminho);
+  if (capturaTemporaria && metodo === "GET") {
+    const instantaneo = ctx.capturasAvulsas.get(capturaTemporaria[1] ?? "");
+    if (instantaneo === undefined) responderJson(res, 404, { ok: false, erro: "instantâneo indisponível" });
+    else {
+      res.setHeader("content-security-policy", "script-src 'none'; object-src 'none'");
+      responderTexto(res, 200, instantaneo, "text/html; charset=utf-8");
+    }
+    return true;
+  }
+  const imagemAnexa = /^\/anexos\/([^/]+)\/imagem$/.exec(caminho);
+  if (imagemAnexa && metodo === "GET") {
+    if (!autorizado(req, ctx.chave)) {
+      responderJson(res, 403, { ok: false, erro: motivoDaRecusa(req, ctx.chave) });
+      return true;
+    }
+    let id: string;
+    try { id = decodeURIComponent(imagemAnexa[1] ?? ""); } catch { id = ""; }
+    if (!idAnexoSeguro(id)) {
+      responderJson(res, 400, { ok: false, erro: "id do print inválido" });
+      return true;
+    }
+    const png = await fila.anexos.imagem(id);
+    if (!png) responderJson(res, 404, { ok: false, erro: "print não encontrado" });
+    else {
+      res.writeHead(200, { "content-type": "image/png", "content-length": png.length, "cache-control": "no-store", "content-disposition": `inline; filename="${id}.png"`, "x-content-type-options": "nosniff", "x-anotador": VERSAO });
+      res.end(png);
+    }
+    return true;
+  }
+  if ((caminho === "/captura" || caminho === "/anexos/captura") && metodo === "POST") {
+    const anexar = caminho === "/anexos/captura";
+    if (anexar && !autorizado(req, ctx.chave)) {
+      responderJson(res, 403, { ok: false, erro: motivoDaRecusa(req, ctx.chave) });
+      return true;
+    }
+    let pedido;
+    let vinculo: { anotacaoId: string; paginaUrl: string } | null = null;
+    try {
+      const corpo = await lerJson(req, LIMITE_CORPO);
+      pedido = validarCaptura(corpo);
+      if (anexar) {
+        if (!idSeguro(corpo["anotacaoId"])) throw new ErroAnexo("id da anotação inválido para anexar print");
+        const pagina = corpo["pagina"] as Record<string, unknown>;
+        vinculo = { anotacaoId: corpo["anotacaoId"], paginaUrl: normalizarPaginaAnexo(pagina["url"]) };
+      }
+    } catch (erro) {
+      responderJson(res, 400, { ok: false, erro: erro instanceof Error ? erro.message : "pedido de captura inválido" });
+      return true;
+    }
+    const chrome = opcoes.chrome ?? encontrarChromium();
+    if (!chrome || !existsSync(chrome)) {
+      responderJson(res, 503, { ok: false, erro: "Chromium não encontrado; configure ANOTADOR_CHROME para tirar prints" });
+      return true;
+    }
+    const id = randomUUID();
+    ctx.capturasAvulsas.set(id, pedido.instantaneo);
+    try {
+      // A porta com TLS também atende HTTP local, sem exigir confiar no certificado
+      // próprio para abrir o instantâneo temporário no navegador de captura.
+      const origem = enderecoInterno({ ...opcoes, https: false }, ctx.porta());
+      const png = await renderizarCaptura(`${origem}${BASE}/captura/${id}/instantaneo`, pedido.viewport, chrome, opcoes.https === true);
+      if (vinculo) {
+        const anexo = await fila.anexos.gravar(png, { ...vinculo, viewport: pedido.viewport });
+        if (!res.destroyed) responderJson(res, 201, { ok: true, anexo });
+      } else if (!res.destroyed) {
+        res.writeHead(200, { "content-type": "image/png", "content-length": png.length, "cache-control": "no-store", "content-disposition": 'attachment; filename="captura.png"', "x-anotador": VERSAO });
+        res.end(png);
+      }
+    } catch (erro) {
+      if (!res.destroyed) responderJson(res, 502, { ok: false, erro: erro instanceof Error ? erro.message : "não foi possível gerar o print" });
+    } finally {
+      ctx.capturasAvulsas.delete(id);
+    }
+    return true;
+  }
+  if (caminho === "/avaliacoes" && metodo === "POST") {
+    if (!autorizado(req, ctx.chave)) {
+      responderJson(res, 403, { ok: false, erro: motivoDaRecusa(req, ctx.chave) });
+      return true;
+    }
+    let pedido;
+    let agenteEsperado: string | undefined;
+    try {
+      const corpo = JSON.parse((await lerCorpo(req)).toString("utf8"));
+      pedido = validarPedido(corpo);
+      if (corpo.agenteEsperado !== undefined && typeof corpo.agenteEsperado !== "string") throw new Error("agente esperado inválido");
+      agenteEsperado = corpo.agenteEsperado;
     } catch (erro) {
       responderJson(res, 400, { ok: false, erro: erro instanceof Error ? erro.message : String(erro) });
       return true;
     }
-    const dossie = gerarDossie(pedido, await extrasDoDossie(opcoes.fonte, pedido.pagina.caminho, ctx.porta(), null));
-    await ctx.avaliacoes.gravar(pedido, dossie);
-    responderJson(res, 201, { ok: true, id: pedido.id, caminhoMd: ctx.avaliacoes.caminhoMd(pedido.id) });
-    void processarAvaliacao(ctx, pedido, origemPublicaDe(req, opcoes)).catch((erro: Error) => registrar(opcoes, `falha ao processar avaliação: ${erro.message}`));
+    const contextoPedido = { ...ctx, opcoes: { ...opcoes, ponte: opcoes.ponte ? { ...opcoes.ponte } : null } };
+    const agenteDoPedido = contextoPedido.opcoes.ponte?.agente ?? contextoPedido.opcoes.agente;
+    if (agenteEsperado !== undefined && (idPeloNome(agenteEsperado) ?? agenteEsperado) !== (idPeloNome(agenteDoPedido) ?? agenteDoPedido)) {
+      responderJson(res, 409, { ok: false, erro: "O agente foi alterado em outra aba. Confira o nome atualizado antes de pedir o parecer." });
+      return true;
+    }
+    const dossie = gerarDossie(pedido, { ...await extrasDoDossie(contextoPedido.opcoes.fonte, pedido.pagina.caminho, ctx.porta(), null), respostaDireta: !!contextoPedido.opcoes.ponte });
+    await contextoPedido.avaliacoes.gravar(pedido, dossie);
+    await contextoPedido.avaliacoes.registrarEstado(pedido.id, { fase: "preparando", agente: agenteDoPedido, atualizadoEm: new Date().toISOString(), esforco: contextoPedido.opcoes.ponte?.esforco ?? null, modelo: contextoPedido.opcoes.ponte?.modelo ?? null });
+    const conversa = await sincronizarAvaliacaoChat(contextoPedido, pedido.id);
+    responderJson(res, 201, { ok: true, id: pedido.id, agente: contextoPedido.opcoes.agente, caminhoMd: contextoPedido.avaliacoes.caminhoMd(pedido.id), conversa: referenciaConversaAvaliacao(conversa) });
+    void processarAvaliacao(contextoPedido, pedido, origemPublicaDe(req, contextoPedido.opcoes)).catch(async (erro: Error) => {
+      registrar(contextoPedido.opcoes, `falha ao processar avaliação: ${erro.message}`);
+      await contextoPedido.avaliacoes.registrarEstado(pedido.id, { fase: "falhou", agente: contextoPedido.opcoes.ponte?.agente ?? contextoPedido.opcoes.agente, atualizadoEm: new Date().toISOString(), erro: "Não foi possível preparar a avaliação. O pedido continua salvo; tente novamente." }).catch(() => undefined);
+    });
     return true;
   }
   if (caminho === "/avaliacoes" && metodo === "GET") {
@@ -661,7 +1203,10 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     if (!sub && metodo === "GET") {
       const pedido = await ctx.avaliacoes.ler(id);
       if (!pedido) responderJson(res, 404, { ok: false, erro: "avaliação não encontrada" });
-      else responderJson(res, 200, { ok: true, avaliacao: { ...pedido, instantaneo: null }, parecer: await ctx.avaliacoes.lerParecer(id) });
+      else {
+        const conversa = await sincronizarAvaliacaoChat(ctx, id);
+        responderJson(res, 200, { ok: true, avaliacao: { ...pedido, instantaneo: null }, parecer: await ctx.avaliacoes.lerParecer(id), estado: await ctx.avaliacoes.lerEstado(id), conversa: referenciaConversaAvaliacao(conversa) });
+      }
       return true;
     }
   }
@@ -821,7 +1366,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
   }
   if (caminho === "/agentes" && metodo === "GET") {
     const fonte = opcoes.fonte;
-    const [claude, codex] = await Promise.all([sessoesClaude(fonte).catch(() => []), sessoesCodex(fonte).catch(() => [])]);
+    const [claude, codex] = await Promise.all([sessoesClaude(fonte).catch(() => []), sessoesCodex(fonte).catch(() => []), atualizarModelosAntigravity()]);
     responderJson(res, 200, { ok: true, agentes: detectarAgentes(), sessoes: [...claude, ...codex], ponte: opcoes.ponte ?? null, execucoes: ctx.ponte.execucoes, ouvintes: difusor.ouvintes() });
     return true;
   }
@@ -842,8 +1387,9 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       responderJson(res, 400, { ok: false, erro: "agente sem ponte por linha de comando" });
       return true;
     }
-    const sessao = typeof corpo["sessao"] === "string" && /^[\w.-]{1,120}$/.test(corpo["sessao"]) ? corpo["sessao"] : null;
     try {
+      const sessao = await sessaoDoAgente(agente, corpo["sessao"], opcoes.fonte);
+      if (agente === "antigravity") await atualizarModelosAntigravity();
       const pendentes = (await fila.pendentes()).length;
       const modelos = modelosDe(agente);
       const modelo = typeof corpo["modelo"] === "string" && modelos.some((m) => m.valor === corpo["modelo"]) ? corpo["modelo"] : opcoes.ponte?.agente === agente ? (opcoes.ponte.modelo ?? null) : null;
@@ -879,14 +1425,20 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       opcoes.ponte = null;
     } else {
       const agente = String(corpo["agente"]) as IdAgente;
-      if (!detectarAgentes().some((a) => a.id === agente && a.ponte && a.instalado)) {
+      if (agente === "antigravity") await atualizarModelosAntigravity();
+      const escolhido = detectarAgentes().find((a) => a.id === agente && a.ponte && a.instalado);
+      if (!escolhido) {
         responderJson(res, 400, { ok: false, erro: "agente não instalado ou sem ponte por linha de comando" });
         return true;
       }
       const modelos = modelosDe(agente);
       const modelo = typeof corpo["modelo"] === "string" && modelos.some((m) => m.valor === corpo["modelo"]) ? corpo["modelo"] : null;
       const esforco = typeof corpo["esforco"] === "string" && modelos.find((m) => m.valor === modelo)?.esforcos.includes(corpo["esforco"]) ? corpo["esforco"] : null;
-      opcoes.ponte = { agente, sessao: typeof corpo["sessao"] === "string" && /^[\w.-]{1,120}$/.test(corpo["sessao"]) ? corpo["sessao"] : null, modelo, esforco };
+      let sessao: string | null;
+      try { sessao = await sessaoDoAgente(agente, corpo["sessao"], opcoes.fonte); }
+      catch (erro) { responderJson(res, 400, { ok: false, erro: erro instanceof Error ? erro.message : "Sessão inválida para este agente." }); return true; }
+      opcoes.ponte = { agente, sessao, modelo, esforco };
+      opcoes.agente = escolhido.nome;
     }
     if (ctx.registro && opcoes.alvo) await ctx.registro.registrar({ alvo: opcoes.alvo, nome: opcoes.nome, fonte: opcoes.fonte, agente: opcoes.agente, ponte: opcoes.ponte ?? null });
     registrar(opcoes, opcoes.ponte ? `ponte automática: ${opcoes.ponte.agente}${opcoes.ponte.modelo ? ` · ${rotuloDoModelo(opcoes.ponte)}` : ""}${opcoes.ponte.sessao ? ` (sessão ${opcoes.ponte.sessao.slice(0, 8)})` : ""}` : "ponte automática desligada");
@@ -900,10 +1452,15 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     else responderTexto(res, 200, texto);
     return true;
   }
+  if (caminho === "/agente/atual" && metodo === "GET") {
+    responderJson(res, 200, { ok: true, agente: opcoes.agente, marca: marcaPeloNome(opcoes.ponte?.agente ?? opcoes.agente), modelo: rotuloDoModelo(opcoes.ponte) });
+    return true;
+  }
   if (caminho === "/overlay.js" && metodo === "GET") {
     const codigo = await montarOverlay({
       base: BASE,
       capturas: opcoes.capturas,
+      https: opcoes.https === true,
       nome: opcoes.nome,
       agente: opcoes.agente,
       marca: marcaPeloNome(opcoes.ponte?.agente ?? opcoes.agente),
@@ -921,7 +1478,25 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       responderJson(res, 400, { ok: false, erro: erro instanceof Error ? erro.message : String(erro) });
       return true;
     }
-    const { registro, novo } = await fila.gravar(lote);
+    let gravacao: Awaited<ReturnType<Fila["gravar"]>>;
+    try {
+      let origemHttpMigrada: string | undefined;
+      if (opcoes.https && (req.socket as { encrypted?: boolean }).encrypted === true) {
+        const origem = new URL("https://" + hostContinuacao(req.headers.host));
+        if (Number(origem.port || 443) === ctx.porta()) {
+          origem.protocol = "http:";
+          origem.port = String(ctx.porta());
+          origemHttpMigrada = origem.origin;
+        }
+      }
+      gravacao = await fila.gravar(lote, { origemHttpMigrada });
+    }
+    catch (erro) {
+      if (!(erro instanceof ErroAnexo)) throw erro;
+      responderJson(res, 400, { ok: false, erro: erro.message });
+      return true;
+    }
+    const { registro, novo } = gravacao;
     responderJson(res, novo ? 201 : 200, { ok: true, id: lote.id, novo, caminhoMd: registro.caminhoMd });
     if (novo) processarLote(ctx, lote, origemPublicaDe(req, opcoes)).catch((erro: Error) => registrar(opcoes, `falha ao processar lote ${lote.id}: ${erro.message}`));
     return true;
@@ -1135,7 +1710,7 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
   // A chave nasce com a fila e vive ao lado dela; trocar de projeto pela página não a
   // renova, porque quem já estava autorizado continua sendo a mesma pessoa.
   const chave = await chaveDaSessao(caminhoDaChave(fila.dir));
-  const ctx: ContextoApi = { fila, chave, avaliacoes, difusor, opcoes, porta: () => portaReal, alvo: () => alvoUrl, conectar, desconectar, ponte, registro, sondagem: { em: 0, alvo: null, valor: null } };
+  const ctx: ContextoApi = { fila, capturasAvulsas: new Map(), continuacoes: new Continuacoes(), chave, avaliacoes, difusor, opcoes, porta: () => portaReal, alvo: () => alvoUrl, conectar, desconectar, ponte, registro, sondagem: { em: 0, alvo: null, valor: null } };
 
   if (opcoes.alvo) {
     const inicial = opcoes.alvo;
@@ -1278,7 +1853,7 @@ uso:
   anotador                        sobe na porta 3999; reconecta ao último app desta pasta ou abre a página de conexão
   anotador servir [--alvo http://localhost:3000] [--porta 3999] [--host 0.0.0.0] [--nome slug] [--saida dir] [--fonte dir]
                   [--agente Claude] [--publico http://ip:porta] [--sem-csp] [--sem-capturas] [--chrome caminho] [--permitir-externo]
-                [--https]  (certificado próprio; libera microfone e câmera quando você abre pelo endereço da rede)
+                [--https]  (certificado próprio; permite solicitar microfone e câmera pelo endereço da rede)
   anotador conectar <url> [--porta 3999]        (troca o app de um anotador já no ar)
   anotador desconectar [--porta 3999]
   anotador fontes [--compact] [--forcar]        (instala a San Francisco da Apple nesta máquina)
@@ -1543,7 +2118,7 @@ async function principal(): Promise<void> {
     publico: values.publico ?? null,
     fonte,
     agente: values.agente?.trim() || salva?.agente || "Claude",
-    ponte: salva?.ponte && ["claude", "codex", "gemini", "opencode"].includes(salva.ponte.agente) ? { agente: salva.ponte.agente as IdAgente, sessao: salva.ponte.sessao, modelo: salva.ponte.modelo ?? null, esforco: salva.ponte.esforco ?? null } : null,
+    ponte: salva?.ponte && ["claude", "codex", "gemini", "opencode", "antigravity"].includes(salva.ponte.agente) ? { agente: salva.ponte.agente as IdAgente, sessao: salva.ponte.sessao, modelo: salva.ponte.modelo ?? null, esforco: salva.ponte.esforco ?? null } : null,
     permitirExterno: values["permitir-externo"],
     https: values.https,
   };
@@ -1568,7 +2143,7 @@ async function principal(): Promise<void> {
     // por esta URL não precisa digitá-la de novo: ela fica guardada na aba.
     ...(ipsDaRede().length ? [`  de fora:   ${esquema}://${ipsDaRede()[0]}:${servidor.porta}${BASE}/?chave=${servidor.chave}`] : []),
     values.https
-      ? "  https:     certificado próprio; o navegador avisa na primeira visita, aceite uma vez e o microfone passa a funcionar"
+      ? "  https:     certificado próprio; confirme na primeira visita para solicitar o microfone, conforme suporte e permissão do navegador"
       : "  https:     desligado; pela rede o navegador bloqueia microfone e câmera (use --https)",
     `  fila:      ${servidor.fila.dir}`,
     `  fonte:     ${opcoes.fonte} (localização dos elementos no código)`,

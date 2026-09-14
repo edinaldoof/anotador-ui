@@ -58,7 +58,11 @@ test("o overlay é servido como JavaScript sem tipos e com a configuração embu
   const r = await pedir(proxy.origem + BASE + "/overlay.js");
   assert.equal(r.status, 200);
   assert.match(r.headers["content-type"] ?? "", /javascript/);
-  assert.match(r.corpo, /window\.__ANOTADOR_CFG = \{"base":"\/__anotador","capturas":false,"nome":"teste","agente":"Claude","marca":"<svg[^]*?","modelo":null,"norma":null\}/);
+  const configuracao = r.corpo.match(/window\.__ANOTADOR_CFG = (\{[^\n]+\});/);
+  assert.ok(configuracao, "configuração serializada em JSON");
+  const { marca, ...cfg } = JSON.parse(configuracao[1]!);
+  assert.deepEqual(cfg, { base: BASE, capturas: false, https: false, nome: "teste", agente: "Claude", modelo: null, norma: null });
+  assert.match(marca, /^<svg\b/);
   // O nonce não cabe na configuração, que é cacheada e serve a qualquer página: ele vem
   // da própria tag deste script, que quem injetou já carimbou com o nonce do documento.
   assert.match(r.corpo, /window\.__ANOTADOR_NONCE = \(document\.currentScript && document\.currentScript\.nonce\)/);

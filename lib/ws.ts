@@ -201,10 +201,13 @@ export class Difusor {
       .map(([, info]) => ({ ...info }));
   }
 
-  transmitir(evento: EventoAnotador): number {
+  /** Sem agente, avisa todos; com agente, conta apenas entregas a ele. */
+  transmitir(evento: EventoAnotador, agente?: string | null): number {
     const texto = JSON.stringify(evento);
+    const destinatario = agente?.trim().toLowerCase();
     let entregues = 0;
-    for (const c of Array.from(this.conexoes.keys())) {
+    for (const [c, info] of Array.from(this.conexoes.entries())) {
+      if (destinatario && info.agente?.toLowerCase() !== destinatario) continue;
       if (c.enviar(texto)) entregues++;
       else this.conexoes.delete(c);
     }

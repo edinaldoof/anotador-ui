@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title data-i18n>Extrair design · anotador-ui</title>
+<style>
+:root{color-scheme:dark;--bg:#161a19;--surface:#1d2220;--line:#333b37;--ink:#e5ebe7;--muted:#a6b1aa;--accent:#8ae0bb;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","SF Pro","Helvetica Neue","Segoe UI",Roboto,system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.55}button,input{font:inherit}button,a,input{outline-offset:4px}button{cursor:pointer}button:disabled{opacity:.5;cursor:wait}a{color:var(--accent)}header{height:72px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 32px;gap:20px}.brand{font-size:17px;font-weight:650;text-decoration:none;color:var(--ink)}header a:last-child{font-size:13px}main{max-width:1440px;margin:auto;padding:44px 32px 64px}.intro{max-width:760px;margin-bottom:28px}.eyebrow{color:var(--accent);margin:0 0 8px;font-size:12px}h1{font-size:clamp(28px,4vw,42px);line-height:1.15;letter-spacing:-1.4px;margin:0 0 14px;font-weight:600}.muted,.intro p{color:var(--muted)}.intro p{max-width:680px;font-size:15px;margin:0}.url-form{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}.url-form label{flex:1;min-width:220px}.sr{position:absolute;clip:rect(0,0,0,0);width:1px;height:1px;overflow:hidden}input{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;color:var(--ink)}input:focus{border-color:var(--accent)}.primary,.secondary{border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-weight:600;white-space:nowrap}.primary{background:var(--accent);color:#14271e;border-color:var(--accent)}.secondary{background:var(--surface);color:var(--ink)}.hint{font-size:12px;color:var(--muted);margin:0 0 28px}.status{margin:18px 0;color:var(--muted)}.status.error{color:#ffb0a7}.access{max-width:520px;margin:18px 0}.access p{color:var(--muted)}.empty{border:1px dashed var(--line);border-radius:18px;padding:48px 24px;text-align:center;margin-top:30px}.empty strong{font-size:18px}.empty p{max-width:490px;margin:8px auto 0;color:var(--muted)}.result-head{display:flex;justify-content:space-between;align-items:center;gap:20px;border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin:28px 0 20px}.result-head h2{margin:0;font-size:24px;line-height:1.25}.result-head p{margin:7px 0 0;color:var(--muted);font-size:12px;overflow-wrap:anywhere}.actions{display:flex;gap:8px;flex-wrap:wrap}.workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}.panel{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface);min-width:0}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);font-size:13px}.tabs{display:flex;border:1px solid var(--line);padding:3px;border-radius:20px;gap:3px}.tabs button{border:0;background:transparent;color:var(--muted);border-radius:16px;padding:5px 12px;font-size:12px}.tabs button[aria-selected=true]{background:#e5ebe7;color:#19241e}.panel-content{padding:24px;max-height:900px;overflow:auto}.source{margin:0;font:12px/1.6 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}.document h1{font-size:28px;letter-spacing:-.5px}.document h2{font-size:21px;margin:30px 0 14px;border-bottom:1px solid var(--line);padding-bottom:10px}.document h3{font-size:16px;margin:22px 0 10px}.document p{color:#c3cdc6;overflow-wrap:anywhere}.document li{margin:6px 0;color:#c3cdc6}.document pre{overflow:auto;background:var(--bg);padding:15px;border-radius:8px;font:11px/1.5 ui-monospace,monospace}.document details{padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:8px;margin-bottom:22px}.document summary{cursor:pointer;color:var(--muted)}.visual-section{margin:0 0 30px}.visual-section h3{font-size:15px;margin:0 0 14px}.colors{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.swatch{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg)}.swatch-color{height:68px;background-image:linear-gradient(45deg,#888 25%,transparent 25%),linear-gradient(-45deg,#888 25%,transparent 25%);background-size:12px 12px}.swatch-info{padding:10px}.token-name{font-size:12px;font-weight:600;overflow-wrap:anywhere}.token-value{font:11px/1.5 ui-monospace,monospace;color:var(--muted);overflow-wrap:anywhere}.type-row{padding:15px 0;border-bottom:1px solid var(--line);overflow:hidden}.type-row .sample{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:8px 0 4px}.scale{display:flex;align-items:end;gap:14px;flex-wrap:wrap;padding:16px;background:var(--bg);border:1px solid var(--line);border-radius:12px}.space{display:flex;align-items:center;flex-direction:column;gap:8px;font-size:10px}.space-bar{width:14px;max-height:100px;background:#bed8c9;border-radius:4px}.shape{width:48px;height:48px;border:1px solid #739783;background:#263b30;margin:0 auto 8px}.component{padding:15px;border:1px solid var(--line);border-radius:12px;margin:10px 0}.component pre{font:11px/1.6 ui-monospace,monospace;white-space:pre-wrap;color:var(--muted);margin-bottom:0}.captures{display:flex;align-items:start;gap:14px}.captures figure{margin:0;min-width:0;flex:1}.captures figure:last-child{max-width:26%}.captures img{display:block;width:100%;border-radius:8px;border:1px solid var(--line)}.captures figcaption{font-size:11px;color:var(--muted);margin-top:6px}.evidence{color:var(--muted);font-size:12px}.evidence ul{padding-left:18px}.footer{font-size:12px;color:var(--muted);margin-top:25px}[hidden]{display:none!important}@media(max-width:850px){main{padding:28px 18px}.workspace{grid-template-columns:1fr}.result-head{align-items:start;flex-direction:column}.panel-content{max-height:none}header{padding:0 18px}.colors{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:460px){.colors{grid-template-columns:repeat(2,minmax(0,1fr))}.url-form .primary{width:100%}.panel-content{padding:17px}.actions{width:100%}.actions button{flex:1}}
+.result-head>div{min-width:0;max-width:100%}.result-head h2,.document h1,.document h2,.document h3,.evidence li,.component pre{overflow-wrap:anywhere}
+.document code{font:.9em/1.5 ui-monospace,monospace;background:var(--bg);padding:2px 5px;border:1px solid var(--line);border-radius:5px;overflow-wrap:anywhere}.document strong{color:var(--ink);font-weight:650}.md-table{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:10px}.md-table table{width:100%;border-collapse:collapse;font-size:12px}.md-table th,.md-table td{padding:11px 13px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line);min-width:100px;max-width:280px;overflow-wrap:anywhere}.md-table th{color:var(--ink);background:var(--bg);font-weight:650;white-space:nowrap}.md-table td{color:#c3cdc6}.md-table tbody tr:last-child td{border-bottom:0}.md-table tbody tr:hover{background:var(--bg)}
+.md-table td code{display:inline-block;max-width:100%;max-height:7.5em;overflow:auto;vertical-align:top}
+
+/* Realce local: apenas spans e texto, com contraste no tema escuro. */
+.syntax{font:inherit;color:#d7e1dc;tab-size:2}.syntax-comment{color:#9bada3;font-style:italic}.syntax-key,.syntax-attribute{color:#9ed5ff}.syntax-string{color:#b8e39c}.syntax-number{color:#efc58f}.syntax-keyword,.syntax-fence{color:#d1b1f5}.syntax-punctuation{color:#aabbb2}.syntax-heading{color:#8ae0bb;font-weight:650}.syntax-link{color:#9ed5ff;text-decoration:underline;text-decoration-color:#55788e}.syntax-tag,.syntax-selector{color:#f1afb7}.syntax-inline{color:#efc58f}.document pre{font-size:12px;line-height:1.65;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2}.document pre code{display:block;font:inherit;white-space:inherit;background:transparent;border:0;padding:0;border-radius:0;overflow-wrap:inherit}.source code{font:inherit;white-space:inherit;overflow-wrap:inherit}.component pre{overflow-wrap:anywhere}.panel-head>span{flex-shrink:0}.tabs button{white-space:nowrap}
+</style>
+</head>
+<body>
+<header><a class="brand" href="/__anotador/">anotador-ui</a><a href="/" target="_blank" rel="noopener" data-i18n>Voltar ao app ↗</a></header>
+<main>
+<div class="intro"><p class="eyebrow" data-i18n>Biblioteca de referências</p><h1><span data-i18n>O design de um site,</span><br><span data-i18n>pronto para consultar.</span></h1><p data-i18n>Informe uma URL para reunir cores, tipografia, espaçamentos e componentes em um DESIGN.md, com exemplos da página em desktop e celular.</p></div>
+<form id="form" class="url-form"><label><span class="sr" data-i18n>URL do site</span><input id="url" type="text" inputmode="url" autocomplete="url" placeholder="https://exemplo.com" data-i18n-placeholder="https://exemplo.com" required></label><button class="primary" id="extract" type="submit" data-i18n>Extrair design</button></form>
+<p class="hint" data-i18n>A extração abre o site em um navegador separado e mantém seu app conectado.</p>
+<div id="status" class="status" role="status" aria-live="polite"></div>
+<div class="access" id="access" hidden><p data-i18n>Conecte este navegador pelo link de acesso compartilhado por quem iniciou o Anotador e tente novamente.</p><a href="/__anotador/" target="_blank" rel="noopener" data-i18n>Abrir a página de conexão</a></div>
+<div class="empty" id="empty"><strong data-i18n>Uma referência que você pode levar para o projeto</strong><p data-i18n>A prévia organiza os valores encontrados. O arquivo inclui os tokens, exemplos de uso e as diferenças observadas entre desktop e celular.</p></div>
+<section id="result" hidden>
+<div class="result-head"><div><h2 id="site-name"></h2><p id="site-meta"></p></div><div class="actions"><button class="secondary" id="copy" data-i18n>Copiar Markdown</button><button class="primary" id="download">↓ DESIGN.md</button></div></div>
+<div class="workspace"><section class="panel"><div class="panel-head"><span>DESIGN.md</span><div class="tabs" role="tablist" aria-label="Visualização do documento" data-i18n-aria-label="Visualização do documento"><button id="tab-preview" role="tab" aria-selected="true" data-i18n>Prévia</button><button id="tab-source" role="tab" aria-selected="false" data-i18n>Código</button></div></div><div class="panel-content"><article id="preview" class="document"></article><pre class="source" id="source" hidden></pre></div></section><section class="panel"><div class="panel-head"><span data-i18n>Sistema visual</span><span class="muted" id="measured"></span></div><div class="panel-content" id="visual"></div></section></div>
+</section>
+<p class="footer"><span data-i18n>Formato inspirado em</span> <a href="https://github.com/dembrandt/dembrandt" target="_blank" rel="noopener">Dembrandt</a><span data-i18n=" e "> e </span><a href="https://www.design-extractor.com/" target="_blank" rel="noopener">Design Extractor</a><span data-i18n>. Valores medidos na página; o relatório identifica o que não pôde ser observado.</span></p>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const idiomasExtrator = window.__anotador_i18n;
+idiomasExtrator?.registrar({
+  "en": {
+    "Extrair design · anotador-ui": "Extract design · anotador-ui",
+    "Voltar ao app ↗": "Back to app ↗",
+    "Biblioteca de referências": "Reference library",
+    "O design de um site,": "A website's design,",
+    "pronto para consultar.": "ready to explore.",
+    "Informe uma URL para reunir cores, tipografia, espaçamentos e componentes em um DESIGN.md, com exemplos da página em desktop e celular.": "Enter a URL to collect colors, typography, spacing and components in a DESIGN.md, with desktop and mobile page examples.",
+    "URL do site": "Website URL",
+    "https://exemplo.com": "https://example.com",
+    "Extrair design": "Extract design",
+    "Extraindo…": "Extracting…",
+    "A extração abre o site em um navegador separado e mantém seu app conectado.": "Extraction opens the site in a separate browser and keeps your app connected.",
+    "Conecte este navegador pelo link de acesso compartilhado por quem iniciou o Anotador e tente novamente.": "Connect this browser using the access link shared by the person who started the Annotator, then try again.",
+    "Abrir a página de conexão": "Open connection page",
+    "Uma referência que você pode levar para o projeto": "A reference you can bring into your project",
+    "A prévia organiza os valores encontrados. O arquivo inclui os tokens, exemplos de uso e as diferenças observadas entre desktop e celular.": "The preview organizes the values found. The file includes tokens, usage examples and observed differences between desktop and mobile.",
+    "Copiar Markdown": "Copy Markdown",
+    "Visualização do documento": "Document view",
+    "Prévia": "Preview",
+    "Código": "Source",
+    "Sistema visual": "Visual system",
+    "Formato inspirado em": "Format inspired by",
+    " e ": " and ",
+    ". Valores medidos na página; o relatório identifica o que não pôde ser observado.": ". Values measured on the page; the report identifies what could not be observed.",
+    "Cores": "Colors",
+    "Tipografia": "Typography",
+    "Espaçamentos": "Spacing",
+    "Formas": "Shapes",
+    "Sombras": "Shadows",
+    "Componentes observados": "Observed components",
+    "Página analisada": "Analyzed page",
+    "Evidências e limites": "Evidence and limitations",
+    "Design começa nos detalhes.": "Design begins with details.",
+    "Celular": "Mobile",
+    "Página analisada em {tipo}": "Page analyzed on {tipo}",
+    "{n} elementos": "{n} elements",
+    "Tabela do documento; role horizontalmente para ver todas as colunas": "Document table; scroll horizontally to see all columns",
+    "Abrindo a página e medindo as versões desktop e celular. Isso pode levar cerca de um minuto.": "Opening the page and measuring desktop and mobile versions. This may take about a minute.",
+    "Não foi possível extrair este site.": "This website could not be extracted.",
+    "Extração concluída. Você já pode copiar ou baixar o DESIGN.md.": "Extraction complete. You can now copy or download DESIGN.md.",
+    "Use a aba Código para selecionar e copiar o documento.": "Use the Source tab to select and copy the document.",
+    "DESIGN.md copiado.": "DESIGN.md copied."
+  },
+  "es": {
+    "Extrair design · anotador-ui": "Extraer diseño · anotador-ui",
+    "Voltar ao app ↗": "Volver a la app ↗",
+    "Biblioteca de referências": "Biblioteca de referencias",
+    "O design de um site,": "El diseño de un sitio,",
+    "pronto para consultar.": "listo para consultar.",
+    "Informe uma URL para reunir cores, tipografia, espaçamentos e componentes em um DESIGN.md, com exemplos da página em desktop e celular.": "Introduce una URL para reunir colores, tipografía, espaciado y componentes en un DESIGN.md, con ejemplos de la página en escritorio y móvil.",
+    "URL do site": "URL del sitio",
+    "https://exemplo.com": "https://ejemplo.com",
+    "Extrair design": "Extraer diseño",
+    "Extraindo…": "Extrayendo…",
+    "A extração abre o site em um navegador separado e mantém seu app conectado.": "La extracción abre el sitio en un navegador separado y mantiene tu app conectada.",
+    "Conecte este navegador pelo link de acesso compartilhado por quem iniciou o Anotador e tente novamente.": "Conecta este navegador con el enlace compartido por quien inició el Anotador e inténtalo de nuevo.",
+    "Abrir a página de conexão": "Abrir página de conexión",
+    "Uma referência que você pode levar para o projeto": "Una referencia que puedes llevar al proyecto",
+    "A prévia organiza os valores encontrados. O arquivo inclui os tokens, exemplos de uso e as diferenças observadas entre desktop e celular.": "La vista previa organiza los valores encontrados. El archivo incluye tokens, ejemplos de uso y diferencias observadas entre escritorio y móvil.",
+    "Copiar Markdown": "Copiar Markdown",
+    "Visualização do documento": "Vista del documento",
+    "Prévia": "Vista previa",
+    "Código": "Código",
+    "Sistema visual": "Sistema visual",
+    "Formato inspirado em": "Formato inspirado en",
+    " e ": " y ",
+    ". Valores medidos na página; o relatório identifica o que não pôde ser observado.": ". Valores medidos en la página; el informe identifica lo que no pudo observarse.",
+    "Cores": "Colores",
+    "Tipografia": "Tipografía",
+    "Espaçamentos": "Espaciado",
+    "Formas": "Formas",
+    "Sombras": "Sombras",
+    "Componentes observados": "Componentes observados",
+    "Página analisada": "Página analizada",
+    "Evidências e limites": "Evidencias y limitaciones",
+    "Design começa nos detalhes.": "El diseño comienza en los detalles.",
+    "Celular": "Móvil",
+    "Página analisada em {tipo}": "Página analizada en {tipo}",
+    "{n} elementos": "{n} elementos",
+    "Tabela do documento; role horizontalmente para ver todas as colunas": "Tabla del documento; desplázate horizontalmente para ver todas las columnas",
+    "Abrindo a página e medindo as versões desktop e celular. Isso pode levar cerca de um minuto.": "Abriendo la página y midiendo las versiones de escritorio y móvil. Esto puede tardar alrededor de un minuto.",
+    "Não foi possível extrair este site.": "No se pudo extraer este sitio.",
+    "Extração concluída. Você já pode copiar ou baixar o DESIGN.md.": "Extracción completada. Ya puedes copiar o descargar DESIGN.md.",
+    "Use a aba Código para selecionar e copiar o documento.": "Usa la pestaña Código para seleccionar y copiar el documento.",
+    "DESIGN.md copiado.": "DESIGN.md copiado."
+  }
+});
+function rotularExtrator(no, texto, parametros) { no.dataset.i18n = texto; if (parametros) no.dataset.i18nParams = JSON.stringify(parametros); else delete no.dataset.i18nParams; no.textContent = idiomasExtrator?.t(texto, parametros) ?? texto.replace(/\{(\w+)\}/g, (original, chave) => String(parametros?.[chave] ?? original)); return no; }
+function atualizarIdiomaExtrator() { document.documentElement.lang = idiomasExtrator?.idioma() ?? "pt-BR"; idiomasExtrator?.traduzir(document); }
+atualizarIdiomaExtrator();
+idiomasExtrator?.observar(atualizarIdiomaExtrator);
+const el = (tag, classe, texto) => { const n = document.createElement(tag); if (classe) n.className = classe; if (texto !== undefined) n.textContent = texto; return n; };
+const urlInicial = new URL(location.href).searchParams.get("url");
+if (urlInicial) $("url").value = urlInicial;
+let resultado = null;
+const sessaoPronta = (async () => {
+  let chave = "";
+  try { chave = sessionStorage.getItem("anotador.chave") || localStorage.getItem("anotador-ui:chave") || ""; } catch {}
+  if (!chave) return;
+  try {
+    const r = await fetch("/__anotador/acesso/sessao", { method: "POST", credentials: "same-origin", headers: { "x-anotador-chave": chave } });
+    if (r.ok) {
+      try { sessionStorage.removeItem("anotador.chave"); } catch {}
+      try { localStorage.removeItem("anotador-ui:chave"); } catch {}
+    }
+  } catch {}
+})();
+function status(texto, erro = false) { rotularExtrator($("status"), texto); $("status").classList.toggle("error", erro); }
+function fecharCodigo(texto, inicio, tamanho) {
+  for (let i = inicio; i < texto.length; i++) {
+    if (texto[i] !== "`") continue;
+    let fim = i + 1; while (texto[fim] === "`") fim++;
+    if (fim - i === tamanho) return i;
+    i = fim - 1;
+  }
+  return -1;
+}
+function fecharForte(texto, inicio, marcador) {
+  for (let i = inicio; i < texto.length - 1; i++) {
+    if (texto[i] === "\\") { i++; continue; }
+    if (texto[i] === "`") {
+      let tamanho = 1; while (texto[i + tamanho] === "`") tamanho++;
+      const fim = fecharCodigo(texto, i + tamanho, tamanho);
+      if (fim !== -1) { i = fim + tamanho - 1; continue; }
+    }
+    if (texto.startsWith(marcador, i)) return i;
+  }
+  return -1;
+}
+function textoInline(destino, texto, emTabela = false, nivel = 0) {
+  let simples = "";
+  const descarregar = () => { if (simples) destino.append(document.createTextNode(simples)); simples = ""; };
+  for (let i = 0; i < texto.length;) {
+    if (texto[i] === "\\" && /[\\`*_{}\[\]<>|]/.test(texto[i + 1] || "")) { simples += texto[i + 1]; i += 2; continue; }
+    if (texto[i] === "`") {
+      let tamanho = 1; while (texto[i + tamanho] === "`") tamanho++;
+      const fim = fecharCodigo(texto, i + tamanho, tamanho);
+      if (fim !== -1) {
+        descarregar();
+        const conteudo = texto.slice(i + tamanho, fim);
+        destino.append(el("code", "", emTabela ? conteudo.replace(/\\\|/g, "|") : conteudo));
+        i = fim + tamanho; continue;
+      }
+      simples += texto.slice(i, i + tamanho); i += tamanho; continue;
+    }
+    const marcador = texto.slice(i, i + 2);
+    if (nivel < 8 && (marcador === "**" || marcador === "__")) {
+      const fim = fecharForte(texto, i + 2, marcador);
+      if (fim > i + 2) {
+        descarregar(); const forte = el("strong");
+        textoInline(forte, texto.slice(i + 2, fim), emTabela, nivel + 1); destino.append(forte);
+        i = fim + 2; continue;
+      }
+    }
+    simples += texto[i++];
+  }
+  descarregar();
+}
+function celulasTabela(linha) {
+  const texto = linha.trim(); const celulas = []; let celula = "";
+  for (let i = texto.startsWith("|") ? 1 : 0; i < texto.length; i++) {
+    if (texto[i] === "\\" && i + 1 < texto.length) { celula += texto.slice(i, i + 2); i++; continue; }
+    if (texto[i] === "`") {
+      let tamanho = 1; while (texto[i + tamanho] === "`") tamanho++;
+      const fim = fecharCodigo(texto, i + tamanho, tamanho);
+      if (fim !== -1) { celula += texto.slice(i, fim + tamanho); i = fim + tamanho - 1; continue; }
+    }
+    if (texto[i] === "|") { celulas.push(celula.trim()); celula = ""; }
+    else celula += texto[i];
+  }
+  if (celula.trim() || !texto.endsWith("|")) celulas.push(celula.trim());
+  return celulas;
+}
+// O realce nunca interpreta HTML e nunca modifica o Markdown original.
+// Limites mantêm o relatório inteiro legível mesmo com conteúdo muito grande.
+function realcarCodigo(destino, texto, linguagem) {
+  const code = el("code", "syntax"); code.dataset.language = String(linguagem || "text").toLowerCase();
+  destino.replaceChildren(code);
+  if (texto.length > 2 * 1024 * 1024) { code.textContent = texto; return; }
+  const frag = document.createDocumentFragment(); let simples = "", nos = 0;
+  const adicionar = (tipo, trecho) => {
+    if (!trecho) return;
+    if (!tipo || nos >= 40000) { simples += trecho; return; }
+    if (simples) { frag.append(document.createTextNode(simples)); simples = ""; }
+    frag.append(el("span", "syntax-" + tipo, trecho)); nos++;
+  };
+  const estado = { comentario: false, tag: false, yaml: false, cerca: "", tamanho: 0, linguagem: "" };
+  const linguagens = { yml:"yaml", yaml:"yaml", css:"css", scss:"css", json:"json", jsonc:"json", html:"html", xml:"html", svg:"html", md:"markdown", markdown:"markdown", js:"javascript", javascript:"javascript", ts:"javascript", typescript:"javascript" };
+  const lingua = (nome) => linguagens[String(nome).toLowerCase()] || "text";
+  function linhaCodigo(linha, modo) {
+    if (modo === "text") { adicionar("", linha); return; }
+    let i = 0; const abreCss = modo === "css" ? linha.indexOf("{") : -1;
+    while (i < linha.length) {
+      if (nos >= 40000) { adicionar("", linha.slice(i)); break; }
+      if (estado.comentario) {
+        const marcador = modo === "html" ? "-->" : "*/", fim = linha.indexOf(marcador, i);
+        const ate = fim < 0 ? linha.length : fim + marcador.length;
+        adicionar("comment", linha.slice(i, ate)); i = ate; if (fim >= 0) estado.comentario = false; continue;
+      }
+      if ((modo === "html" && linha.startsWith("<!--", i)) || ((modo === "css" || modo === "javascript" || modo === "json") && linha.startsWith("/*", i))) {
+        estado.comentario = true; continue;
+      }
+      if ((modo === "yaml" && linha[i] === "#" && (i === 0 || /\s/.test(linha[i - 1]))) || ((modo === "json" || modo === "javascript") && linha.startsWith("//", i))) { adicionar("comment", linha.slice(i)); break; }
+      const char = linha[i];
+      if (char === '"' || char === "'" || (modo === "javascript" && char === "`")) {
+        let fim = i + 1;
+        while (fim < linha.length) {
+          if (linha[fim] === "\\") { fim = Math.min(linha.length, fim + 2); continue; }
+          if (linha[fim++] === char) { if (modo === "yaml" && char === "'" && linha[fim] === "'") { fim++; continue; } break; }
+        }
+        const chave = (modo === "yaml" || modo === "json") && /^\s*:/.test(linha.slice(fim));
+        adicionar(chave ? "key" : "string", linha.slice(i, fim)); i = fim; continue;
+      }
+      if (modo === "html" && char === "<") {
+        const tag = /^<\/?[A-Za-z][\w:-]*/.exec(linha.slice(i));
+        if (tag) { adicionar("tag", tag[0]); i += tag[0].length; estado.tag = true; continue; }
+      }
+      if (modo === "html" && estado.tag && (char === ">" || linha.startsWith("/>", i))) {
+        const trecho = char === ">" ? ">" : "/>"; adicionar("tag", trecho); i += trecho.length; estado.tag = false; continue;
+      }
+      if ((modo === "css" && char === "#") || /[0-9]/.test(char) || (char === "-" && /[0-9]/.test(linha[i+1] || ""))) {
+        const numero = modo === "css" && char === "#" ? /^#[0-9a-fA-F]{3,8}\b/.exec(linha.slice(i)) : /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?(?:px|rem|em|vh|vw|ms|s|%)?/i.exec(linha.slice(i));
+        if (numero) { adicionar("number", numero[0]); i += numero[0].length; continue; }
+      }
+      if (/[A-Za-z_$-]/.test(char)) {
+        let fim = i + 1; while (fim < linha.length && /[\w$.-]/.test(linha[fim])) fim++;
+        const palavra = linha.slice(i, fim), depois = linha.slice(fim);
+        const chave = (modo === "yaml" || modo === "css") && /^\s*:/.test(depois);
+        const atributo = modo === "html" && estado.tag && /^\s*=/.test(depois);
+        const reservada = /^(?:true|false|null|undefined|yes|no|on|off|const|let|var|function|return|if|else|import|from|export|default|async|await|new)$/.test(palavra);
+        const seletor = modo === "css" && abreCss >= fim;
+        adicionar(chave ? "key" : atributo ? "attribute" : reservada ? "keyword" : seletor ? "selector" : "", palavra); i = fim; continue;
+      }
+      adicionar(/[{}[\]:,;=]/.test(char) ? "punctuation" : "", char); i++;
+    }
+  }
+  function linhaMarkdown(linha, primeira) {
+    const limpa = linha.trim();
+    if (primeira && limpa === "---") { estado.yaml = true; adicionar("fence", linha); return; }
+    if (estado.yaml) {
+      if (limpa === "---" || limpa === "...") { estado.yaml = false; adicionar("fence", linha); }
+      else linhaCodigo(linha, "yaml");
+      return;
+    }
+    const cerca = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(linha);
+    if (estado.cerca) {
+      if (cerca && cerca[1][0] === estado.cerca && cerca[1].length >= estado.tamanho && !cerca[2].trim()) { estado.cerca = ""; estado.comentario = false; estado.tag = false; adicionar("fence", linha); }
+      else linhaCodigo(linha, estado.linguagem);
+      return;
+    }
+    if (cerca) { estado.cerca = cerca[1][0]; estado.tamanho = cerca[1].length; estado.linguagem = lingua(cerca[2].trim().split(/\s/)[0]); adicionar("fence", linha); return; }
+    if (/^\s{0,3}#{1,6}\s/.test(linha)) { adicionar("heading", linha); return; }
+    let i = 0;
+    while (i < linha.length) {
+      if (linha[i] === "`") {
+        let fimMarca = i + 1; while (linha[fimMarca] === "`") fimMarca++;
+        const marca = linha.slice(i, fimMarca), fim = linha.indexOf(marca, fimMarca);
+        if (fim >= 0) { adicionar("inline", linha.slice(i, fim + marca.length)); i = fim + marca.length; continue; }
+        adicionar("", linha.slice(i)); break;
+      }
+      if (linha[i] === "[") {
+        const fimNome = linha.indexOf("](", i + 1), fimUrl = fimNome < 0 ? -1 : linha.indexOf(")", fimNome + 2);
+        if (fimUrl >= 0) { adicionar("link", linha.slice(i, fimUrl + 1)); i = fimUrl + 1; continue; }
+        adicionar("", linha.slice(i)); break;
+      }
+      if (linha.startsWith("**", i) || linha.startsWith("__", i)) {
+        const marca = linha.slice(i, i + 2), fim = linha.indexOf(marca, i + 2);
+        if (fim >= 0) { adicionar("heading", linha.slice(i, fim + 2)); i = fim + 2; continue; }
+      }
+      adicionar("", linha[i++]);
+    }
+  }
+  const partes = texto.split(/(\r\n|\r|\n)/), modo = lingua(linguagem);
+  for (let i = 0; i < partes.length; i++) {
+    const parte = partes[i];
+    if (i % 2 || parte.length > 20000 || nos >= 40000) adicionar("", parte);
+    else if (modo === "markdown") linhaMarkdown(parte, i === 0);
+    else linhaCodigo(parte, modo);
+  }
+  if (simples) frag.append(document.createTextNode(simples));
+  code.append(frag);
+}
+function documento(md) {
+  const box = $("preview"); box.replaceChildren();
+  const linhas = md.replace(/\r\n?/g, "\n").split("\n"); let indice = 0;
+  if (linhas[0] === "---") { const fim = linhas.indexOf("---", 1); if (fim > 0) { const d = el("details"), pre = el("pre"); realcarCodigo(pre, linhas.slice(1, fim).join("\n"), "yaml"); d.append(el("summary", "", "Tokens · YAML"), pre); box.append(d); indice = fim + 1; } }
+  let codigo = null, linhasCodigo = [], linguagemCodigo = "", marcadorCodigo = "";
+  const fecharBloco = () => { if (codigo) realcarCodigo(codigo, linhasCodigo.join("\n") + (linhasCodigo.length ? "\n" : ""), linguagemCodigo); codigo = null; };
+  for (; indice < linhas.length; indice++) {
+    const linha = linhas[indice];
+    const cerca = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(linha);
+    if (codigo) {
+      if (cerca && cerca[1][0] === marcadorCodigo[0] && cerca[1].length >= marcadorCodigo.length && !cerca[2].trim()) fecharBloco();
+      else linhasCodigo.push(linha);
+      continue;
+    }
+    if (cerca) { codigo = el("pre"); linhasCodigo = []; marcadorCodigo = cerca[1]; linguagemCodigo = cerca[2].trim().split(/\s/)[0]; box.append(codigo); continue; }
+    const h = /^(#{1,3})\s+(.+)$/.exec(linha);
+    if (h) { const titulo = el("h" + h[1].length); textoInline(titulo, h[2]); box.append(titulo); }
+    else if (/^[-*] /.test(linha)) { let lista = box.lastElementChild; if (!lista || lista.tagName !== "UL") { lista = el("ul"); box.append(lista); } const item = el("li"); textoInline(item, linha.slice(2)); lista.append(item); }
+    else if (linha.trim().startsWith("|") && linhas[indice + 1]?.trim().startsWith("|") && celulasTabela(linhas[indice + 1]).every((c) => /^:?-{3,}:?$/.test(c))) {
+      const cabecalhos = celulasTabela(linha), separadores = celulasTabela(linhas[++indice]);
+      const wrap = el("div", "md-table"), tabela = el("table"), cab = el("thead"), corpo = el("tbody");
+      wrap.tabIndex = 0; wrap.setAttribute("role", "region"); wrap.setAttribute("aria-label", "Tabela do documento; role horizontalmente para ver todas as colunas");
+      const adicionar = (valores, pai, tag) => {
+        const row = el("tr");
+        for (let i = 0; i < cabecalhos.length; i++) {
+          const celula = el(tag); if (tag === "th") celula.setAttribute("scope", "col");
+          const separador = separadores[i] || "";
+          celula.style.textAlign = separador.endsWith(":") ? (separador.startsWith(":") ? "center" : "right") : "left";
+          textoInline(celula, valores[i] || "", true); row.append(celula);
+        }
+        pai.append(row);
+      };
+      adicionar(cabecalhos, cab, "th");
+      while (linhas[indice + 1]?.trim().startsWith("|")) adicionar(celulasTabela(linhas[++indice]), corpo, "td");
+      tabela.append(cab, corpo); wrap.append(tabela); box.append(wrap);
+    }
+    else if (linha.trim()) { const paragrafo = el("p"); textoInline(paragrafo, linha); box.append(paragrafo); }
+  }
+  fecharBloco();
+}
+function secao(titulo, corpo) { const s = el("section", "visual-section"); s.append(rotularExtrator(el("h3"), titulo), corpo); $("visual").append(s); }
+function visualizar(r) {
+  $("visual").replaceChildren(); const t = r.tokens;
+  const colors = el("div", "colors");
+  for (const [nome, valor] of Object.entries(t.colors)) { const card = el("div", "swatch"), cor = el("div", "swatch-color"), info = el("div", "swatch-info"); cor.style.background = valor; info.append(el("div", "token-name", nome), el("div", "token-value", valor)); card.append(cor, info); colors.append(card); } secao("Cores", colors);
+  const tipos = el("div");
+  for (const [nome, v] of Object.entries(t.typography)) { const row = el("div", "type-row"), amostra = rotularExtrator(el("div", "sample"), "Design começa nos detalhes."); Object.assign(amostra.style, {fontFamily:v.fontFamily,fontSize:v.fontSize,fontWeight:v.fontWeight,lineHeight:v.lineHeight,letterSpacing:v.letterSpacing}); row.append(el("div", "token-name", nome), amostra, el("div", "token-value", [v.fontFamily, v.fontSize, v.fontWeight, v.lineHeight].join(" · "))); tipos.append(row); } secao("Tipografia", tipos);
+  const escala = el("div", "scale"); for (const [nome, v] of Object.entries(t.spacing)) { const item = el("div", "space"), bar = el("div", "space-bar"); bar.style.height = Math.max(2, Math.min(100, parseFloat(v) || 0)) + "px"; item.append(bar, el("span", "", nome), el("span", "token-value", v)); escala.append(item); } secao("Espaçamentos", escala);
+  const formas = el("div", "scale"); for (const [nome, v] of Object.entries(t.rounded)) { const item = el("div", "space"), forma = el("div", "shape"); forma.style.borderRadius = v; item.append(forma, el("span", "", nome), el("span", "token-value", v)); formas.append(item); } secao("Formas", formas);
+  if (Object.keys(t.shadows || {}).length) { const sombras = el("div", "scale"); for (const [nome, v] of Object.entries(t.shadows)) { const item = el("div", "space"), forma = el("div", "shape"); forma.style.boxShadow = v; item.append(forma, el("span", "", nome)); sombras.append(item); } secao("Sombras", sombras); }
+  const componentes = el("div"); for (const [nome, v] of Object.entries(t.components)) { const card = el("div", "component"), pre = el("pre"); realcarCodigo(pre, Object.entries(v).map(([k,x]) => k + ": " + x).join("\n"), "yaml"); card.append(el("strong", "", nome), pre); componentes.append(card); } secao("Componentes observados", componentes);
+  if (r.capturas) { const capturas = el("div", "captures"); for (const tipo of ["desktop", "mobile"]) { if (!r.capturas[tipo]) continue; const figure = el("figure"), img = el("img"); img.src = "data:image/png;base64," + r.capturas[tipo]; img.dataset.i18nAlt = "Página analisada em {tipo}"; img.dataset.i18nParams = JSON.stringify({tipo}); img.alt = idiomasExtrator?.t("Página analisada em {tipo}", {tipo}) ?? "Página analisada em " + tipo; figure.append(img, rotularExtrator(el("figcaption"), tipo === "desktop" ? "Desktop" : "Celular")); capturas.append(figure); } secao("Página analisada", capturas); }
+  const evidencia = el("div", "evidence"), lista = el("ul"); for (const v of r.evidencias.viewports) lista.append(el("li", "", `${v.nome}: ${v.largura} × ${v.altura} · ${v.elementosAnalisados} elementos`)); for (const l of r.evidencias.limitacoes) lista.append(el("li", "", l)); evidencia.append(lista); secao("Evidências e limites", evidencia);
+}
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault(); if ($("extract").disabled) return;
+  $("extract").disabled = true; rotularExtrator($("extract"), "Extraindo…"); status("Abrindo a página e medindo as versões desktop e celular. Isso pode levar cerca de um minuto.");
+  try {
+    await sessaoPronta;
+    const resp = await fetch("/__anotador/extrair", {method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify({url:$("url").value.trim()})});
+    const dados = await resp.json();
+    if (resp.status === 403) { $("access").hidden = false; throw new Error("Conecte este navegador pelo link de acesso compartilhado por quem iniciou o Anotador e tente novamente."); }
+    if (!resp.ok) throw new Error(dados.erro || "Não foi possível extrair este site.");
+    resultado = dados.resultado; $("site-name").textContent = resultado.nome; $("site-meta").textContent = resultado.url + " · " + new Date(resultado.extraidoEm).toLocaleString(idiomasExtrator?.idioma() ?? "pt-BR"); realcarCodigo($("source"), resultado.markdown, "markdown");
+    documento(resultado.markdown); visualizar(resultado); rotularExtrator($("measured"), "{n} elementos", {n:resultado.evidencias.viewports.reduce((n,v) => n + v.elementosAnalisados, 0)});
+    $("result").hidden = false; $("empty").hidden = true; $("access").hidden = true; status("Extração concluída. Você já pode copiar ou baixar o DESIGN.md.");
+  } catch (erro) { status(erro.message || String(erro), true); }
+  finally { $("extract").disabled = false; rotularExtrator($("extract"), "Extrair design"); }
+});
+$("download").addEventListener("click", () => { if (!resultado) return; const url = URL.createObjectURL(new Blob([resultado.markdown], {type:"text/markdown;charset=utf-8"})); const a = el("a"); a.href=url; a.download="DESIGN.md"; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url),60000); });
+$("copy").addEventListener("click", async () => { if (!resultado) return; try { await navigator.clipboard.writeText(resultado.markdown); } catch { const a = el("textarea"); a.value=resultado.markdown; document.body.append(a); a.select(); const copiou=document.execCommand("copy"); a.remove(); if (!copiou) { status("Use a aba Código para selecionar e copiar o documento.",true); return; } } status("DESIGN.md copiado."); });
+for (const aba of ["preview","source"]) $("tab-" + aba).addEventListener("click", () => { $("preview").hidden = aba !== "preview"; $("source").hidden = aba !== "source"; $("tab-preview").setAttribute("aria-selected", String(aba === "preview")); $("tab-source").setAttribute("aria-selected", String(aba === "source")); });
+</script>
+</body>
+</html>

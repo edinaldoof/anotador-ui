@@ -1,6 +1,7 @@
 // Reescrita da resposta do app alvo: injeção do overlay respeitando a CSP da página.
 
 import type { IncomingHttpHeaders, OutgoingHttpHeaders } from "node:http";
+import { CABECALHO_CHAVE, COOKIE_SESSAO } from "./acesso.ts";
 
 const HOP_A_HOP = new Set([
   "connection",
@@ -86,6 +87,12 @@ export function cabecalhosParaAlvo(cabecalhos: IncomingHttpHeaders, ctx: Context
   for (const [nome, valor] of Object.entries(cabecalhos)) {
     if (valor === undefined) continue;
     const chave = nome.toLowerCase();
+    if (chave === CABECALHO_CHAVE) continue;
+    if (chave === "cookie") {
+      const cookies = String(valor).split(";").filter((cookie) => cookie.trim().split("=", 1)[0] !== COOKIE_SESSAO).map((cookie) => cookie.trim()).filter(Boolean);
+      if (cookies.length) saida[nome] = cookies.join("; ");
+      continue;
+    }
     if (HOP_A_HOP.has(chave) && chave !== "upgrade" && chave !== "connection") continue;
     if (chave === "accept-encoding") continue;
     if (chave === "host") {

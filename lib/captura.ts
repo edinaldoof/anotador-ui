@@ -56,11 +56,12 @@ async function capturar(fila: Fila, lote: Lote, opcoes: OpcoesCaptura): Promise<
     for (const a of lote.anotacoes) {
       const r = a.elemento.rectPagina;
       if (!r || r.width <= 0 || r.height <= 0) continue;
+      const margem = a.area ? 0 : MARGEM;
       const clip: Rect = {
-        left: Math.max(0, r.left - MARGEM),
-        top: Math.max(0, r.top - MARGEM),
-        width: r.width + MARGEM * 2,
-        height: r.height + MARGEM * 2,
+        left: Math.max(0, r.left - margem),
+        top: Math.max(0, r.top - margem),
+        width: r.width + margem * 2,
+        height: r.height + margem * 2,
       };
       const caminho = join(dir, `anotacao-${a.ordem}.png`);
       await writeFile(caminho, await pagina.capturar({ clip }));

@@ -89,3 +89,53 @@ test("aceitarWs responde ping com pong", async () => {
     await new Promise<void>((r) => servidor.close(() => r()));
   }
 });
+
+test("difusor entrega tarefas só ao agente escolhido e mantém os demais eventos públicos", { timeout: 5000 }, async () => {
+  const difusor = new Difusor();
+  const servidor = createServer();
+  servidor.on("upgrade", (req, socket) => difusor.aceitar(req, socket));
+  await new Promise<void>((resolver) => servidor.listen(0, "127.0.0.1", resolver));
+  const endereco = servidor.address();
+  assert.ok(endereco && typeof endereco === "object");
+  const origem = `ws://127.0.0.1:${endereco.port}/eventos`;
+  const clientes: Awaited<ReturnType<typeof abrirWs>>[] = [];
+  try {
+    const claude = await abrirWs(origem + "?agente=Claude");
+    clientes.push(claude);
+    const codex = await abrirWs(origem + "?agente=%20Codex%20");
+    clientes.push(codex);
+    const anonimo = await abrirWs(origem);
+    clientes.push(anonimo);
+
+    const lote = { tipo: "lote", id: "para-codex" } satisfies EventoAnotador;
+    const avaliacao = { tipo: "avaliacao", id: "avaliacao-codex" } satisfies EventoAnotador;
+    assert.equal(difusor.transmitir(lote, "codex"), 1);
+    assert.equal(difusor.transmitir(avaliacao, "CoDeX"), 1);
+    assert.equal(difusor.transmitir({ tipo: "lote", id: "sem-gemini" }, "gemini"), 0, "outros agentes e anônimos não impedem a ponte escolhida de iniciar");
+
+    const parecer = { tipo: "parecer", id: "parecer-publico" } satisfies EventoAnotador;
+    assert.equal(difusor.transmitir(parecer), 3);
+    assert.deepEqual(JSON.parse(await claude.proximo()), parecer, "Claude não recebeu as tarefas do Codex");
+    assert.deepEqual(JSON.parse(await anonimo.proximo()), parecer, "um ouvinte sem identidade não recebe tarefas dirigidas");
+    assert.deepEqual(JSON.parse(await codex.proximo()), lote);
+    assert.deepEqual(JSON.parse(await codex.proximo()), avaliacao);
+    assert.deepEqual(JSON.parse(await codex.proximo()), parecer);
+
+    const paraClaude = { tipo: "lote", id: "para-claude" } satisfies EventoAnotador;
+    assert.equal(difusor.transmitir(paraClaude, "claude"), 1, "a identidade Claude da skill combina com o id claude");
+    assert.deepEqual(JSON.parse(await claude.proximo()), paraClaude);
+
+    for (const evento of [
+      { tipo: "mensagem", id: "conversa-publica" },
+      { tipo: "lote", id: "sem-ponte" },
+    ] satisfies EventoAnotador[]) {
+      assert.equal(difusor.transmitir(evento, null), 3, "sem filtro, mantém a difusão normal");
+      for (const cliente of clientes) assert.deepEqual(JSON.parse(await cliente.proximo()), evento);
+    }
+  } finally {
+    for (const cliente of clientes) cliente.fechar();
+    difusor.fecharTodas();
+    servidor.closeAllConnections();
+    await new Promise<void>((resolver) => servidor.close(() => resolver()));
+  }
+});

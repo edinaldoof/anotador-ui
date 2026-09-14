@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Microfone · Anotador</title>
+  <style>
+    :root { color-scheme: dark; font: 16px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif; color: #edf3f0; background: #161c19; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 560px; margin: 0 auto; padding: 32px 24px; }
+    .marca { color: #8adeb9; font-size: 13px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { margin: 12px 0; font-size: clamp(27px, 7vw, 34px); line-height: 1.15; letter-spacing: -.035em; }
+    p { color: #a8b8af; margin: 12px 0 20px; }
+    label { display: block; font-size: 14px; font-weight: 600; margin: 22px 0 8px; }
+    textarea { display: block; resize: vertical; width: 100%; min-height: 180px; border: 1px solid #36453e; border-radius: 16px; background: #202924; color: #edf3f0; font: inherit; padding: 16px; }
+    textarea:focus-visible, button:focus-visible { outline: 3px solid #8adeb9; outline-offset: 3px; }
+    .acoes { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+    button { border: 1px solid #39463f; border-radius: 999px; padding: 12px 18px; font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; background: #26312b; color: #edf3f0; }
+    button:hover:not(:disabled) { background: #34453b; }
+    button:disabled { cursor: default; opacity: .45; }
+    #comecar { background: #8adeb9; border-color: #8adeb9; color: #112d20; }
+    #comecar:hover:not(:disabled) { background: #b0f0d0; }
+    #concluir { margin-left: auto; }
+    #status { min-height: 48px; margin-top: 18px; font-size: 14px; }
+    #status[data-estado="ouvindo"] { color: #8adeb9; }
+    #status[data-estado="erro"] { color: #ffb5a3; }
+    .nota { border-top: 1px solid #2b3931; padding-top: 18px; font-size: 12px; }
+    @media (max-width: 380px) { main { padding: 24px 18px; } #concluir { margin-left: 0; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="marca">Anotador · Microfone</div>
+  <h1>Dite seu comentário</h1>
+  <p>O texto aparece na página original enquanto você fala. Suas anotações continuam abertas.</p>
+  <div id="status" role="status" aria-live="polite">Conectando à página original…</div>
+  <label for="transcricao">Sua transcrição</label>
+  <textarea id="transcricao" readonly placeholder="Sua fala aparecerá aqui…"></textarea>
+  <div class="acoes">
+    <button id="comecar" type="button" disabled>Começar ditado</button>
+    <button id="parar" type="button" disabled>Pausar</button>
+    <button id="concluir" type="button">Concluir</button>
+  </div>
+  <p class="nota">O reconhecimento usa o serviço de voz do navegador. O Anotador recebe somente o texto. Concluir mantém o comentário como rascunho.</p>
+</main>
+<script>
+(() => {
+  "use strict";
+  const status = document.getElementById("status");
+  const campo = document.getElementById("transcricao");
+  const comecar = document.getElementById("comecar");
+  const parar = document.getElementById("parar");
+  const concluir = document.getElementById("concluir");
+  const parametros = new URLSearchParams(location.hash.slice(1));
+  const canal = parametros.get("canal") || "";
+  let origem;
+  try { origem = new URL(parametros.get("origem") || ""); } catch { origem = null; }
+  const pagina = window.opener;
+  let conectado = false;
+  let encerrado = false;
+  let reconhecimento = null;
+  let intervalo = null;
+  function mostrar(texto, estado = "") {
+    status.textContent = texto;
+    status.dataset.estado = estado;
+  }
+  function erroVoz(erro) {
+    const mensagens = {
+      "not-allowed": "Permita o microfone nas permissões deste site no navegador e clique em Começar ditado.",
+      "audio-capture": "Não consegui acessar o microfone. Verifique se ele está conectado e disponível.",
+      "network": "O serviço de ditado não respondeu. Verifique a conexão e tente novamente.",
+      "service-not-allowed": "Este navegador não disponibilizou o serviço de ditado. Tente abrir o Anotador no Chrome.",
+      "no-speech": "Não detectei fala. Clique em Começar ditado e tente novamente.",
+      "language-not-supported": "O ditado em português não está disponível neste navegador.",
+      "aborted": "Ditado interrompido. Você pode começar novamente."
+    };
+    return mensagens[erro] || "Não consegui iniciar o ditado. Verifique a permissão do microfone e tente novamente.";
+  }
+  function enviar(tipo, dados = {}) {
+    if (!pagina || !origem || encerrado) return;
+    try { pagina.postMessage({ ...dados, tipo, canal }, origem.origin); } catch { /* página fechada */ }
+  }
+  function atualizarBotoes(ativo) {
+    comecar.disabled = !conectado || ativo;
+    parar.disabled = !ativo;
+  }
+  function encerrar(fechar = true) {
+    if (encerrado) return;
+    enviar("anotador:voz:encerrou");
+    encerrado = true;
+    clearInterval(intervalo);
+    window.removeEventListener("message", receber);
+    const rec = reconhecimento;
+    reconhecimento = null;
+    try { rec?.abort(); } catch { /* reconhecimento já parado */ }
+    comecar.disabled = true;
+    parar.disabled = true;
+    if (fechar) window.close();
+  }
+  function receber(evento) {
+    if (encerrado || !origem || evento.origin !== origem.origin || evento.source !== pagina) return;
+    const dados = evento.data;
+    if (!dados || typeof dados !== "object" || dados.canal !== canal) return;
+    if (dados.tipo === "anotador:voz:conectar" && !conectado) {
+      conectado = true;
+      atualizarBotoes(false);
+      mostrar("Pronto. Clique em Começar ditado e permita o microfone quando o navegador solicitar.");
+    } else if (dados.tipo === "anotador:voz:parar") encerrar();
+  }
+  concluir.addEventListener("click", () => encerrar());
+  if (!origem || origem.host !== location.host || !["http:", "https:"].includes(origem.protocol) || origem.username || origem.password || !/^[a-f0-9]{32}$/.test(canal) || !pagina) {
+    mostrar("Abra o microfone pelo botão de ditado na página do Anotador.", "erro");
+    return;
+  }
+  if (!window.isSecureContext) {
+    mostrar("Esta janela precisa de uma conexão HTTPS válida para acessar o microfone. Abra o endereço seguro do Anotador.", "erro");
+    return;
+  }
+  window.addEventListener("message", receber);
+  window.addEventListener("pagehide", () => encerrar(false), { once: true });
+  enviar("anotador:voz:pronto");
+  const esperaAte = Date.now() + 120000;
+  intervalo = setInterval(() => {
+    if (pagina.closed || (!conectado && Date.now() > esperaAte)) {
+      encerrar(false);
+      mostrar("A página original foi fechada ou não respondeu. Abra o microfone por ela novamente.", "erro");
+    } else if (!conectado) enviar("anotador:voz:pronto");
+  }, 500);
+  comecar.addEventListener("click", () => {
+    if (!conectado || encerrado || reconhecimento) return;
+    const Reconhecimento = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Reconhecimento) {
+      mostrar("Este navegador não oferece ditado. Tente abrir o Anotador no Chrome.", "erro");
+      enviar("anotador:voz:erro", { erro: "service-not-allowed" });
+      return;
+    }
+    const rec = new Reconhecimento();
+    reconhecimento = rec;
+    rec.lang = "pt-BR";
+    rec.interimResults = true;
+    rec.continuous = true;
+    const base = campo.value ? campo.value.trimEnd() + " " : "";
+    let falhou = false;
+    atualizarBotoes(true);
+    mostrar("Aguardando a permissão do microfone…");
+    enviar("anotador:voz:aguardando");
+    rec.addEventListener("start", () => {
+      if (reconhecimento !== rec || encerrado) return;
+      mostrar("Ouvindo… fale naturalmente. Use Pausar quando terminar.", "ouvindo");
+      enviar("anotador:voz:iniciou");
+    });
+    rec.onresult = (evento) => {
+      if (reconhecimento !== rec || encerrado) return;
+      let texto = "";
+      for (let i = 0; i < evento.results.length; i++) texto += (evento.results[i]?.[0]?.transcript || "") + " ";
+      campo.value = (base + texto).replace(/\s+/g, " ").slice(0, 100000);
+      enviar("anotador:voz:resultado", { texto: campo.value });
+    };
+    rec.onerror = (evento) => {
+      if (reconhecimento !== rec || encerrado) return;
+      falhou = true;
+      mostrar(erroVoz(evento.error), "erro");
+      enviar("anotador:voz:erro", { erro: evento.error || "" });
+      reconhecimento = null;
+      atualizarBotoes(false);
+      try { rec.abort(); } catch { /* já encerrado */ }
+    };
+    rec.onend = () => {
+      if (encerrado || reconhecimento !== rec) return;
+      reconhecimento = null;
+      atualizarBotoes(false);
+      if (!falhou) mostrar("Ditado pausado. O texto já está no comentário. Você pode continuar ou concluir.");
+      enviar("anotador:voz:pausou");
+    };
+    try { rec.start(); }
+    catch (erro) {
+      reconhecimento = null;
+      atualizarBotoes(false);
+      const codigo = erro?.name === "NotAllowedError" ? "not-allowed" : "";
+      mostrar(erroVoz(codigo), "erro");
+      enviar("anotador:voz:erro", { erro: codigo });
+      try { rec.abort(); } catch { /* não chegou a iniciar */ }
+    }
+  });
+  parar.addEventListener("click", () => {
+    if (!reconhecimento) return;
+    parar.disabled = true;
+    mostrar("Finalizando o trecho…");
+    try { reconhecimento.stop(); }
+    catch {
+      reconhecimento = null;
+      atualizarBotoes(false);
+      mostrar("Ditado pausado. O texto já está no comentário.");
+      enviar("anotador:voz:pausou");
+    }
+  });
+})();
+</script>
+</body>
+</html>

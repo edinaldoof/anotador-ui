@@ -68,10 +68,11 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     assert.match(await pagina.avaliar<string>(`${noOverlay(".an-dica")}.textContent`), /^span "Salvar"/);
   });
 
-  test("tipografia: fonte da Apple primeiro, fonte da página como reserva", async () => {
+  test("tipografia: fonte da Apple primeiro sem herdar a fonte do site", async () => {
     const fonte = await pagina.avaliar<string>(`getComputedStyle(${noOverlay(".an-barra")}).fontFamily`);
     assert.match(fonte, /^-apple-system/, "a fonte da Apple vem primeiro, para valer em iPhone, iPad e Mac");
-    assert.match(fonte, /"Filson Teste"/, "sem ela, a Filson declarada pela página é a reserva");
+    assert.doesNotMatch(fonte, /Filson/, "a fonte do site não altera a interface do anotador");
+    assert.match(fonte, /system-ui/, "sem San Francisco, usa a fonte do sistema");
     const mono = await pagina.avaliar<string>(`getComputedStyle(${noOverlay(".an-dica")}).fontFamily`);
     assert.match(mono, /monospace/);
   });
@@ -83,7 +84,9 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     const origem = centro(alca);
     await pagina.arrastar(origem, { x: origem.x + 200, y: origem.y + 480 });
     const barraDepois = await rectDe(noOverlay(".an-barra"));
-    assert.ok(perto(barraDepois.left, barraAntes.left + 200) && perto(barraDepois.top, barraAntes.top + 480), `barra deveria ter deslocado (200, 480); foi de (${barraAntes.left}, ${barraAntes.top}) para (${barraDepois.left}, ${barraDepois.top})`);
+    const larguraViewport = await pagina.avaliar<number>("innerWidth");
+    const esquerdaEsperada = Math.min(barraAntes.left + 200, larguraViewport - barraAntes.width - 8);
+    assert.ok(perto(barraDepois.left, esquerdaEsperada) && perto(barraDepois.top, barraAntes.top + 480), `barra deveria ir para (${esquerdaEsperada}, ${barraAntes.top + 480}), limitada ao viewport; foi para (${barraDepois.left}, ${barraDepois.top})`);
     assert.equal(await debug<boolean>("armado()"), true, "arrastar não muda o modo");
 
     await clicarEm('document.querySelector("p.rotulo")');
@@ -171,11 +174,11 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     assert.equal(await pagina.avaliar<number>(`${noOverlay("div")}.querySelectorAll(".an-pin").length`), 1);
   });
 
-  test("botão de reabrir: fonte da página, contador, arrasto pelo corpo e posição lembrada", async () => {
+  test("botão de reabrir: fonte padronizada, contador, arrasto pelo corpo e posição lembrada", async () => {
     await clicarEm(noOverlay('.an-barra .an-ico[title^="Ocultar"]'));
     await esperarAte(() => visivel(".an-religar"));
     assert.equal(await visivel(".an-barra"), false);
-    assert.match(await pagina.avaliar<string>(`getComputedStyle(${noOverlay(".an-religar")}).fontFamily`), /"Filson Teste"/, "fora do .an-raiz, a fonte da página continua na pilha");
+    assert.doesNotMatch(await pagina.avaliar<string>(`getComputedStyle(${noOverlay(".an-religar")}).fontFamily`), /Filson/, "fora do .an-raiz também mantém a fonte padronizada");
     assert.equal(await pagina.avaliar<string>(`${noOverlay(".an-religar .n")}.textContent`), "1", "contador mostra a anotação pendente");
     const antes = await rectDe(noOverlay(".an-religar"));
     const centro = { x: antes.left + antes.width / 2, y: antes.top + antes.height / 2 };
@@ -211,14 +214,14 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     assert.match(md ?? "", /HTML do elemento na seleção[\s\S]*<button id="salvar" class="botao"><span>Salvar<\/span><\/button>/);
     await esperarAte(async () => (await debug<Anotacao[]>("pendentes()")).length === 0, 8_000, 100, "fila local esvaziar após o envio");
     assert.equal((await debug<Anotacao[]>("enviadas()")).length, 1);
-    assert.match(await pagina.avaliar<string>(`${noOverlay(".an-estado")}.textContent`), /aguardando Claude/);
+    assert.match(await pagina.avaliar<string>(`${noOverlay(".an-estado")}.textContent`), /Aguardando/);
 
     const progresso = await pedir(`${proxy.origem}${BASE}/lotes/${evento.id}/progresso`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ nota: "aplicando em pagina.html" }) });
     assert.equal(progresso.status, 200);
     assert.equal((JSON.parse(await ouvinte.proximo()) as EventoAnotador).tipo, "progresso", "o progresso também vira evento para o chat");
     const evPasso = JSON.parse(await ouvinte.proximo()) as EventoAnotador;
     assert.equal(evPasso.mensagem?.tipo, "passo", "e entra na conversa como passo da linha do tempo");
-    await esperarAte(async () => /Claude: aplicando em pagina\.html/.test(await pagina.avaliar<string>(`${noOverlay(".an-estado")}.textContent`)), 12_000, 500);
+    await esperarAte(async () => /Em andamento/.test(await pagina.avaliar<string>(`${noOverlay(".an-estado")}.textContent`)), 12_000, 500);
     await clicarEm(noOverlay('.an-barra .an-ico[title^="Ver fila"]'));
     await esperarAte(() => visivel(".an-fila"), 8_000, 100, "lista de lotes abrir pelo ícone da barra");
     assert.match(await pagina.avaliar<string>(`${noOverlay(".an-fila .item.lote")}.textContent`), /Claude trabalhando[\s\S]*aplicando em pagina\.html/, "a lista de lotes mostra estado e nota");
@@ -229,7 +232,7 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     const evEscolha = JSON.parse(await ouvinte.proximo()) as EventoAnotador;
     assert.equal(evEscolha.mensagem?.tipo, "escolha");
     assert.equal(evEscolha.mensagem?.autor, "agente");
-    await esperarAte(async () => /Claude perguntou/.test(await pagina.avaliar<string>(`${noOverlay(".an-estado")}.textContent`)), 12_000, 500, "barra mostrar 'Claude perguntou'");
+    await esperarAte(async () => /Responder/.test(await pagina.avaliar<string>(`${noOverlay(".an-estado")}.textContent`)), 12_000, 500, "barra mostrar 'Claude perguntou'");
     await esperarAte(() => visivel(".an-conversa"), 5_000, 100, "painel de conversa abrir sozinho");
     await esperarAte(async () => /Verde em todos os botões primários/.test(await pagina.avaliar<string>(`(${noOverlay(".an-conversa .fluxo")} || {}).textContent || ""`)), 5_000, 100, "pergunta aparecer no fluxo");
     const opcoes = await pagina.avaliar<string[]>(`Array.from(${noOverlay(".an-conversa")}.querySelectorAll(".an-opcao")).map((b) => b.textContent)`);
@@ -240,7 +243,7 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     assert.equal(evResposta.mensagem?.autor, "usuario");
     assert.deepEqual(evResposta.mensagem?.opcoes, ["Em todos"]);
     await esperarAte(async () => /Você respondeu: Em todos/.test(await pagina.avaliar<string>(`${noOverlay(".an-conversa .fluxo")}.textContent`)), 8_000, 100, "fluxo registrar a resposta");
-    await esperarAte(async () => !/Claude perguntou/.test(await pagina.avaliar<string>(`${noOverlay(".an-estado")}.textContent`)), 12_000, 500, "barra sair de 'Claude perguntou'");
+    await esperarAte(async () => !/Responder/.test(await pagina.avaliar<string>(`${noOverlay(".an-estado")}.textContent`)), 12_000, 500, "barra sair de 'Claude perguntou'");
     await clicarEm(noOverlay(".an-conversa .entrada textarea"));
     await pagina.digitar("E mantém o texto branco");
     await pagina.pressionar("Enter");
@@ -255,7 +258,7 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     const marcado = await pedir(`${proxy.origem}${BASE}/lotes/${evento.id}/processado`, { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify({ nota: "botão verde aplicado" }) });
     assert.equal(marcado.status, 200);
     await esperarAte(async () => (await debug<Array<{ estado: string }>>("lotes()"))[0]?.estado === "processado", 15_000, 500, "lote local virar processado");
-    assert.match(await pagina.avaliar<string>(`${noOverlay(".an-estado")}.textContent`), /Aplicado por Claude/);
+    assert.match(await pagina.avaliar<string>(`${noOverlay(".an-estado")}.textContent`), /Concluído/);
     assert.deepEqual(pagina.erros, [], "nenhum erro de página durante o fluxo inteiro");
   });
 
@@ -314,13 +317,15 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     await esperarAte(async () => !(await visivel(".an-arvore")));
   });
 
-  test("arrastar na página lista o que há dentro da área, sem criar anotação", async () => {
+  test("arrastar na página lista os elementos e inicia uma anotação da área exata", async () => {
     const corpo = noOverlay(".an-arvore .corpo");
     const arvore = () => debug<ResumoArvore>("arvore()");
     const secao = await rectDe('document.querySelector("section.cartao")');
     await pagina.arrastar({ x: secao.left + secao.width + 6, y: secao.top - 6 }, { x: secao.left - 6, y: secao.top + secao.height + 6 }, 12);
-    await esperarAte(() => visivel(".an-arvore"), 5_000, 100, "a área abre a árvore sozinha");
     await esperarAte(async () => !!(await arvore()).area, 5_000, 100, "área registrada");
+    assert.equal(await visivel(".an-arvore"), false, "a área permanece visível sem abrir a árvore por cima");
+    await clicarEm(noOverlay('.an-barra [title^="Estrutura de elementos"]'));
+    await esperarAte(() => visivel(".an-arvore"), 5_000, 100, "a árvore continua disponível pelo botão");
     const resumo = await arvore();
     assert.equal(resumo.area?.contidos, 4, `section, h2, p e a cabem inteiros; main e p.rotulo não: ${JSON.stringify(resumo)}`);
     assert.match(resumo.area?.raiz ?? "", /^section/, "a raiz da área é o ancestral comum");
@@ -329,7 +334,11 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     }
     assert.ok(!resumo.linhas.some((l) => /p\.rotulo|button#salvar/.test(l)), "o que ficou fora da área não aparece");
     assert.ok(resumo.linhas.some((l) => /\+2 fora da área/.test(l)), "os irmãos de fora ficam resumidos");
-    assert.equal(await debug<Anotacao | null>("atual()"), null, "o arrasto não vira clique de seleção");
+    const anotacaoArea = await debug<Anotacao | null>("atual()");
+    assert.equal(anotacaoArea?.elemento.meta.tag, "area", "o arrasto cria uma região, sem substituir por um elemento");
+    assert.ok(anotacaoArea?.area);
+    assert.ok(Math.abs(anotacaoArea.area.rectPagina.width - (secao.width + 12)) < 1);
+    assert.deepEqual(anotacaoArea.area.elementos.map((el) => el.meta.tag), ["h2", "p", "a"]);
     assert.equal((await debug<Anotacao[]>("pendentes()")).length, 0);
     assert.equal(await visivel(".an-area"), true, "o retângulo da área fica desenhado");
 

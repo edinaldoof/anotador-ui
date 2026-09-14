@@ -82,6 +82,14 @@ a:hover { text-decoration: underline; }
 .marca h1 { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
 .marca .sub { color: var(--texto-3); font-size: 12px; margin-top: 1px; }
 .estado-topo { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.idioma-sistema { position: relative; margin-left: auto; }
+.idioma-gatilho { display: flex; align-items: center; gap: 7px; padding: 7px 10px; font-size: 12px; }
+.idioma-gatilho svg { width: 15px; height: 15px; flex: none; }
+.idioma-menu { position: absolute; z-index: 40; right: 0; top: calc(100% + 6px); width: 210px; max-width: calc(100vw - 40px); padding: 5px; background: var(--superficie); border: 1px solid var(--borda-forte); border-radius: 12px; box-shadow: var(--sombra-forte); }
+.idioma-menu button { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; font-size: 12px; }
+.idioma-menu button[aria-selected=true] { color: var(--acento); background: var(--acento-suave); }
+.idioma-gatilho:focus-visible, .idioma-menu button:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+@media(max-width:540px) { .idioma-sistema { margin-left: 0; } .idioma-menu { left: 0; right: auto; } .estado-topo { margin-left: 0; } }
 .pilula {
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px 6px 10px; border-radius: 999px;
   background: var(--superficie); border: 1px solid var(--borda); color: var(--texto-2);
@@ -115,13 +123,15 @@ input[type=text], input[type=url] {
 input:focus { border-color: var(--acento); box-shadow: 0 0 0 3px color-mix(in srgb, var(--acento) 18%, transparent); }
 .linha { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .linha > input { flex: 1; min-width: 210px; }
-button { font: inherit; font-weight: 600; color: var(--texto); border: 1px solid var(--borda-forte); border-radius: 10px; padding: 9px 15px; background: var(--superficie); cursor: pointer; transition: background .15s, border-color .15s, transform .06s; }
+button, a.botao { font: inherit; font-weight: 600; color: var(--texto); border: 1px solid var(--borda-forte); border-radius: 10px; padding: 9px 15px; background: var(--superficie); cursor: pointer; transition: background .15s, border-color .15s, transform .06s; }
+a.botao { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+a.botao:focus-visible { outline: 2px solid var(--acento); outline-offset: 3px; }
 button:hover { background: var(--superficie-2); }
 button:active { transform: translateY(1px); }
 button.primario { background: var(--acento-solido); border-color: transparent; color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--acento-solido) 35%, transparent); }
 button.primario:hover { background: color-mix(in srgb, var(--acento-solido) 88%, #000); }
-button.sucesso { background: #17915f; border-color: transparent; color: #fff; box-shadow: 0 2px 8px rgba(23, 145, 95, .3); }
-button.sucesso:hover { background: #148054; }
+button.sucesso, a.botao.sucesso { background: #17915f; border-color: transparent; color: #fff; box-shadow: 0 2px 8px rgba(23, 145, 95, .3); }
+button.sucesso:hover, a.botao.sucesso:hover { background: #148054; }
 button.fantasma { background: transparent; border-color: transparent; color: var(--texto-2); }
 button.fantasma:hover { background: var(--superficie-2); color: var(--texto); }
 button.mini { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
@@ -267,18 +277,37 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
         <div class="sub" id="sub-marca">anotações visuais viram mudanças no código</div>
       </div>
     </div>
+    <div class="idioma-sistema">
+      <button type="button" class="idioma-gatilho" id="idioma-gatilho" role="combobox" aria-label="Idioma da interface" data-i18n-aria-label="Idioma da interface" aria-haspopup="listbox" aria-expanded="false" aria-controls="idioma-menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18"/></svg>
+        <span id="idioma-atual">Português (Brasil)</span>
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+      </button>
+      <div class="idioma-menu" id="idioma-menu" role="listbox" aria-label="Idioma da interface" data-i18n-aria-label="Idioma da interface" hidden>
+        <button type="button" role="option" data-idioma="pt-BR" aria-selected="true" tabindex="-1">Português (Brasil)</button>
+        <button type="button" role="option" data-idioma="en" aria-selected="false" tabindex="-1">English</button>
+        <button type="button" role="option" data-idioma="es" aria-selected="false" tabindex="-1">Español</button>
+      </div>
+    </div>
     <div class="estado-topo">
       <span class="pilula neutro" id="pilula-app">App: verificando…</span>
       <span class="pilula neutro" id="pilula-agente">Agente: verificando…</span>
     </div>
   </header>
 
+  <section class="cartao" aria-label="Acesso deste navegador" data-i18n-aria-label="Acesso deste navegador">
+    <div class="corpo">
+      <div class="linha"><span id="acesso-descricao" role="status" tabindex="-1" style="flex:1">Conectando este navegador…</span><button type="button" class="mini" id="btn-verificar-acesso" hidden>Verificar acesso</button><button type="button" class="mini" id="btn-copiar-acesso" hidden>Copiar link de acesso</button></div>
+      <input type="text" id="link-acesso" aria-label="Link de acesso para compartilhar" readonly hidden style="margin-top:10px">
+    </div>
+  </section>
+
   <section class="cartao">
     <div class="cabeca">
       <span class="passo" id="passo-1">1</span>
       <div>
-        <h2>App em desenvolvimento</h2>
-        <p>O anotador fica na frente do seu servidor de desenvolvimento e injeta o overlay de anotação. Nada muda no código do app.</p>
+        <h2 data-i18n>App em desenvolvimento</h2>
+        <p data-i18n>O anotador fica na frente do seu servidor de desenvolvimento e injeta o overlay de anotação. Nada muda no código do app.</p>
       </div>
     </div>
     <div class="corpo">
@@ -289,30 +318,30 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
           <div class="det" id="app-detalhe"></div>
         </div>
         <span class="esp"></span>
-        <a href="/" id="abrir-app"><button class="sucesso" type="button">Abrir o app com o anotador</button></a>
+        <a href="/" id="abrir-app" class="botao sucesso">Abrir o app com o anotador</a>
         <button type="button" class="fantasma" id="btn-desconectar">Desconectar</button>
       </div>
 
       <div class="rotulo-secao" style="margin-top:14px">
         <span id="rotulo-deteccao">Servidores nesta máquina</span>
         <span class="esp"></span>
-        <button type="button" class="mini fantasma" id="btn-redetectar">Procurar de novo</button>
+        <button type="button" class="mini fantasma" id="btn-redetectar" data-i18n>Procurar de novo</button>
       </div>
       <div class="servidores" id="chips"></div>
 
       <div class="linha" style="margin-top:11px">
         <input type="url" id="alvo" placeholder="http://localhost:3000" autocomplete="off" spellcheck="false">
-        <button type="button" id="btn-testar">Testar</button>
+        <button type="button" id="btn-testar" data-i18n>Testar</button>
         <button type="button" class="primario" id="btn-conectar">Conectar e abrir</button>
       </div>
       <div class="aviso-linha" id="resultado"></div>
 
       <details class="ajustes" id="opcoes">
-        <summary>Projeto, código-fonte e rótulo do agente</summary>
+        <summary data-i18n>Projeto, código-fonte e rótulo do agente</summary>
         <div class="campos">
-          <label class="campo"><span>Nome do projeto (nomeia a pasta da fila)</span><input type="text" id="nome" autocomplete="off"></label>
-          <label class="campo"><span>Nome do agente mostrado na interface</span><input type="text" id="agente-rotulo" autocomplete="off"></label>
-          <label class="campo largo"><span>Pasta do código-fonte (para localizar cada elemento no código)</span><input type="text" id="fonte" class="mono" autocomplete="off" spellcheck="false"></label>
+          <label class="campo"><span data-i18n>Nome do projeto (nomeia a pasta da fila)</span><input type="text" id="nome" autocomplete="off"></label>
+          <label class="campo"><span data-i18n>Nome do agente mostrado na interface</span><input type="text" id="agente-rotulo" autocomplete="off"></label>
+          <label class="campo largo"><span data-i18n>Pasta do código-fonte (para localizar cada elemento no código)</span><input type="text" id="fonte" class="mono" autocomplete="off" spellcheck="false"></label>
         </div>
       </details>
     </div>
@@ -322,20 +351,20 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     <div class="cabeca">
       <span class="passo" id="passo-2">2</span>
       <div>
-        <h2>Agente que aplica as anotações</h2>
-        <p>Quem recebe cada lote e mexe no código. Uma sessão pode <b>ouvir</b> os eventos ao vivo; sem ninguém ouvindo, a <b>ponte</b> chama o agente pela linha de comando.</p>
+        <h2 data-i18n>Agente que aplica as anotações</h2>
+        <p data-i18n>Quem recebe cada lote e mexe no código. Uma sessão pode ouvir os eventos ao vivo; sem ninguém ouvindo, a ponte chama o agente pela linha de comando.</p>
       </div>
     </div>
     <div class="corpo">
       <div class="agentes" id="abas"></div>
       <div id="painel-agente"></div>
       <div class="faixa">
-        <span class="rot">Ponte automática</span>
+        <span class="rot" data-i18n>Ponte automática</span>
         <span id="ponte"></span>
-        <span class="selo ouvindo" id="ponte-estado" hidden>ativa</span>
-        <span class="dica">Sem ninguém ouvindo, cada lote novo chama este agente e modelo pela linha de comando.</span>
+        <span class="selo ouvindo" id="ponte-estado" hidden data-i18n>ativa</span>
+        <span class="dica" data-i18n>Sem ninguém ouvindo, cada lote novo chama este agente e modelo pela linha de comando.</span>
       </div>
-      <div class="rotulo-secao" style="margin-top:16px">Ouvindo agora</div>
+      <div class="rotulo-secao" style="margin-top:16px" data-i18n>Ouvindo agora</div>
       <div id="ouvintes"></div>
       <div id="execucoes"></div>
     </div>
@@ -345,26 +374,27 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     <div class="cabeca">
       <span class="passo">3</span>
       <div>
-        <h2>Qualquer outro agente ou script</h2>
-        <p>Protocolo neutro: eventos por WebSocket, lotes em Markdown e uma API REST. Serve para Antigravity, Cursor, um script seu ou qualquer modelo.</p>
+        <h2 data-i18n>Qualquer outro agente ou script</h2>
+        <p data-i18n>Protocolo neutro: eventos por WebSocket, lotes em Markdown e uma API REST. Serve para Antigravity, Cursor, um script seu ou qualquer modelo.</p>
       </div>
     </div>
     <div class="corpo">
       <div class="protocolo-topo">
-        <span class="rotulo-secao" style="margin:0">Endereços deste anotador</span>
+        <span class="rotulo-secao" style="margin:0" data-i18n>Endereços deste anotador</span>
         <span style="flex:1"></span>
-        <button type="button" class="mini" id="btn-copiar-protocolo">Copiar</button>
+        <button type="button" class="mini" id="btn-copiar-protocolo" data-i18n>Copiar</button>
       </div>
       <pre class="bloco" id="protocolo"></pre>
     </div>
   </section>
 
   <footer class="rodape">
+    <a href="/__anotador/extrair" target="_blank" rel="noopener" data-i18n>Extrair design de um site · DESIGN.md</a>
     <span id="rodape-fila"></span>
     <span id="rodape-fonte"></span>
     <span id="rodape-tipografia" hidden></span>
     <span style="flex:1"></span>
-    <a href="https://github.com/edinaldoof/anotador-ui" target="_blank" rel="noopener">documentação</a>
+    <a href="https://github.com/edinaldoof/anotador-ui" target="_blank" rel="noopener" data-i18n>documentação</a>
   </footer>
 </div>
 <div class="toast" id="toast"></div>
@@ -372,7 +402,14 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
 <script>
 (() => {
   "use strict";
+  const i18n = window.__anotador_i18n || { t: (texto) => texto, idioma: () => "pt-BR", traduzir: () => {}, observar: () => {}, definir: () => {} };
+  const t = (texto, parametros) => i18n.t(texto, parametros);
   const $ = (id) => document.getElementById(id);
+  const textoUI = (el, fonte, parametros) => {
+    el.setAttribute("data-i18n", fonte);
+    if (parametros) el.setAttribute("data-i18n-params", JSON.stringify(parametros)); else el.removeAttribute("data-i18n-params");
+    el.textContent = t(fonte, parametros);
+  };
   const h = (tag, attrs, ...filhos) => {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) {
@@ -386,13 +423,11 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     for (const f of filhos.flat()) if (f !== null && f !== undefined && f !== false) el.append(f instanceof Node ? f : document.createTextNode(String(f)));
     return el;
   };
-  // A chave chega pela URL que o anotador imprime no terminal e fica guardada na aba.
-  // Sai da barra de endereço logo em seguida: link copiado ou print de tela não deve
-  // carregar consigo a permissão de iniciar um agente nesta máquina.
-  const CHAVE = (() => {
+  // Compatibilidade com abas antigas: troca a chave uma vez por uma sessão HttpOnly.
+  let chaveLegada = (() => {
     const daUrl = new URLSearchParams(location.search).get("chave");
     let guardada = null;
-    try { guardada = sessionStorage.getItem("anotador.chave"); } catch {}
+    try { guardada = sessionStorage.getItem("anotador.chave") || localStorage.getItem("anotador-ui:chave"); } catch {}
     if (daUrl) {
       try { sessionStorage.setItem("anotador.chave", daUrl); } catch {}
       const limpa = new URL(location.href);
@@ -402,77 +437,143 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     }
     return guardada;
   })();
+  let acessoAutorizado = false;
+  function mostrarAcesso(autorizado, indisponivel = false) {
+    acessoAutorizado = autorizado;
+    $("btn-copiar-acesso").hidden = !autorizado;
+    $("btn-verificar-acesso").hidden = autorizado;
+    if (!autorizado) { $("link-acesso").hidden = true; $("link-acesso").value = ""; }
+    textoUI($("acesso-descricao"), autorizado
+      ? "Este navegador está conectado. Compartilhe um link para conectar outro navegador; basta abri-lo uma vez."
+      : indisponivel ? "Não foi possível verificar o acesso. Recarregue esta página para tentar novamente."
+      : "Conecte este navegador abrindo uma vez o link de acesso compartilhado por quem iniciou o Anotador.");
+  }
+  let verificacaoAcesso = null;
+  const verificarAcesso = () => verificacaoAcesso || (verificacaoAcesso = (async () => {
+    try {
+      const r = await fetch("/__anotador/acesso/sessao", { method: "POST", credentials: "same-origin", headers: chaveLegada ? { "x-anotador-chave": chaveLegada } : {}, signal: AbortSignal.timeout(10000) });
+      // Um Set-Cookie aceito pelo servidor pode ter sido recusado pelo navegador.
+      // Só descartar a credencial antiga depois de confirmar a sessão sem ela.
+      const confirmada = r.ok && (await fetch("/__anotador/acesso/sessao", { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(10000) })).ok;
+      mostrarAcesso(confirmada);
+      if (confirmada) {
+        chaveLegada = null;
+        try { sessionStorage.removeItem("anotador.chave"); } catch {}
+        try { localStorage.removeItem("anotador-ui:chave"); } catch {}
+      } else if (r.ok) {
+        textoUI($("acesso-descricao"), "O navegador não guardou a conexão. Permita os cookies deste site e clique em Verificar acesso.");
+      }
+      return confirmada;
+    } catch { mostrarAcesso(false, true); }
+    return false;
+  })().finally(() => { verificacaoAcesso = null; }));
+  const sessaoPronta = verificarAcesso();
   const api = async (caminho, corpo) => {
-    const cabecalhos = CHAVE ? { "x-anotador-chave": CHAVE } : {};
-    const r = await fetch(caminho, corpo === undefined
-      ? { cache: "no-store", headers: cabecalhos }
-      : { method: "POST", headers: { ...cabecalhos, "content-type": "application/json" }, body: JSON.stringify(corpo) });
-    const texto = await r.text();
+    await sessaoPronta;
+    let r;
+    try { r = await fetch(new URL(caminho, location.origin + "/__anotador/"), corpo === undefined
+      ? { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(30000) }
+      : { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(corpo), signal: AbortSignal.timeout(30000) }); }
+    catch { return { ok: false, erro: t("Não foi possível falar com o Anotador. Verifique a conexão e tente novamente."), __status: 0 }; }
+    let texto;
+    try { texto = await r.text(); }
+    catch { return { ok: false, erro: t("Não foi possível falar com o Anotador. Verifique a conexão e tente novamente."), __status: 0 }; }
     let json;
     try { json = JSON.parse(texto); } catch { json = { ok: r.ok, erro: texto }; }
     if (!r.ok && json.erro === undefined) json.erro = "HTTP " + r.status;
     json.__status = r.status;
+    if (r.status === 403) mostrarAcesso(false);
     return json;
   };
   let toastT = null;
   const avisar = (m) => { const t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("on"), 2800); };
   const copiar = async (texto) => {
-    try { await navigator.clipboard.writeText(texto); avisar("Copiado."); }
-    catch { const ta = h("textarea", null, texto); document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); avisar("Copiado."); }
+    try { await navigator.clipboard.writeText(texto); avisar(t("Copiado.")); return true; }
+    catch {
+      const ta = h("textarea", { style: "position:fixed;opacity:0;pointer-events:none" }, texto); document.body.append(ta); ta.select();
+      let copiou = false; try { copiou = document.execCommand("copy"); } catch {} finally { ta.remove(); }
+      if (copiou) avisar(t("Copiado."));
+      return copiou;
+    }
   };
   const hora = (iso) => {
     const d = new Date(iso);
     const hoje = new Date().toDateString() === d.toDateString();
-    return hoje ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return hoje ? d.toLocaleTimeString(i18n.idioma(), { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString(i18n.idioma(), { day: "2-digit", month: "2-digit" }) + " " + d.toLocaleTimeString(i18n.idioma(), { hour: "2-digit", minute: "2-digit" });
   };
   const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>';
   const CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
   const NIVEIS = { low: "baixo", medium: "médio", high: "alto", xhigh: "muito alto", max: "máximo", ultra: "ultra" };
-  const nivelCurto = (e) => NIVEIS[e] || e;
+  const nivelCurto = (e) => t(NIVEIS[e] || e);
 
   let saude = null;
   let agentes = null;
-  let agenteAtivo = localStorage.getItem("anotador:agente") || "claude";
+  let agenteAtivo = "claude";
+  try { agenteAtivo = localStorage.getItem("anotador:agente") || agenteAtivo; } catch { /* preferência disponível nesta página */ }
   let preencheuOpcoes = false;
   let verTodasSessoes = false;
+
+  async function compartilharAcesso() {
+    if (!acessoAutorizado) return;
+    const botao = $("btn-copiar-acesso"); botao.disabled = true;
+    try {
+      const r = await api("/__anotador/acesso/link", { voltar: "/__anotador/" });
+      if (!r.ok) throw new Error(r.__status === 403 ? t("Abra o link de acesso compartilhado para conectar este navegador.") : r.erro || t("Não foi possível criar o link de acesso."));
+      const origem = new URL(location.origin);
+      if (/^(localhost|127(?:\.\d{1,3}){3}|\[::1\])$/.test(origem.hostname)) {
+        if (!saude) await atualizarSaude();
+        const ip = saude && Array.isArray(saude.ips) ? saude.ips.find((valor) => typeof valor === "string" && valor) : null;
+        if (ip) { origem.hostname = ip.includes(":") ? "[" + ip.replace(/^\[|\]$/g, "") + "]" : ip; if (saude.porta) origem.port = String(saude.porta); }
+      }
+      const link = new URL(r.caminho, origem.origin).href;
+      const copiou = await copiar(link);
+      $("link-acesso").hidden = copiou;
+      $("link-acesso").value = copiou ? "" : link;
+      textoUI($("acesso-descricao"), copiou
+        ? "Link copiado. Compartilhe com a pessoa que vai usar o Anotador; ela só precisa abri-lo uma vez neste navegador."
+        : "Copie o link abaixo e compartilhe. Ao abri-lo uma vez, o outro navegador fica conectado.");
+      if (!copiou) { $("link-acesso").focus(); $("link-acesso").select(); }
+    } catch (erro) { avisar(erro.message || String(erro)); }
+    finally { botao.disabled = false; }
+  }
 
   // ---------- estado ----------
   function marcarPasso(el, feito) { el.classList.toggle("feito", feito); el.innerHTML = feito ? CHECK : el.dataset.n; }
 
   function renderizarSaude(s) {
     saude = s;
-    $("sub-marca").textContent = s.nome ? s.nome + " · v" + s.versao : "anotações visuais viram mudanças no código";
+    $("sub-marca").textContent = s.nome ? s.nome + " · v" + s.versao : t("anotações visuais viram mudanças no código");
     $("rodape-fila").innerHTML = "";
-    $("rodape-fila").append("fila: ", h("span", { class: "mono" }, s.saida));
+    $("rodape-fila").append(t("fila: "), h("span", { class: "mono" }, s.saida));
     $("rodape-fonte").innerHTML = "";
-    if (s.fonte) $("rodape-fonte").append("código-fonte: ", h("span", { class: "mono" }, s.fonte));
+    if (s.fonte) $("rodape-fonte").append(t("código-fonte: "), h("span", { class: "mono" }, s.fonte));
 
     const pa = $("pilula-app");
-    if (!s.conectado) { pa.className = "pilula aviso"; pa.textContent = "App: não conectado"; }
-    else if (s.app && s.app.alcancavel) { pa.className = "pilula ok"; pa.textContent = "App: respondendo" + (s.app.framework ? " · " + s.app.framework : ""); }
-    else { pa.className = "pilula erro"; pa.textContent = "App: sem resposta" + (s.app && s.app.erro ? " · " + s.app.erro : ""); }
+    if (!s.conectado) { pa.className = "pilula aviso"; pa.textContent = t("App: não conectado"); }
+    else if (s.app && s.app.alcancavel) { pa.className = "pilula ok"; pa.textContent = t("App: respondendo") + (s.app.framework ? " · " + s.app.framework : ""); }
+    else { pa.className = "pilula erro"; pa.textContent = t("App: sem resposta") + (s.app && s.app.erro ? " · " + s.app.erro : ""); }
 
     const pg = $("pilula-agente");
     const quem = s.quemOuve || [];
     if (quem.length) {
       pg.className = "pilula ok";
       const nomes = Array.from(new Set(quem.map((o) => o.agente).filter(Boolean)));
-      pg.textContent = "Agente: " + (quem.length === 1 ? "1 ouvindo" : quem.length + " ouvindo") + (nomes.length ? " · " + nomes.join(", ") : "");
-    } else if (s.ponte) { pg.className = "pilula aviso"; pg.textContent = "Agente: ponte " + nomeAgente(s.ponte.agente); }
-    else { pg.className = "pilula erro"; pg.textContent = "Agente: ninguém ouvindo"; }
+      pg.textContent = t("Agente: {quantidade} ouvindo", { quantidade: quem.length }) + (nomes.length ? " · " + nomes.join(", ") : "");
+    } else if (s.ponte) { pg.className = "pilula aviso"; pg.textContent = t("Agente: ponte {nome}", { nome: nomeAgente(s.ponte.agente) }); }
+    else { pg.className = "pilula erro"; pg.textContent = t("Agente: ninguém ouvindo"); }
 
     marcarPasso($("passo-1"), !!s.conectado && !!(s.app && s.app.alcancavel));
     marcarPasso($("passo-2"), quem.length > 0 || !!s.ponte);
 
     $("bloco-conectado").hidden = !s.conectado;
-    $("btn-conectar").textContent = s.conectado ? "Trocar e abrir" : "Conectar e abrir";
+    $("btn-conectar").textContent = s.conectado ? t("Trocar e abrir") : t("Conectar e abrir");
     if (s.conectado) {
       $("alvo-atual").textContent = s.alvo;
       const d = [];
       if (s.app && s.app.titulo) d.push("“" + s.app.titulo + "”");
       if (s.app && s.app.framework) d.push(s.app.framework);
       if (s.app && s.app.status) d.push("HTTP " + s.app.status);
-      if (s.pendentes) d.push(s.pendentes + " lote(s) pendente(s)");
+      if (s.pendentes) d.push(t("{quantidade} lote(s) pendente(s)", { quantidade: s.pendentes }));
       // Vírgulas: quatro informações emendadas por ponto médio são o que a régua
       // desta ferramenta acusa como marca de interface montada no automático.
       $("app-detalhe").textContent = d.join(", ");
@@ -485,7 +586,7 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
       $("agente-rotulo").value = s.agente || "Claude";
       if (!s.alvo && s.conexoes && s.conexoes[0]) {
         $("alvo").value = s.conexoes[0].alvo;
-        mostrarResultado("Última conexão nesta pasta: " + s.conexoes[0].alvo + " · " + hora(s.conexoes[0].usadoEm), "");
+        mostrarResultado("Última conexão nesta pasta: {url} · {hora}", "", { url: s.conexoes[0].alvo, hora: hora(s.conexoes[0].usadoEm) });
       }
     }
     marcarServidorAtual();
@@ -504,17 +605,18 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     if (temSF || fontes.nativa || !(fontes.faltando || []).length) return;
     const el = $("rodape-tipografia");
     el.textContent = "";
-    el.append("tipografia: ", h("code", null, "anotador fontes"), " instala a San Francisco");
-    el.title = "Faltam nesta máquina: " + fontes.faltando.join(", ");
+    el.append(t("tipografia: "), h("code", null, "anotador fontes"), t(" instala a San Francisco"));
+    el.title = t("Faltam nesta máquina: {fontes}", { fontes: fontes.faltando.join(", ") });
     el.hidden = false;
   }
   async function atualizarSaude() {
     try { const s = await api("saude"); if (s.ok) renderizarSaude(s); }
-    catch { const pa = $("pilula-app"); pa.className = "pilula erro"; pa.textContent = "Anotador: sem resposta"; }
+    catch { const pa = $("pilula-app"); pa.className = "pilula erro"; pa.textContent = t("Anotador: sem resposta"); }
   }
 
   // ---------- detecção ----------
   let detectados = [];
+  let detectando = false;
   function marcarServidorAtual() {
     const valor = $("alvo").value.trim();
     for (const el of $("chips").children) {
@@ -523,14 +625,20 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     }
   }
   async function detectar() {
-    $("rotulo-deteccao").textContent = "Procurando servidores…";
+    detectando = true;
+    $("rotulo-deteccao").textContent = t("Procurando servidores…");
     $("chips").textContent = "";
     try { detectados = (await api("deteccao")).servidores || []; } catch { detectados = []; }
-    $("rotulo-deteccao").textContent = detectados.length ? "Servidores nesta máquina" : "Nenhum servidor nas portas comuns";
+    detectando = false;
+    renderizarDetectados();
+    if (!$("alvo").value && detectados[0]) { $("alvo").value = detectados[0].url; marcarServidorAtual(); testar(); }
+  }
+  function renderizarDetectados() {
+    $("rotulo-deteccao").textContent = detectados.length ? t("Servidores nesta máquina") : t("Nenhum servidor nas portas comuns");
     const caixa = $("chips");
     caixa.textContent = "";
     if (!detectados.length) {
-      caixa.append(h("div", { class: "vazio", style: "grid-column:1/-1" }, "Inicie o app em modo de desenvolvimento (npm run dev) e procure de novo — ou digite a URL abaixo."));
+      caixa.append(h("div", { class: "vazio", style: "grid-column:1/-1" }, t("Inicie o app em modo de desenvolvimento (npm run dev) e procure de novo — ou digite a URL abaixo.")));
       return;
     }
     for (const s of detectados) {
@@ -541,19 +649,18 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
         s.titulo ? h("span", { class: "tit", title: s.titulo }, s.titulo) : null));
     }
     marcarServidorAtual();
-    if (!$("alvo").value && detectados[0]) { $("alvo").value = detectados[0].url; marcarServidorAtual(); testar(); }
   }
-  function mostrarResultado(texto, classe) { const r = $("resultado"); r.textContent = texto; r.className = "aviso-linha " + (classe || ""); }
+  function mostrarResultado(texto, classe, parametros) { const r = $("resultado"); textoUI(r, texto, parametros); r.className = "aviso-linha " + (classe || ""); }
   async function testar() {
     const alvo = $("alvo").value.trim();
     if (!alvo) { mostrarResultado("Digite a URL do servidor de desenvolvimento.", "erro"); return null; }
-    mostrarResultado("Testando " + alvo + "…", "");
+    mostrarResultado("Testando {url}…", "", { url: alvo });
     const r = await api("sondar", { alvo });
     if (!r.ok) { mostrarResultado(r.erro || "não foi possível testar", "erro"); return null; }
     const s = r.sondagem;
     if (s.anotador) { mostrarResultado("Essa URL é o próprio anotador — aponte para o servidor do app.", "erro"); return s; }
-    if (!s.alcancavel) { mostrarResultado("Sem resposta (" + (s.erro || "desconhecido") + "). O servidor de desenvolvimento está rodando?", "erro"); return s; }
-    mostrarResultado("Respondeu HTTP " + s.status + (s.framework ? ", " + s.framework : "") + (s.titulo ? ", “" + s.titulo + "”" : "") + (s.html ? "" : ", não é HTML (API?)"), "ok");
+    if (!s.alcancavel) { mostrarResultado("Sem resposta ({erro}). O servidor de desenvolvimento está rodando?", "erro", { erro: s.erro || t("desconhecido") }); return s; }
+    mostrarResultado("Respondeu HTTP {status}", "ok", { status: s.status + (s.framework ? ", " + s.framework : "") + (s.titulo ? ", “" + s.titulo + "”" : "") + (s.html ? "" : t(", não é HTML (API?)")) });
     return s;
   }
   async function conectar() {
@@ -563,7 +670,7 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     try {
       const corpo = { alvo, nome: $("nome").value.trim() || undefined, fonte: $("fonte").value.trim() || undefined, agente: $("agente-rotulo").value.trim() || undefined };
       let r = await api("conectar", corpo);
-      if (r.__status === 409 && confirm(r.erro + "\n\nConectar mesmo assim? Você pode subir o app depois.")) r = await api("conectar", { ...corpo, forcar: true });
+      if (r.__status === 409 && confirm(r.erro + t("\n\nConectar mesmo assim? Você pode subir o app depois."))) r = await api("conectar", { ...corpo, forcar: true });
       if (!r.ok) { mostrarResultado(r.erro || "falha ao conectar", "erro"); return; }
       renderizarSaude(r.saude);
       mostrarResultado("Conectado. Abrindo o app…", "ok");
@@ -571,8 +678,32 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     } finally { btn.disabled = false; }
   }
   async function desconectar() {
-    const r = await api("desconectar", {});
-    if (r.ok) { await atualizarSaude(); mostrarResultado("Desconectado. O app continua rodando na porta dele; só o anotador saiu da frente.", ""); }
+    const btn = $("btn-desconectar");
+    if (btn.disabled) return;
+    btn.disabled = true; btn.setAttribute("aria-busy", "true");
+    mostrarResultado("Desconectando o app…", "");
+    try {
+      const r = await api("desconectar", {});
+      if (!r.ok) { mostrarResultado(r.erro || "Não foi possível desconectar o app.", "erro"); if (r.__status === 403) orientarAcesso(); return; }
+      await atualizarSaude();
+      mostrarResultado("Desconectado. O app continua rodando na porta dele; só o anotador saiu da frente.", "ok");
+    } finally { btn.disabled = false; btn.removeAttribute("aria-busy"); }
+  }
+  function orientarAcesso() {
+    $("acesso-descricao").scrollIntoView({ block: "center", behavior: "smooth" });
+    $("acesso-descricao").focus({ preventScroll: true });
+  }
+  async function abrirApp(evento) {
+    if (evento.ctrlKey || evento.metaKey || evento.shiftKey || evento.altKey || evento.button > 0) return;
+    evento.preventDefault();
+    const link = $("abrir-app");
+    if (link.getAttribute("aria-busy") === "true") return;
+    link.setAttribute("aria-busy", "true");
+    try {
+      if (!await verificarAcesso()) { mostrarResultado("Conecte este navegador para abrir o app com todas as funções do Anotador.", "erro"); orientarAcesso(); return; }
+      mostrarResultado("Abrindo o app…", "ok");
+      location.assign(link.href);
+    } finally { link.removeAttribute("aria-busy"); }
   }
 
   // ---------- agentes ----------
@@ -591,30 +722,30 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     const estaOuvindo = ouvindo.has(s.id);
     const acoes = [];
     if (a.id === "claude" && s.ativa) {
-      acoes.push(h("button", { type: "button", class: "mini" + (estaOuvindo ? " fantasma" : " primario"), title: "Copia o comando para colar nessa sessão", onclick: () => copiar("/anotar") }, estaOuvindo ? "Já ouvindo" : "Copiar /anotar"));
+      acoes.push(h("button", { type: "button", class: "mini" + (estaOuvindo ? " fantasma" : " primario"), title: t("Copia o comando para colar nessa sessão"), onclick: () => copiar("/anotar") }, estaOuvindo ? t("Já ouvindo") : t("Copiar /anotar")));
     } else if (a.ponte) {
-      acoes.push(h("button", { type: "button", class: "mini", onclick: (e) => iniciarConversa(a.id, s.id, e.currentTarget) }, "Iniciar conversa"));
+      acoes.push(h("button", { type: "button", class: "mini", onclick: (e) => iniciarConversa(a.id, s.id, e.currentTarget) }, t("Iniciar conversa")));
     }
     return h("div", { class: "sessao" + (s.ativa ? " viva" : "") },
       h("span", { class: "av" }, s.id.slice(0, 2).toUpperCase()),
       h("div", { class: "info" },
-        h("div", { class: "nome" }, s.nome || s.titulo || "sessão " + s.id.slice(0, 8)),
+        h("div", { class: "nome" }, s.nome || s.titulo || t("sessão {id}", { id: s.id.slice(0, 8) })),
         h("div", { class: "det" }, [s.nome && s.titulo ? s.titulo : null, s.origem, hora(s.em), s.id.slice(0, 8)].filter(Boolean).join(", "))),
-      s.ativa ? h("span", { class: "selo viva" }, "aberta") : null,
-      estaOuvindo ? h("span", { class: "selo ouvindo" }, "ouvindo") : null,
+      s.ativa ? h("span", { class: "selo viva" }, t("aberta")) : null,
+      estaOuvindo ? h("span", { class: "selo ouvindo" }, t("ouvindo")) : null,
       ...acoes);
   }
   function renderizarAgentes() {
     if (!agentes) return;
     const abas = $("abas"); abas.textContent = "";
     for (const a of agentes.agentes) {
-      abas.append(h("button", { type: "button", class: "agente" + (a.instalado ? " instalado" : "") + (a.id === agenteAtivo ? " ativa" : ""), title: a.instalado ? a.caminho : "não encontrado no PATH", onclick: () => { agenteAtivo = a.id; verTodasSessoes = false; localStorage.setItem("anotador:agente", a.id); renderizarAgentes(); } },
-        h("span", { class: "logo", html: a.marca || "" }), a.nome, a.instalado ? null : h("span", { class: "marca-nao" }, "não instalado")));
+      abas.append(h("button", { type: "button", class: "agente" + (a.instalado ? " instalado" : "") + (a.id === agenteAtivo ? " ativa" : ""), title: a.instalado ? a.caminho : t("não encontrado no PATH"), onclick: () => { agenteAtivo = a.id; verTodasSessoes = false; try { localStorage.setItem("anotador:agente", a.id); } catch { /* mantém a seleção sem armazenamento */ } renderizarAgentes(); } },
+        h("span", { class: "logo", html: a.marca || "" }), a.nome, a.instalado ? null : h("span", { class: "marca-nao" }, t("não instalado"))));
     }
     const a = agentes.agentes.find((x) => x.id === agenteAtivo) || agentes.agentes[0];
     const painel = $("painel-agente"); painel.textContent = "";
     if (!a) return;
-    painel.append(h("div", { class: "como" }, a.como));
+    painel.append(h("div", { class: "como" }, t(a.como)));
     const ouvindo = new Set((saude && saude.quemOuve || []).map((o) => o.sessao).filter(Boolean));
     if (a.sessoes) {
       const todas = (agentes.sessoes || []).filter((s) => s.agente === a.id);
@@ -622,7 +753,7 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
       const antigas = todas.filter((s) => !s.ativa);
       const lista = h("div", { class: "sessoes" });
       if (vivas.length) {
-        painel.append(h("div", { class: "rotulo-secao" }, "Sessões abertas agora" + (saude && saude.fonte ? " · " + saude.fonte : "")));
+        painel.append(h("div", { class: "rotulo-secao" }, t("Sessões abertas agora") + (saude && saude.fonte ? " · " + saude.fonte : "")));
         for (const s of vivas) lista.append(linhaSessao(a, s, ouvindo));
         painel.append(lista);
       }
@@ -630,18 +761,18 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
       const mostrar = verTodasSessoes ? antigas : antigas.slice(0, 3);
       for (const s of mostrar) listaAntigas.append(linhaSessao(a, s, ouvindo));
       if (antigas.length > mostrar.length) {
-        listaAntigas.append(h("button", { type: "button", class: "mini fantasma mais-sessoes", onclick: () => { verTodasSessoes = true; renderizarAgentes(); } }, "Ver mais " + (antigas.length - mostrar.length) + " sessão(ões)"));
+        listaAntigas.append(h("button", { type: "button", class: "mini fantasma mais-sessoes", onclick: () => { verTodasSessoes = true; renderizarAgentes(); } }, t("Ver mais {quantidade} sessão(ões)", { quantidade: antigas.length - mostrar.length })));
       }
       if (antigas.length) {
-        painel.append(h("div", { class: "rotulo-secao" }, vivas.length ? "Sessões recentes deste projeto" : "Sessões recentes deste projeto" + (saude && saude.fonte ? " · " + saude.fonte : "")));
+        painel.append(h("div", { class: "rotulo-secao" }, vivas.length ? t("Sessões recentes deste projeto") : t("Sessões recentes deste projeto") + (saude && saude.fonte ? " · " + saude.fonte : "")));
         painel.append(listaAntigas);
       }
-      if (!todas.length) painel.append(h("div", { class: "vazio" }, "Nenhuma sessão de " + a.nome + " para esta pasta."));
+      if (!todas.length) painel.append(h("div", { class: "vazio" }, t("Nenhuma sessão de {nome} para esta pasta.", { nome: a.nome })));
     }
     if (a.ponte && a.instalado) {
       painel.append(h("div", { class: "linha", style: "margin-top:11px" },
-        h("button", { type: "button", onclick: (e) => iniciarConversa(a.id, null, e.currentTarget) }, a.sessoes ? "Iniciar conversa numa sessão nova" : "Iniciar conversa"),
-        h("span", { style: "color:var(--texto-3);font-size:11.5px;flex:1;min-width:200px" }, "Roda o agente em segundo plano com os lotes pendentes.")));
+        h("button", { type: "button", onclick: (e) => iniciarConversa(a.id, null, e.currentTarget) }, a.sessoes ? t("Iniciar conversa numa sessão nova") : t("Iniciar conversa")),
+        h("span", { style: "color:var(--texto-3);font-size:11.5px;flex:1;min-width:200px" }, t("Roda o agente em segundo plano com os lotes pendentes."))));
     }
     renderizarPonte();
     renderizarExecucoes();
@@ -650,8 +781,8 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     if (btn) btn.disabled = true;
     try {
       const r = await api("agente/iniciar", { agente, sessao });
-      if (!r.ok) { avisar(r.erro || "não foi possível iniciar"); return; }
-      avisar(nomeAgente(agente) + " iniciado (pid " + r.execucao.pid + ").");
+      if (!r.ok) { avisar(r.erro || t("não foi possível iniciar")); return; }
+      avisar(t("{nome} iniciado (pid {pid}).", { nome: nomeAgente(agente), pid: r.execucao.pid }));
       await carregarAgentes();
     } finally { if (btn) btn.disabled = false; }
   }
@@ -667,7 +798,7 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
 
     const gatilho = h("button", { type: "button", class: "seletor-gatilho", "aria-haspopup": "true" },
       h("span", { class: "logo", html: ponte ? (agentePorId(ponte.agente) || {}).marca || "" : "" }),
-      h("span", { class: "rot" }, ponte ? nomeAgente(ponte.agente) + (modeloAtual ? " · " + modeloAtual.titulo : "") : "desligada"),
+      h("span", { class: "rot" }, ponte ? nomeAgente(ponte.agente) + (modeloAtual ? " · " + modeloAtual.titulo : "") : t("desligada")),
       ponte && ponte.esforco ? h("span", { class: "nivel" }, nivelCurto(ponte.esforco)) : null,
       h("span", { class: "chevron", html: CHEVRON }));
 
@@ -692,9 +823,9 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
       fechar();
       const corpo = { agente, sessao: ponte && ponte.agente === agente ? ponte.sessao : null, modelo: modelo || null, esforco: esforco || null };
       const r = await api("agente/ponte", corpo);
-      if (!r.ok) { avisar(r.erro || "não foi possível salvar"); return; }
+      if (!r.ok) { avisar(r.erro || t("não foi possível salvar")); return; }
       const m = modelo ? modeloDe(agente, modelo) : null;
-      avisar(agente ? "Ponte: " + nomeAgente(agente) + (m ? " · " + m.titulo : "") : "Ponte desligada.");
+      avisar(agente ? t("Ponte: {nome}", { nome: nomeAgente(agente) }) + (m ? " · " + m.titulo : "") : t("Ponte desligada."));
       await atualizarSaude();
     };
 
@@ -704,17 +835,17 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
         h("span", { class: "col" }, h("span", { class: "titulo" }, titulo), descricao ? h("span", { class: "desc" }, descricao) : null),
         h("span", { class: "check", html: CHECK }));
 
-    menu.append(item("", "Desligada", "só as sessões que estiverem ouvindo", !ponte, () => escolher(null, null, null)));
+    menu.append(item("", t("Desligada"), t("só as sessões que estiverem ouvindo"), !ponte, () => escolher(null, null, null)));
     for (const a of disponiveis) {
       menu.append(h("div", { class: "seletor-sep" }));
       menu.append(h("div", { class: "seletor-grupo" }, h("span", { class: "logo", html: a.marca || "" }), a.nome));
       if (!a.modelos.length) {
-        menu.append(item(a.marca, "Modelo padrão", "o que o " + a.nome + " já usa", !!ponte && ponte.agente === a.id, () => escolher(a.id, null, null)));
+        menu.append(item(a.marca, t("Modelo padrão"), t("o que o {nome} já usa", { nome: a.nome }), !!ponte && ponte.agente === a.id, () => escolher(a.id, null, null)));
         continue;
       }
       for (const m of a.modelos) {
         const marcado = !!ponte && ponte.agente === a.id && ponte.modelo === m.valor;
-        menu.append(item(a.marca, m.titulo + (m.padrao ? " ·  padrão" : ""), m.descricao, marcado, () => escolher(a.id, m.valor, m.esforcoPadrao || null)));
+        menu.append(item(a.marca, m.titulo + (m.padrao ? t(" ·  padrão") : ""), m.descricao, marcado, () => escolher(a.id, m.valor, m.esforcoPadrao || null)));
       }
     }
     if (modeloAtual && modeloAtual.esforcos.length) {
@@ -723,7 +854,7 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
       for (const nivel of modeloAtual.esforcos) {
         niveis.append(h("button", { type: "button", class: (ponte.esforco || modeloAtual.esforcoPadrao) === nivel ? "ativo" : "", onclick: () => escolher(ponte.agente, ponte.modelo, nivel) }, nivelCurto(nivel)));
       }
-      menu.append(h("div", { class: "seletor-rodape" }, h("span", { class: "rot" }, "Raciocínio"), niveis));
+      menu.append(h("div", { class: "seletor-rodape" }, h("span", { class: "rot" }, t("Raciocínio")), niveis));
     }
     caixa.append(seletor);
     $("ponte-estado").hidden = !ponte;
@@ -731,27 +862,27 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
   function renderizarOuvintes() {
     const box = $("ouvintes"); box.textContent = "";
     const lista = (saude && saude.quemOuve) || [];
-    if (!lista.length) { box.append(h("div", { class: "vazio" }, "Ninguém ouvindo. Abra uma sessão do agente e conecte (Claude Code: /anotar) ou ligue a ponte automática.")); return; }
+    if (!lista.length) { box.append(h("div", { class: "vazio" }, t("Ninguém ouvindo. Abra uma sessão do agente e conecte (Claude Code: /anotar) ou ligue a ponte automática."))); return; }
     for (const o of lista) {
       box.append(h("div", { class: "ouvinte" },
-        h("span", { class: "selo ouvindo" }, o.agente || "agente"),
-        h("span", { class: "q" }, [o.rotulo, o.sessao ? "sessão " + o.sessao.slice(0, 8) : null, o.cwd].filter(Boolean).join(" · ") || o.ip || "sem identificação"),
-        h("span", { class: "hora" }, "desde " + hora(o.desde))));
+        h("span", { class: "selo ouvindo" }, o.agente || t("agente")),
+        h("span", { class: "q" }, [o.rotulo, o.sessao ? t("sessão {id}", { id: o.sessao.slice(0, 8) }) : null, o.cwd].filter(Boolean).join(" · ") || o.ip || t("sem identificação")),
+        h("span", { class: "hora" }, t("desde {hora}", { hora: hora(o.desde) }))));
     }
   }
   function renderizarExecucoes() {
     const box = $("execucoes"); box.textContent = "";
     const lista = (agentes && agentes.execucoes) || [];
     if (!lista.length) return;
-    box.append(h("div", { class: "rotulo-secao", style: "margin-top:16px" }, "Execuções da ponte"));
+    box.append(h("div", { class: "rotulo-secao", style: "margin-top:16px" }, t("Execuções da ponte")));
     for (const e of lista.slice(0, 6)) {
       const rodando = e.terminadoEm === null;
       const log = h("pre", { class: "bloco", hidden: true, style: "margin-top:6px" });
       box.append(h("div", { class: "exec" },
-        h("span", { class: "selo " + (rodando ? "viva" : e.codigo === 0 ? "ouvindo" : "") }, rodando ? "rodando" : "saiu " + e.codigo),
-        h("span", { class: "q", title: e.comando.join(" ") }, nomeAgente(e.agente) + (e.sessao ? " · sessão " + e.sessao.slice(0, 8) : " · sessão nova") + " · " + e.motivo),
+        h("span", { class: "selo " + (rodando ? "viva" : e.codigo === 0 ? "ouvindo" : "") }, rodando ? t("rodando") : t("saiu {codigo}", { codigo: e.codigo })),
+        h("span", { class: "q", title: e.comando.join(" ") }, nomeAgente(e.agente) + (e.sessao ? " · " + t("sessão {id}", { id: e.sessao.slice(0, 8) }) : t(" · sessão nova")) + " · " + e.motivo),
         h("span", { class: "hora", style: "color:var(--texto-3);font-size:11.5px" }, hora(e.iniciadoEm)),
-        h("button", { type: "button", class: "mini fantasma", onclick: async () => { if (log.hidden) log.textContent = (await (await fetch("agente/execucoes/" + encodeURIComponent(e.id) + "/log", { cache: "no-store" })).text()) || "(vazio)"; log.hidden = !log.hidden; } }, "log")), log);
+        h("button", { type: "button", class: "mini fantasma", onclick: async () => { if (log.hidden) log.textContent = (await (await fetch("agente/execucoes/" + encodeURIComponent(e.id) + "/log", { cache: "no-store" })).text()) || t("(vazio)"); log.hidden = !log.hidden; } }, "log")), log);
     }
   }
   function renderizarProtocolo() {
@@ -776,11 +907,54 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     ].join("\n");
   }
 
+  const idiomas = { "pt-BR": "Português (Brasil)", en: "English", es: "Español" };
+  const gatilhoIdioma = $("idioma-gatilho"), menuIdioma = $("idioma-menu");
+  const opcoesIdioma = Array.from(menuIdioma.querySelectorAll("[data-idioma]"));
+  const fecharIdioma = (focar = false) => { menuIdioma.hidden = true; gatilhoIdioma.setAttribute("aria-expanded", "false"); if (focar) gatilhoIdioma.focus(); };
+  const abrirIdioma = () => {
+    menuIdioma.hidden = false; gatilhoIdioma.setAttribute("aria-expanded", "true");
+    (opcoesIdioma.find(opcao => opcao.dataset.idioma === i18n.idioma()) || opcoesIdioma[0]).focus();
+  };
+  gatilhoIdioma.addEventListener("click", () => menuIdioma.hidden ? abrirIdioma() : fecharIdioma());
+  gatilhoIdioma.addEventListener("keydown", evento => { if (["ArrowDown", "ArrowUp"].includes(evento.key)) { evento.preventDefault(); abrirIdioma(); } });
+  opcoesIdioma.forEach((opcao, indice) => {
+    opcao.addEventListener("click", () => { i18n.definir(opcao.dataset.idioma); fecharIdioma(true); });
+    opcao.addEventListener("keydown", evento => {
+      if (evento.key === "Escape") { evento.preventDefault(); fecharIdioma(true); return; }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(evento.key)) return;
+      evento.preventDefault();
+      const destino = evento.key === "Home" ? 0 : evento.key === "End" ? opcoesIdioma.length - 1 : (indice + (evento.key === "ArrowDown" ? 1 : -1) + opcoesIdioma.length) % opcoesIdioma.length;
+      opcoesIdioma[destino].focus();
+    });
+  });
+  document.addEventListener("click", evento => { if (!gatilhoIdioma.parentElement.contains(evento.target)) fecharIdioma(); });
+  menuIdioma.addEventListener("focusout", evento => { if (!gatilhoIdioma.parentElement.contains(evento.relatedTarget)) fecharIdioma(); });
+  for (const id of ["btn-verificar-acesso", "btn-copiar-acesso", "btn-desconectar", "abrir-app"]) $(id).setAttribute("data-i18n", $(id).textContent);
+  $("link-acesso").setAttribute("data-i18n-aria-label", "Link de acesso para compartilhar");
+  textoUI($("acesso-descricao"), "Conectando este navegador…");
+  function aplicarIdiomaConexao() {
+    document.documentElement.lang = i18n.idioma(); document.title = t("Anotador · conexão");
+    i18n.traduzir(document);
+    $("idioma-atual").textContent = idiomas[i18n.idioma()];
+    opcoesIdioma.forEach(opcao => opcao.setAttribute("aria-selected", String(opcao.dataset.idioma === i18n.idioma())));
+    if (saude) renderizarSaude(saude);
+    else { $("sub-marca").textContent = t("anotações visuais viram mudanças no código"); $("pilula-app").textContent = t("App: verificando…"); $("pilula-agente").textContent = t("Agente: verificando…"); $("btn-conectar").textContent = t("Conectar e abrir"); }
+    if (detectando) $("rotulo-deteccao").textContent = t("Procurando servidores…"); else renderizarDetectados();
+    menuAberto = false; renderizarAgentes();
+    if (saude?.fontes) { tipografiaConferida = false; avisarTipografia(saude.fontes); }
+  }
+  i18n.observar(aplicarIdiomaConexao);
+  aplicarIdiomaConexao();
+
   $("btn-testar").addEventListener("click", testar);
   $("btn-conectar").addEventListener("click", conectar);
   $("btn-desconectar").addEventListener("click", desconectar);
+  $("abrir-app").addEventListener("click", abrirApp);
+  $("btn-verificar-acesso").addEventListener("click", verificarAcesso);
+  window.addEventListener("focus", () => { void sessaoPronta.then(verificarAcesso); });
   $("btn-redetectar").addEventListener("click", detectar);
   $("btn-copiar-protocolo").addEventListener("click", () => copiar($("protocolo").textContent));
+  $("btn-copiar-acesso").addEventListener("click", compartilharAcesso);
   $("alvo").addEventListener("input", marcarServidorAtual);
   $("alvo").addEventListener("keydown", (e) => { if (e.key === "Enter") conectar(); });
   for (const id of ["passo-1", "passo-2"]) $(id).dataset.n = $(id).textContent;
