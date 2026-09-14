@@ -331,7 +331,7 @@ export class ChatAgentes {
       const conversa = await this.ler(id);
       conferirDono(conversa, agenteEsperado);
       if (conversa.ocupada || conversa.avaliacao?.acompanhando && conversa.avaliacao.emAndamento || emExecucao.has(this.caminho(id))) throw new ErroChat("Aguarde a resposta antes de trocar o modelo.", 409);
-      const escolha = await this.agente({ agente: conversa.agente, modelo: pedido.modelo === undefined ? conversa.modelo : pedido.modelo, esforco: pedido.esforco === undefined ? conversa.esforco : pedido.esforco });
+      const escolha = await this.validarDestino({ agente: conversa.agente, modelo: pedido.modelo === undefined ? conversa.modelo : pedido.modelo, esforco: pedido.esforco === undefined ? conversa.esforco : pedido.esforco });
       if (conversa.modelo !== escolha.modelo) {
         conversa.metricas = invalidarContextoMetricasChat(conversa.metricas, escolha.modelo);
         conversa.contextoInvalidadoEm = new Date().toISOString();
@@ -342,7 +342,8 @@ export class ChatAgentes {
       await this.salvar(conversa); return this.indicarSomenteLeitura(conversa);
     });
   }
-  private async agente(pedido: PedidoChat): Promise<{ agente: AgenteDetectado; modelo: string | null; esforco: string | null }> {
+  /** Valida uma escolha local sem criar conversa nem alterar o agente dos lotes. */
+  async validarDestino(pedido: PedidoChat): Promise<{ agente: AgenteDetectado; modelo: string | null; esforco: string | null }> {
     if (!this.dependencias.detectar && pedido.agente === "antigravity") await atualizarModelosAntigravity();
     const agente = (await (this.dependencias.detectar?.() ?? detectarAgentes())).find((a) => a.id === pedido.agente && a.instalado && a.ponte);
     if (!agente?.caminho || !isAbsolute(agente.caminho)) throw new ErroChat("Agente não instalado ou sem suporte a chat.", 503);
@@ -358,7 +359,7 @@ export class ChatAgentes {
   }
   async criar(pedido: PedidoChat): Promise<ConversaChat> {
     if (!pedido || typeof pedido !== "object" || typeof pedido.agente !== "string") throw new ErroChat("Escolha um agente.");
-    const escolha = await this.agente(pedido);
+    const escolha = await this.validarDestino(pedido);
     const idExterno = pedido.sessaoExterna || null;
     if (idExterno && (typeof idExterno !== "string" || !ID_SESSAO_NATIVA.test(idExterno) || !["claude", "codex", "antigravity"].includes(pedido.agente))) throw new ErroChat("Sessão externa inválida.");
     await this.preparar();
@@ -390,7 +391,7 @@ export class ChatAgentes {
       const conversa = await this.ler(id);
       conferirDono(conversa, agenteEsperado);
       if (conversa.ocupada || conversa.avaliacao?.acompanhando && conversa.avaliacao.emAndamento || emExecucao.has(caminho)) throw new ErroChat("Aguarde a resposta atual antes de enviar outra mensagem.", 409);
-      const { agente } = await this.agente(conversa);
+      const { agente } = await this.validarDestino(conversa);
       if (conversa.sessaoExterna && ["claude", "codex", "antigravity"].includes(conversa.agente)) {
         const externas = await this.externas(true);
         if (externas.some((s) => s.id === conversa.sessaoExterna && s.agente === conversa.agente && s.ativa)) throw new ErroChat("Esta sessão está ativa no CLI. Encerre a execução original antes de continuar pelo chat.", 409);

@@ -17,17 +17,19 @@ describe("avaliação: medição, retorno e arrasto", { skip: chrome ? false : "
     await pagina.navegar(proxy.origem+'/'); await pagina.esperarPor('window.__anotadorCarregado');
     await pagina.avaliar(`(()=>{
       localStorage.clear();window.avPosts=[];window.avGets=0;window.avStatus=200;window.avResposta={ok:true,parecer:null,estado:{fase:'executando',agente:'Claude Code',atualizadoEm:'agora'}};
+      window.avAgentes=[{id:'codex',nome:'Codex CLI',instalado:true,ponte:true,modelos:[{valor:'codex-teste',titulo:'Modelo Codex',esforcos:['low','high']}]},{id:'claude',nome:'Claude Code',instalado:true,ponte:true,modelos:[{valor:'claude-teste',titulo:'Modelo Claude',esforcos:['low','high']}]},{id:'gemini',nome:'Gemini CLI',instalado:false,ponte:true,modelos:[]}];
       const fetchOriginal=window.fetch;window.fetch=(url,opcoes={})=>{
         const caminho=new URL(String(url),location.href).pathname;
+        if(caminho.endsWith('/agentes'))return Promise.resolve(Response.json({agentes:window.avAgentes,ponte:{agente:'claude'},ouvintes:[]}));
         if(caminho.endsWith('/agente/atual')&&window.avAgente)return Promise.resolve(Response.json({ok:true,agente:window.avAgente,marca:'<svg></svg>',modelo:null}));
         if(window.avChat && caminho.includes('/chat/')) {
-          if(caminho.endsWith('/catalogo'))return Promise.resolve(Response.json({agentes:[{id:'claude',nome:'Claude Code',instalado:true,ponte:true,modelos:[]}],sessoesExternas:[]}));
+          if(caminho.endsWith('/catalogo'))return Promise.resolve(Response.json({agentes:window.avAgentes.filter(a=>a.instalado),sessoesExternas:[]}));
           if(caminho.endsWith('/sessoes'))return Promise.resolve(Response.json({sessoes:[window.avChat]}));
           if(caminho.endsWith('/sessoes/'+window.avChat.id))return Promise.resolve(Response.json({conversa:window.avChat}));
           if(caminho.endsWith('/limites'))return Promise.resolve(Response.json({agente:'claude',disponivel:false,janelas:[],atualizadoEm:null}));
         }
-        if(caminho.endsWith('/avaliacoes')&&opcoes.method==='POST'){window.avPosts.push(JSON.parse(opcoes.body));return Promise.resolve(window.avConflito?Response.json({erro:'O agente foi alterado em outra aba. Confira o nome atualizado antes de pedir o parecer.'},{status:409}):Response.json({ok:true,id:'avaliacao-ui-0001',conversa:window.avResposta.conversa},{status:201}));}
-        if(caminho.endsWith('/avaliacoes/avaliacao-ui-0001')){window.avGets++;if(window.avAdiarPrimeira&&window.avGets===1)return new Promise(resolve=>window.avResolverPrimeira=resolve);return Promise.resolve(new Response(JSON.stringify(window.avResposta),{status:window.avStatus}));}
+        if(caminho.endsWith('/avaliacoes')&&opcoes.method==='POST'){window.avPosts.push(JSON.parse(opcoes.body));return Promise.resolve(window.avPostErro?Response.json({erro:window.avPostErro},{status:503}):window.avConflito?Response.json({erro:'O agente foi alterado em outra aba. Confira o nome atualizado antes de pedir o parecer.'},{status:409}):Response.json({ok:true,id:'avaliacao-ui-'+String(window.avPosts.length).padStart(4,'0'),conversa:window.avResposta.conversa},{status:201}));}
+        if(caminho.includes('/avaliacoes/avaliacao-ui-')){window.avGets++;if(window.avAdiarPrimeira&&window.avGets===1)return new Promise(resolve=>window.avResolverPrimeira=resolve);return Promise.resolve(new Response(JSON.stringify(window.avResposta),{status:window.avStatus}));}
         return fetchOriginal(url,opcoes);
       };
       const timeoutOriginal=window.setTimeout;window.setTimeout=(fn,tempo,...args)=>timeoutOriginal(fn,tempo===3000?60:tempo,...args);
@@ -72,6 +74,52 @@ describe("avaliação: medição, retorno e arrasto", { skip: chrome ? false : "
     await pagina.esperarPor(`${no('.an-avaliacao')}.textContent.includes('Hierarquia revisada')`);
     assert.doesNotMatch(await texto(),/Aguardando|está avaliando/); assert.equal(await pagina.avaliar(`${no('.an-avaliacao .rodape input')}.value`),'Avaliar a hierarquia');
     assert.deepEqual(await proxy.servidor.avaliacoes.listar(),[],"fixture não executa nem envia prompt real");
+  });
+
+  test("troca o agente numa nova conversa; cancelar ou falhar preserva o parecer anterior", async () => {
+    await abrir(); await pedir();
+    await pagina.avaliar(`window.avResposta.conversa={id:'aaaaaaaa-bbbb-5ccc-addd-eeeeeeeeeeee',agente:'codex',modelo:'codex-teste',sessaoExterna:'11111111-2222-4333-a444-555555555555'};window.avResposta.parecer={agente:'Codex CLI',resumo:'Parecer anterior preservado.',itens:[]}`);
+    await pagina.esperarPor(`${no('.an-avaliacao')}.textContent.includes('Parecer anterior preservado.')`);
+    const escolherClaude = async () => {
+      await clicar('.an-avaliacao-nova');
+      await pagina.esperarPor(`${no('.an-avaliacao-agente')}?.options.length === 2`);
+      await clicar('.an-avaliacao-escolhas button[aria-label="Agente"]');
+      await pagina.esperarPor(`${no('.an-seletor-popup')}?.checkVisibility()`);
+      await clicar('.an-seletor-popup .an-seletor-opcao:nth-child(2)');
+      assert.equal(await pagina.avaliar(`${no('.an-avaliacao-modelo')}.value`), '', 'modelo anterior não passa para outro agente');
+      await clicar('.an-avaliacao-escolhas button[aria-label="Modelo"]');
+      await clicar('.an-seletor-popup .an-seletor-opcao:nth-child(2)');
+      await clicar('.an-avaliacao-escolhas button[aria-label="Raciocínio"]');
+      await clicar('.an-seletor-popup .an-seletor-opcao:nth-child(3)');
+      assert.match(await pagina.avaliar<string>(`${no('.an-avaliacao .rodape button')}.textContent`), /Iniciar com Claude Code/);
+    };
+    await escolherClaude();
+    assert.equal(await pagina.avaliar('window.avPosts.length'), 1, 'selecionar não envia');
+    for (const largura of [873, 390]) {
+      await pagina.definirViewport(largura, 746);
+      await pagina.esperar(50);
+      const medidas = await pagina.avaliar<{left:number;right:number;bottom:number;overflow:boolean}>(`(()=>{const e=${no('.an-avaliacao')},r=e.getBoundingClientRect();return {left:r.left,right:r.right,bottom:r.bottom,overflow:e.scrollWidth>e.clientWidth}})()`);
+      assert.ok(medidas.left >= 0 && medidas.right <= largura + 1 && medidas.bottom <= 747 && !medidas.overflow, JSON.stringify(medidas));
+    }
+    await clicar('.an-avaliacao-escolhas-cab button');
+    assert.match(await texto(), /Parecer anterior preservado/);
+    assert.match(await pagina.avaliar<string>(`${no('.an-avaliacao-chat-info strong')}.textContent`), /Codex CLI/);
+    await escolherClaude();
+    await pagina.avaliar(`window.avPostErro='O agente está indisponível.';${no('.an-avaliacao .rodape input')}.value='Revisar contraste';${no('.an-avaliacao .rodape input')}.dispatchEvent(new Event('input',{bubbles:true}))`);
+    await clicar('.an-avaliacao .rodape button');
+    await pagina.esperarPor(`${no('.an-avaliacao [role="alert"]')}?.textContent.includes('indisponível')`);
+    assert.match(await pagina.avaliar<string>(`${no('.an-avaliacao-chat-info strong')}.textContent`), /Codex CLI/);
+    assert.equal(await pagina.avaliar(`localStorage.getItem('anotador-ui:avaliacao:teste:/')`), 'avaliacao-ui-0001');
+    await pagina.avaliar(`window.avPostErro=null;window.avResposta={ok:true,parecer:null,estado:{fase:'executando',agente:'claude'},conversa:{id:'bbbbbbbb-bbbb-5ccc-addd-eeeeeeeeeeee',agente:'claude',modelo:'claude-teste',sessaoExterna:null}};window.avChat={...window.avResposta.conversa,esforco:'high',titulo:'Nova avaliação Claude',atualizadaEm:new Date().toISOString(),ocupada:false,mensagens:[{id:'m1',autor:'agente',texto:'Avaliando com Claude.',em:new Date().toISOString()}]}`);
+    await clicar('.an-avaliacao .rodape button');
+    await pagina.esperarPor(`${no('.an-chat-mensagens')}?.textContent.includes('Avaliando com Claude.')`);
+    assert.equal(await pagina.avaliar(`${no('.an-avaliacao')}.hidden`), true);
+    const enviada = await pagina.avaliar<{destino:unknown;id?:string;agenteEsperado?:string;foco:string}>('window.avPosts[2]');
+    assert.deepEqual(enviada.destino, { agente: 'claude', modelo: 'claude-teste', esforco: 'high' });
+    assert.equal(enviada.id, undefined); assert.equal(enviada.agenteEsperado, undefined); assert.equal(enviada.foco, 'Revisar contraste');
+    assert.equal(await pagina.avaliar(`localStorage.getItem('anotador-ui:avaliacao:teste:/')`), 'avaliacao-ui-0003');
+    assert.deepEqual(await proxy.servidor.avaliacoes.listar(), [], 'nenhum prompt real é enviado');
+    await pagina.definirViewport(1200, 800);
   });
 
   test("falha de autenticação encerra espera e consulta manual pode recuperar parecer posterior", async () => {

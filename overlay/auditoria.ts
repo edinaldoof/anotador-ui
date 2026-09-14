@@ -636,6 +636,110 @@ let sondaParecer: ReturnType<typeof setTimeout> | null = null;
 let consultaParecer: AbortController | null = null;
 let geracaoParecer = 0;
 let verificandoAgenteAvaliacao = false;
+interface DestinoNovaAvaliacao { agente: string; modelo: string | null; esforco: string | null }
+const escolhaAvaliacao = {
+  aberta: false, carregando: false, geracao: 0, erro: null as string | null,
+  erroEnvio: null as string | null,
+  agentes: [] as AgenteNoOverlay[], destino: null as DestinoNovaAvaliacao | null,
+};
+
+async function escolherNovaAvaliacao(): Promise<void> {
+  if (avaliacao.enviando || escolhaAvaliacao.aberta) return;
+  escolhaAvaliacao.aberta = true;
+  escolhaAvaliacao.carregando = true;
+  escolhaAvaliacao.erro = null;
+  escolhaAvaliacao.erroEnvio = null;
+  escolhaAvaliacao.destino = null;
+  const geracao = ++escolhaAvaliacao.geracao;
+  renderizarAvaliacao();
+  try {
+    const resposta = await pedirApi("/agentes", undefined, AbortSignal.timeout(8000));
+    if (geracao !== escolhaAvaliacao.geracao) return;
+    if (!resposta.ok) throw new Error(typeof resposta.dados.erro === "string" ? resposta.dados.erro : "HTTP " + resposta.status);
+    const dados = resposta.dados as unknown as EstadoAgentes;
+    escolhaAvaliacao.agentes = (dados.agentes ?? []).filter(a => a.instalado && a.ponte);
+    const agente = escolhaAvaliacao.agentes.find(a => a.id === avaliacao.conversa?.agente)
+      ?? escolhaAvaliacao.agentes.find(a => a.id === dados.ponte?.agente || a.nome === AGENTE)
+      ?? escolhaAvaliacao.agentes[0];
+    if (!agente) throw new Error(traduzirInterface("Nenhum agente instalado está disponível para avaliar a página."));
+    const modeloAtual = avaliacao.conversa?.agente === agente.id ? avaliacao.conversa.modelo : dados.ponte?.agente === agente.id ? dados.ponte.modelo : null;
+    const modelo = agente.modelos?.find(m => m.valor === modeloAtual);
+    escolhaAvaliacao.destino = { agente: agente.id, modelo: modelo?.valor ?? null, esforco: null };
+  } catch (erro) {
+    if (geracao === escolhaAvaliacao.geracao) escolhaAvaliacao.erro = erro instanceof Error ? erro.message : String(erro);
+  } finally {
+    if (geracao === escolhaAvaliacao.geracao) {
+      escolhaAvaliacao.carregando = false;
+      renderizarAvaliacao();
+      if (avaliacao.aberto) ui.avaliacao?.querySelector<HTMLButtonElement>('.an-avaliacao-escolhas button[role="combobox"]')?.focus({ preventScroll: true });
+    }
+  }
+}
+
+function cancelarNovaAvaliacao(): void {
+  if (avaliacao.enviando) return;
+  fecharSeletorAberto?.();
+  escolhaAvaliacao.aberta = false;
+  escolhaAvaliacao.geracao++;
+  renderizarAvaliacao();
+  ui.avaliacao?.querySelector<HTMLButtonElement>(".an-avaliacao-nova")?.focus({ preventScroll: true });
+}
+
+function nomeDestinoAvaliacao(): string {
+  return escolhaAvaliacao.agentes.find(a => a.id === escolhaAvaliacao.destino?.agente)?.nome ?? AGENTE;
+}
+
+function controlesNovaAvaliacao(): HTMLElement {
+  const bloco = h("div", { class: "an-avaliacao-escolhas", id: "an-avaliacao-escolhas" },
+    h("div", { class: "an-avaliacao-escolhas-cab" },
+      h("strong", null, textoInterface("Nova conversa de avaliação")),
+      h("button", { type: "button", class: "an-btn mini", disabled: avaliacao.enviando, onclick: cancelarNovaAvaliacao }, textoInterface("Cancelar"))));
+  if (escolhaAvaliacao.carregando) {
+    bloco.append(h("p", { role: "status" }, textoInterface("Carregando agentes…")));
+    return bloco;
+  }
+  if (escolhaAvaliacao.erro) {
+    bloco.append(h("p", { class: "erro", role: "alert" }, escolhaAvaliacao.erro),
+      h("button", { type: "button", class: "an-btn mini", onclick: () => { escolhaAvaliacao.aberta = false; void escolherNovaAvaliacao(); } }, textoInterface("Tentar novamente")));
+    return bloco;
+  }
+  const destino = escolhaAvaliacao.destino;
+  if (!destino) return bloco;
+  const agente = h("select", { class: "an-avaliacao-agente", disabled: avaliacao.enviando },
+    ...escolhaAvaliacao.agentes.map(a => h("option", { value: a.id }, a.nome)));
+  agente.value = destino.agente;
+  const modelo = h("select", { class: "an-avaliacao-modelo", disabled: avaliacao.enviando });
+  const esforco = h("select", { class: "an-avaliacao-esforco" });
+  const campo = (rotulo: string, select: HTMLSelectElement) => h("label", { class: "an-avaliacao-escolha" },
+    h("span", null, textoInterface(rotulo)), select, criarSeletorPersonalizado(select, rotulo));
+  bloco.append(campo("Agente", agente), h("div", { class: "an-avaliacao-modelos" }, campo("Modelo", modelo), campo("Raciocínio", esforco)));
+  const atualizarDestino = () => {
+    destino.agente = agente.value; destino.modelo = modelo.value || null; destino.esforco = esforco.value || null;
+    const botao = ui.avaliacao?.querySelector<HTMLButtonElement>(".rodape button");
+    if (botao) botao.replaceChildren(h("span", null, textoInterface("Iniciar com {agente}", { agente: nomeDestinoAvaliacao() })));
+    const foco = ui.avaliacao?.querySelector<HTMLInputElement>(".rodape input");
+    if (foco) foco.placeholder = traduzirInterface("O que {agente} deve olhar com atenção? (opcional)", { agente: nomeDestinoAvaliacao() });
+  };
+  const atualizarEsforcos = (anterior: string | null = null) => {
+    const atual = escolhaAvaliacao.agentes.find(a => a.id === agente.value)?.modelos?.find(m => m.valor === modelo.value);
+    esforco.replaceChildren(h("option", { value: "" }, textoInterface("Padrão")),
+      ...(atual?.esforcos ?? []).map(e => h("option", { value: e }, textoInterface(({ low: "Baixo", medium: "Médio", high: "Alto", xhigh: "Muito alto", max: "Máximo", ultra: "Ultra" } as Record<string, string>)[e] ?? e))));
+    esforco.value = anterior && atual?.esforcos.includes(anterior) ? anterior : "";
+    esforco.disabled = avaliacao.enviando || !atual?.esforcos.length;
+    atualizarSeletorPersonalizado(esforco);
+  };
+  const atualizarModelos = (anterior: string | null = null) => {
+    const atual = escolhaAvaliacao.agentes.find(a => a.id === agente.value);
+    modelo.replaceChildren(h("option", { value: "" }, textoInterface("Padrão do agente")), ...(atual?.modelos ?? []).map(m => h("option", { value: m.valor }, m.titulo)));
+    modelo.value = anterior && atual?.modelos?.some(m => m.valor === anterior) ? anterior : "";
+    atualizarSeletorPersonalizado(modelo);
+  };
+  atualizarModelos(destino.modelo); atualizarEsforcos(destino.esforco);
+  agente.addEventListener("change", () => { atualizarModelos(); atualizarEsforcos(); atualizarDestino(); });
+  modelo.addEventListener("change", () => { atualizarEsforcos(); atualizarDestino(); });
+  esforco.addEventListener("change", atualizarDestino);
+  return bloco;
+}
 
 function elementoDoSeletor(seletor: string | null | undefined): ElementoEstilizavel | null {
   if (!seletor) return null;
@@ -712,21 +816,18 @@ function fecharAvaliacao(): void {
   pararAcompanhamentoParecer();
 }
 
-async function pedirParecer(foco: string): Promise<void> {
-  if (avaliacao.enviando || verificandoAgenteAvaliacao || !avaliacao.medicao || avaliacaoEmAndamento()) return;
+async function pedirParecer(foco: string, destino?: DestinoNovaAvaliacao): Promise<void> {
+  if (avaliacao.enviando || verificandoAgenteAvaliacao || !avaliacao.medicao || (!destino && avaliacaoEmAndamento())) return;
+  if (destino) destino = { ...destino };
   avaliacao.enviando = true;
-  pararAcompanhamentoParecer();
-  avaliacao.id = null;
-  avaliacao.execucao = null;
-  avaliacao.conversa = null;
   avaliacao.foco = foco;
   avaliacao.erro = null;
-  avaliacao.parecer = null;
+  escolhaAvaliacao.erroEnvio = null;
   renderizarAvaliacao();
   try {
     const contexto = { ...contextoDaPagina(), medidos: avaliacao.medicao.medidos };
     const corpo = {
-      agenteEsperado: AGENTE,
+      ...(destino ? { destino } : { agenteEsperado: AGENTE }),
       pagina: {
         url: location.href,
         caminho: location.pathname,
@@ -740,17 +841,24 @@ async function pedirParecer(foco: string): Promise<void> {
       instantaneo: CFG.capturas ? instantaneoHtml([]) : null,
     };
     const resp = await pedirApi("/avaliacoes", corpo, AbortSignal.timeout(30_000));
-    if (resp.status === 409) await sincronizarAgenteAtual();
+    if (resp.status === 409 && !destino) await sincronizarAgenteAtual();
     if (!resp.ok) throw new Error(typeof resp.dados.erro === "string" ? traduzirInterface(resp.dados.erro) : "HTTP " + resp.status);
     if (typeof resp.dados.id !== "string") throw new Error(traduzirInterface("O servidor não confirmou o pedido de avaliação."));
+    // Só troca a referência depois da confirmação. Cancelamento e falha preservam a sessão anterior.
+    pararAcompanhamentoParecer();
+    avaliacao.execucao = null;
+    avaliacao.parecer = null;
     avaliacao.id = resp.dados.id;
     avaliacao.conversa = (resp.dados.conversa as ConversaAvaliacaoUI | null) ?? null;
+    escolhaAvaliacao.aberta = false;
+    escolhaAvaliacao.geracao++;
     try { localStorage.setItem(chaveUltimaAvaliacao(), avaliacao.id); } catch { /* memória continua disponível */ }
     avisar(traduzirInterface("Pedido de parecer enviado a {agente}.", { agente: typeof resp.dados.agente === "string" ? resp.dados.agente : AGENTE }));
     acompanharParecer();
     if (avaliacao.conversa && await abrirChatDaAvaliacao(avaliacao.conversa)) fecharAvaliacao();
   } catch (erro) {
-    avaliacao.erro = erro instanceof Error ? erro.message : String(erro);
+    if (destino) escolhaAvaliacao.erroEnvio = erro instanceof Error ? erro.message : String(erro);
+    else avaliacao.erro = erro instanceof Error ? erro.message : String(erro);
   } finally {
     avaliacao.enviando = false;
     renderizarAvaliacao();
@@ -929,19 +1037,26 @@ function renderizarAvaliacao(): void {
     h("button", { class: "an-ico", title: textoInterface("Fechar"), html: ICONES.fechar, onclick: fecharAvaliacao })
   );
   painel.append(cab);
+  const vinculo = h("div", { class: "an-avaliacao-vinculo" });
   if (avaliacao.conversa) {
     const conversa = avaliacao.conversa;
     const nome = conversa.agente === "claude" ? "Claude Code" : conversa.agente === "codex" ? "Codex CLI" : conversa.agente;
     const sessao = conversa.sessaoExterna || conversa.id;
-    painel.append(h("button", { type: "button", class: "an-avaliacao-chat", title: textoInterface("Abrir conversa da avaliação"), onclick: () => void abrirConversaAvaliacao() },
+    vinculo.append(h("button", { type: "button", class: "an-avaliacao-chat", title: textoInterface("Abrir conversa da avaliação"), disabled: avaliacao.enviando, onclick: () => void abrirConversaAvaliacao() },
       h("span", { class: "an-ico", html: ICONE_CHAT }),
-      h("span", { class: "an-avaliacao-chat-info" }, h("strong", null, nome + (conversa.modelo ? " · " + conversa.modelo : "")), h("span", { title: sessao }, textoInterface(conversa.sessaoExterna ? "Sessão {id}" : "Conversa {id}", { id: sessao.slice(0, 8) }))),
+      h("span", { class: "an-avaliacao-chat-info" }, h("strong", { title: nome + (conversa.modelo ? " · " + conversa.modelo : "") }, nome + (conversa.modelo ? " · " + conversa.modelo : "")), h("span", { title: sessao }, textoInterface(conversa.sessaoExterna ? "Sessão {id}" : "Conversa {id}", { id: sessao.slice(0, 8) }))),
       h("span", { class: "an-avaliacao-chat-acao" }, textoInterface("Abrir chat"))));
+  } else {
+    vinculo.append(h("span", { class: "an-avaliacao-chat-info" }, h("strong", null, AGENTE)));
   }
+  vinculo.append(h("button", { type: "button", class: "an-btn mini an-avaliacao-nova", disabled: avaliacao.enviando,
+    title: textoInterface("Trocar agente e iniciar nova conversa"), "aria-expanded": String(escolhaAvaliacao.aberta), "aria-controls": "an-avaliacao-escolhas",
+    onclick: () => escolhaAvaliacao.aberta ? cancelarNovaAvaliacao() : void escolherNovaAvaliacao() }, textoInterface("Trocar agente")));
+  painel.append(vinculo);
   tornarArrastavel(painel, [alca, cab], "avaliacao");
 
   const corpo = h("div", { class: "corpo" });
-  if (m) {
+  if (!escolhaAvaliacao.aberta && m) {
     // Os dois conjuntos ficam numa lista só, ordenada por gravidade, porque quem abre
     // o painel quer decidir o que consertar primeiro — e não ler duas listas. O título
     // então precisa cobrir as duas origens; o selo de cada linha diz de quem é o achado.
@@ -951,7 +1066,9 @@ function renderizarAvaliacao(): void {
     for (const a of m.achados) corpo.append(linhaDeAchado(a));
   }
 
-  if (avaliacao.parecer) {
+  if (escolhaAvaliacao.aberta) {
+    corpo.append(controlesNovaAvaliacao());
+  } else if (avaliacao.parecer) {
     const p = avaliacao.parecer;
     corpo.append(h("div", { class: "secao" }, textoInterface("Parecer de {agente}", { agente: p.agente })));
     if (p.resumo) corpo.append(h("div", { class: "resumo" }, p.resumo));
@@ -989,22 +1106,31 @@ function renderizarAvaliacao(): void {
   }
   painel.append(corpo);
 
-  const campo = h("input", { type: "text", placeholder: textoInterface("O que {agente} deve olhar com atenção? (opcional)", { agente: AGENTE }) });
+  const campo = h("input", { type: "text", "aria-label": textoInterface("Foco da nova avaliação (opcional)"),
+    placeholder: avaliacao.id && !escolhaAvaliacao.aberta ? textoInterface("Foco da nova avaliação (opcional)") : textoInterface("O que {agente} deve olhar com atenção? (opcional)", { agente: escolhaAvaliacao.aberta ? nomeDestinoAvaliacao() : AGENTE }), disabled: avaliacao.enviando });
   campo.value = avaliacao.foco;
   campo.addEventListener("input", () => { avaliacao.foco = campo.value; });
+  const acionar = () => {
+    if (escolhaAvaliacao.aberta) {
+      if (!escolhaAvaliacao.carregando && escolhaAvaliacao.destino) void pedirParecer(campo.value.trim(), escolhaAvaliacao.destino);
+    } else if (avaliacaoEmAndamento()) void abrirConversaAvaliacao();
+    else if (avaliacao.id) void escolherNovaAvaliacao();
+    else void pedirParecer(campo.value.trim());
+  };
   const botao = h(
     "button",
     {
       class: "an-btn primario",
-      disabled: avaliacao.enviando || verificandoAgenteAvaliacao || !m || avaliacaoEmAndamento() && !avaliacao.conversa,
-      onclick: () => avaliacaoEmAndamento() ? void abrirConversaAvaliacao() : void pedirParecer(campo.value.trim()),
+      disabled: avaliacao.enviando || verificandoAgenteAvaliacao || !m || (escolhaAvaliacao.aberta ? escolhaAvaliacao.carregando || !escolhaAvaliacao.destino : avaliacaoEmAndamento() && !avaliacao.conversa),
+      onclick: acionar,
     },
-    textoInterface(verificandoAgenteAvaliacao ? "Conferindo agente…" : avaliacao.enviando ? "Enviando…" : avaliacaoEmAndamento() ? "Acompanhar no chat" : avaliacao.parecer || avaliacao.execucao?.fase === "falhou" || avaliacao.execucao?.fase === "sem_parecer" ? "Pedir de novo" : "Pedir parecer a {agente}", { agente: AGENTE })
+    textoInterface(verificandoAgenteAvaliacao ? "Conferindo agente…" : avaliacao.enviando ? "Enviando…" : escolhaAvaliacao.aberta ? "Iniciar com {agente}" : avaliacaoEmAndamento() ? "Acompanhar no chat" : avaliacao.id ? "Nova avaliação" : "Pedir parecer a {agente}", { agente: escolhaAvaliacao.aberta ? nomeDestinoAvaliacao() : AGENTE })
   );
   campo.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") void pedirParecer(campo.value.trim());
+    if (e.key === "Enter" && !botao.disabled) acionar();
   });
   painel.append(h("div", { class: "rodape" }, campo, botao));
+  if (escolhaAvaliacao.aberta && escolhaAvaliacao.erroEnvio) painel.append(h("div", { class: "erro", role: "alert" }, escolhaAvaliacao.erroEnvio));
   if (avaliacao.erro) painel.append(h("div", { class: "erro" }, avaliacao.erro));
 }
 

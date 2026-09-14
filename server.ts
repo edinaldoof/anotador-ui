@@ -1104,16 +1104,26 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     }
     let pedido;
     let agenteEsperado: string | undefined;
+    let destino: Awaited<ReturnType<ChatAgentes["validarDestino"]>> | undefined;
     try {
       const corpo = JSON.parse((await lerCorpo(req)).toString("utf8"));
       pedido = validarPedido(corpo);
       if (corpo.agenteEsperado !== undefined && typeof corpo.agenteEsperado !== "string") throw new Error("agente esperado inválido");
       agenteEsperado = corpo.agenteEsperado;
+      if (corpo.destino !== undefined) {
+        const escolha = corpo.destino;
+        if (!escolha || typeof escolha !== "object" || Array.isArray(escolha) || typeof escolha.agente !== "string") throw new ErroChat("Escolha um agente válido.");
+        destino = await chatDoContexto(ctx).validarDestino({ agente: escolha.agente, modelo: escolha.modelo, esforco: escolha.esforco });
+      }
     } catch (erro) {
-      responderJson(res, 400, { ok: false, erro: erro instanceof Error ? erro.message : String(erro) });
+      responderJson(res, erro instanceof ErroChat ? erro.status : 400, { ok: false, erro: erro instanceof Error ? erro.message : String(erro) });
       return true;
     }
     const contextoPedido = { ...ctx, opcoes: { ...opcoes, ponte: opcoes.ponte ? { ...opcoes.ponte } : null } };
+    if (destino) {
+      contextoPedido.opcoes.agente = destino.agente.nome;
+      contextoPedido.opcoes.ponte = { agente: destino.agente.id, modelo: destino.modelo, esforco: destino.esforco, sessao: null };
+    }
     const agenteDoPedido = contextoPedido.opcoes.ponte?.agente ?? contextoPedido.opcoes.agente;
     if (agenteEsperado !== undefined && (idPeloNome(agenteEsperado) ?? agenteEsperado) !== (idPeloNome(agenteDoPedido) ?? agenteDoPedido)) {
       responderJson(res, 409, { ok: false, erro: "O agente foi alterado em outra aba. Confira o nome atualizado antes de pedir o parecer." });

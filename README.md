@@ -243,6 +243,8 @@ As três últimas vêm da lista de *tells* que a Anthropic publica na skill [fro
 
 Com a ponte configurada, cada pedido abre uma **conversa de avaliação** no chat, com agente, modelo e ID da sessão. As mensagens públicas da execução e os contadores disponíveis aparecem ali. O botão **Abrir chat** no painel retoma a mesma conversa, inclusive depois de recarregar a página. Enquanto a avaliação está em andamento, novos envios e alterações de modelo dessa conversa ficam bloqueados; ao terminar, você pode continuar com o mesmo agente.
 
+Para pedir outra avaliação, use **Trocar agente** no próprio painel, escolha agente, modelo e raciocínio e clique em **Iniciar com…**. O pedido abre uma nova conversa no chat. Cada avaliação mantém seu agente e histórico; essa escolha vale apenas para o novo pedido. Cancelar ou receber um erro no envio mantém a avaliação anterior acessível.
+
 O parecer é recebido diretamente da saída estruturada do CLI, sem exigir que o processo consiga acessar o servidor por HTTP. O retorno por `POST /avaliacoes/<id>/parecer` continua disponível para integrações que escutam os eventos. Se a execução falhar ou não entregar um parecer válido, o chat conserva as mensagens disponíveis e mostra o estado; consultar novamente nunca inicia outra análise.
 
 ![Painel de avaliação sobre a tela de entrada do Portal, com um achado do motor emprestado e um da régua da casa](docs/imagens/avaliacao.png)

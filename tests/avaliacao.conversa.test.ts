@@ -4,7 +4,8 @@ import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Ponte, comandoDaPonte, type Execucao, type PedidoPonte } from "../lib/agentes.ts";
+import { AGENTES, Ponte, comandoDaPonte, type Execucao, type PedidoPonte } from "../lib/agentes.ts";
+import { ChatAgentes } from "../lib/chat.ts";
 import { idConversaAvaliacao, parecerDaResposta, saidaPublicaAvaliacao } from "../lib/avaliacao-conversa.ts";
 import { BASE } from "../server.ts";
 import { criarAlvoFalso, criarProxy, esperarAte, pedir } from "./ajuda.ts";
@@ -114,4 +115,52 @@ test("a saída estruturada usa flags nativas sem alterar os comandos normais de 
     assert.ok(comando.includes(agente === "codex" ? "--json" : "--output-format"));
     assert.ok(!comandoDaPonte(agente, null, "Aplicar lote")!.includes("--output-format"));
   }
+});
+
+test("trocar o destino cria outra avaliação e outra sessão, preservando o agente global e o histórico", async (t) => {
+  const chamadas: PedidoPonte[] = [];
+  const validar = ChatAgentes.prototype.validarDestino;
+  const agentes = AGENTES.filter(a => a.id === "claude" || a.id === "codex").map(a => ({
+    ...a, instalado: true, caminho: process.execPath, marca: "", modelos: [{ valor: a.id + "-teste", titulo: "Modelo teste", esforcos: ["low", "high"] }],
+  }));
+  t.mock.method(ChatAgentes.prototype, "validarDestino", function (this: ChatAgentes, pedido: Parameters<ChatAgentes["validarDestino"]>[0]) {
+    return validar.call(new ChatAgentes(this.dir, null, { detectar: () => agentes }), pedido);
+  });
+  t.mock.method(Ponte.prototype, "lerSaidaAvaliacao", async () => "");
+  t.mock.method(Ponte.prototype, "iniciar", async (pedido: PedidoPonte) => {
+    chamadas.push(pedido);
+    const execucao: Execucao = { id: `2026-09-14T19-40-56-51${chamadas.length}Z-${pedido.agente}`, agente: pedido.agente, sessao: null, modelo: pedido.modelo, pid: null, comando: ["simulado"], log: "", motivo: pedido.motivo, iniciadoEm: new Date().toISOString(), terminadoEm: null, codigo: null };
+    await pedido.aoAtualizar?.(execucao); return execucao;
+  });
+  const alvo = await criarAlvoFalso(), proxy = await criarProxy(alvo, { capturas: false, fonte: null, agente: "Codex CLI", ponte: { agente: "codex", sessao: randomUUID(), modelo: "codex-teste", esforco: "high" } });
+  const post = (corpo: unknown) => pedir(proxy.origem + BASE + "/avaliacoes", { metodo: "POST", headers: { "content-type": "application/json" }, corpo: JSON.stringify(corpo) });
+  const get = async (path: string) => JSON.parse((await pedir(proxy.origem + BASE + path)).corpo);
+  try {
+    const pagina = { url: alvo.origem, caminho: "/entrar" };
+    const primeira = JSON.parse((await post({ pagina, foco: "Primeira avaliação" })).corpo);
+    await esperarAte(() => chamadas.length === 1, 3000, 20);
+    const anterior = (await get("/chat/sessoes/" + primeira.conversa.id + "?agente=codex")).conversa;
+    const global = await get("/agente/atual");
+    const resposta = await post({ pagina, foco: "Outro olhar", destino: { agente: "claude", modelo: "claude-teste", esforco: "low" } });
+    assert.equal(resposta.status, 201, resposta.corpo);
+    const segunda = JSON.parse(resposta.corpo);
+    await esperarAte(() => chamadas.length === 2, 3000, 20);
+    assert.notEqual(segunda.id, primeira.id);
+    assert.notEqual(segunda.conversa.id, primeira.conversa.id);
+    assert.equal(segunda.conversa.agente, "claude"); assert.equal(segunda.agente, "Claude Code");
+    assert.equal(chamadas[1]!.agente, "claude"); assert.equal(chamadas[1]!.modelo, "claude-teste");
+    assert.equal(chamadas[1]!.esforco, "low"); assert.equal(chamadas[1]!.sessao, null);
+    assert.deepEqual(await get("/agente/atual"), global);
+    const preservada = (await get("/chat/sessoes/" + primeira.conversa.id + "?agente=codex")).conversa;
+    assert.equal(preservada.agente, "codex"); assert.deepEqual(preservada.mensagens, anterior.mensagens);
+    assert.equal((await pedir(proxy.origem + BASE + "/chat/sessoes/" + primeira.conversa.id + "?agente=claude")).status, 409);
+    const nova = (await get("/chat/sessoes/" + segunda.conversa.id + "?agente=claude")).conversa;
+    assert.equal(nova.esforco, "low"); assert.equal(nova.avaliacao.id, segunda.id);
+    for (const destino of [null, { agente: "inexistente" }, { agente: "claude", modelo: "codex-teste" }, { agente: "claude", modelo: "claude-teste", esforco: "ultra" }, { agente: "claude", modelo: 42 }]) {
+      const invalida = await post({ pagina, destino });
+      assert.ok(invalida.status === 400 || invalida.status === 503, invalida.corpo);
+    }
+    assert.equal(chamadas.length, 2, "destinos inválidos nunca executam nem reutilizam outro agente");
+    assert.equal((await proxy.servidor.avaliacoes.listar()).length, 2);
+  } finally { await proxy.fechar(); await alvo.fechar(); }
 });
