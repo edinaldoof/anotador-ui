@@ -71,6 +71,28 @@ test("paraDtcg recusa o que o formato não representa, dizendo o motivo", () => 
   assert.deepEqual(valor["spread"], { value: 0, unit: "px" }, "o que o CSS omite vira zero explícito, que o formato exige");
 });
 
+test("exportação de cores preserva alpha explícito sem confundir o último canal com transparência", () => {
+  const casos: Array<[string, number]> = [
+    ["rgb(255, 0, 0)", 1],
+    ["rgb(255 0 1)", 1],
+    ["rgb(100% 0% 0%)", 1],
+    ["rgba(255, 0, 0, 0.25)", 0.25],
+    ["rgb(255 0 0 / 50%)", 0.5],
+    ["hsl(0 100% 50% / 0.2)", 0.2],
+    ["hsla(0, 100%, 50%, 0.3)", 0.3],
+    ["oklch(50% 0.2 20 / 25%)", 0.25],
+    ["#f008", 0.533],
+    ["#ff000080", 0.502],
+    ["transparent", 0],
+  ];
+  for (const [css, alpha] of casos) {
+    const { documento } = paraDtcg(sistemaDe(`:root {\n  --color-teste: ${css};\n}`));
+    const cores = documento["cor"] as Record<string, Record<string, unknown>>;
+    const valor = cores["color-teste"]?.["$value"] as Record<string, unknown>;
+    assert.equal(valor["alpha"], alpha, css);
+  }
+});
+
 test("cada token carrega de onde saiu, para a viagem de volta ser possível", () => {
   const { documento } = paraDtcg(sistemaDe(":root {\n  --color-marca: #123456;\n}"));
   const cor = (documento["cor"] ?? {}) as Record<string, Record<string, unknown>>;

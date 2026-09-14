@@ -284,7 +284,7 @@ anotador progresso <id> --nota … | nota <id> --texto … | perguntar <id> --te
 ## Segurança e limites
 
 - Ferramenta de desenvolvimento: escuta em `0.0.0.0` para você anotar de outro aparelho da rede, e **só aceita como alvo** endereços da própria máquina ou da rede local.
-- **Microfone e câmera exigem conexão segura.** O navegador trata `localhost` como seguro e um endereço de rede não, então o ditado por voz some quando você abre do celular. `anotador servir --https` resolve: o anotador gera um certificado próprio com o `openssl` do sistema, cobrindo `localhost` e os endereços desta máquina. Na primeira visita o navegador avisa, você aceita uma vez, e o microfone passa a funcionar. O certificado fica em `tls/` dentro da pasta da fila e é refeito sozinho quando a máquina troca de rede.
+- **Microfone e câmera exigem conexão segura.** O navegador trata `localhost` como seguro e um endereço de rede não, então o ditado por voz some quando você abre do celular. `anotador servir --https` resolve: o anotador gera um certificado próprio com o `openssl` do sistema, cobrindo `localhost` e os endereços desta máquina. Na primeira visita o navegador avisa, você aceita uma vez, e o microfone passa a funcionar. O certificado fica em `tls/` dentro da pasta da fila e é refeito sozinho quando a máquina troca de rede. A porta continua atendendo HTTP em texto claro ao mesmo tempo, para o agente na própria máquina abrir `ws://` sem precisar saber do certificado.
 - As rotas que trocam a conexão, mexem na ponte ou **iniciam um agente** exigem identificação. Da própria máquina passam direto, e o cabeçalho de origem barra pedido de outro site aberto ao lado. De outro aparelho é preciso a **chave da sessão**, que o anotador imprime ao subir:
 
   ```

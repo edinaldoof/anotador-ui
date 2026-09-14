@@ -125,3 +125,51 @@ test("anexarCapturas regrava o markdown com os caminhos dos prints", async () =>
   assert.match(md, /Recorte: capturas\/lote-teste-0002\/anotacao-1.png/);
   assert.deepEqual(await fila.capturas(lote.id), { pagina: "capturas/lote-teste-0002/pagina.png", anotacoes: { "anot-0001": "capturas/lote-teste-0002/anotacao-1.png" } });
 });
+
+test("reenvios simultâneos do mesmo lote gravam uma única entrada completa", async () => {
+  const pasta = await mkdtemp(join(tmpdir(), "anotador-fila-concorrente-"));
+  try {
+    const filas = [new Fila(pasta), new Fila(pasta)];
+    await filas[0]!.preparar();
+    const lote = loteDeExemplo("lote-concorrente-0001");
+    const resultados = await Promise.all(Array.from({ length: 12 }, (_, i) => filas[i % 2]!.gravar(lote)));
+    assert.equal(resultados.filter((r) => r.novo).length, 1);
+    assert.equal((await filas[0]!.listar()).length, 1);
+    assert.equal(await filas[0]!.lerInstantaneo(lote.id), lote.instantaneo);
+    assert.match((await filas[0]!.lerMarkdown(lote.id)) ?? "", /Deixar o rótulo maior/);
+    assert.equal((await filas[0]!.status(lote.id)).estado, "recebido");
+  } finally {
+    await rm(pasta, { recursive: true, force: true });
+  }
+});
+
+test("respostas simultâneas à mesma pergunta aceitam apenas uma e liberam a fila após rejeição", async () => {
+  const fila = new Fila(dir);
+  const outra = new Fila(dir);
+  const lote = loteDeExemplo("lote-concorrente-0002");
+  await fila.gravar(lote);
+  const pergunta = await fila.registrarMensagem({ lote: lote.id, autor: "agente", tipo: "escolha", texto: "Qual?", opcoes: ["A", "B"] });
+  assert.ok(pergunta);
+  const respostas = await Promise.allSettled([fila, outra].map((f, i) => f.registrarMensagem({ lote: lote.id, autor: "usuario", tipo: "resposta", texto: String(i), responde: pergunta.id })));
+  assert.equal(respostas.filter((r) => r.status === "fulfilled").length, 1);
+  const recusada = respostas.find((r) => r.status === "rejected");
+  assert.ok(recusada?.status === "rejected");
+  assert.match(String(recusada.reason), /já respondida/);
+  assert.equal((await fila.conversa(lote.id)).filter((m) => m.responde === pergunta.id).length, 1);
+  assert.ok(await outra.registrarMensagem({ lote: lote.id, autor: "agente", tipo: "nota", texto: "Concluído." }));
+});
+
+test("progresso concorrente não reabre lote concluído", async () => {
+  const fila = new Fila(dir);
+  const outra = new Fila(dir);
+  const lote = loteDeExemplo("lote-concorrente-0003");
+  await fila.gravar(lote);
+  await Promise.all([
+    fila.marcarProgresso(lote.id, "começando"),
+    outra.marcarProcessado(lote.id, "concluído"),
+    fila.marcarProgresso(lote.id, "evento atrasado"),
+  ]);
+  const status = await fila.status(lote.id);
+  assert.equal(status.estado, "processado");
+  assert.equal(status.nota, "concluído");
+});

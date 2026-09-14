@@ -301,18 +301,24 @@ function dimensaoDtcg(valor: string): { value: number; unit: "px" | "rem" } | nu
   return { value: n, unit: m[2] as "px" | "rem" };
 }
 
-/** Alpha declarado em `rgba(...)` ou em hex de 8 dígitos; 1 quando não há. */
+/** Alpha explícito em cores CSS; o terceiro canal RGB nunca é transparência. */
 function alphaDe(valor: string): number {
   const v = valor.trim().toLowerCase();
-  const hex = /^#([0-9a-f]{8})$/.exec(v);
-  if (hex?.[1]) return Math.round((parseInt(hex[1].slice(6, 8), 16) / 255) * 1000) / 1000;
-  const rgba = /^rgba?\([^)]*?[\s,/]+([\d.]+%?)\s*\)$/.exec(v);
-  if (rgba?.[1]) {
-    const bruto = rgba[1];
-    const n = bruto.endsWith("%") ? Number(bruto.slice(0, -1)) / 100 : Number(bruto);
-    if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
+  if (v === "transparent") return 0;
+  const hex = /^#([0-9a-f]{4}|[0-9a-f]{8})$/.exec(v);
+  if (hex?.[1]) {
+    const h = hex[1];
+    const alpha = h.length === 4 ? h[3]!.repeat(2) : h.slice(6, 8);
+    return Math.round((parseInt(alpha, 16) / 255) * 1000) / 1000;
   }
-  return 1;
+  const funcao = /^(rgba?|hsla?|oklch)\((.*)\)$/.exec(v);
+  if (!funcao?.[2]) return 1;
+  const partes = funcao[2].split("/");
+  const canais = funcao[2].split(",");
+  const bruto = (partes.length === 2 ? partes[1] : canais.length === 4 ? canais[3] : undefined)?.trim();
+  if (!bruto || !/^[+-]?(?:\d*\.)?\d+(?:e[+-]?\d+)?%?$/.test(bruto)) return 1;
+  const n = bruto.endsWith("%") ? Number(bruto.slice(0, -1)) / 100 : Number(bruto);
+  return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 1;
 }
 
 function corDtcg(valor: string): Record<string, unknown> | null {

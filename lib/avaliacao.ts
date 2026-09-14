@@ -2,9 +2,11 @@
 // o agente julga o que a medição não alcança (hierarquia, clareza, elegância) e
 // devolve um parecer. Guardado ao lado dos lotes, no mesmo diretório do projeto.
 
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { idSeguro } from "./fila.ts";
 import type { IntencaoDeArquivo } from "./fonte.ts";
+import { gravarAtomico } from "./persistencia.ts";
 
 export interface PaginaAvaliada {
   url: string;
@@ -66,32 +68,62 @@ export interface RegistroAvaliacao {
 // desfazer, visibilidade de progresso — e viraria categoria que nunca acende.
 const CATEGORIAS_PARECER = ["hierarquia", "espacamento", "contraste", "consistencia", "clareza", "intuitividade", "elegancia", "conteudo", "acessibilidade"];
 
+function objeto(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function listaDeTextos(v: unknown): boolean {
+  return v === undefined || (Array.isArray(v) && v.every((item) => typeof item === "string"));
+}
+
+function medida(v: unknown, padrao = 0): number {
+  const numero = Number(v);
+  return Number.isFinite(numero) && numero > 0 ? numero : padrao;
+}
+
 export function validarPedido(bruto: unknown): PedidoAvaliacao {
-  if (!bruto || typeof bruto !== "object") throw new Error("corpo vazio");
-  const o = bruto as Record<string, unknown>;
-  const pagina = o["pagina"] as Record<string, unknown> | undefined;
-  if (!pagina || typeof pagina["url"] !== "string") throw new Error("falta a página");
+  if (!objeto(bruto)) throw new Error("corpo vazio");
+  const o = bruto;
+  const id = o["id"] === undefined ? crypto.randomUUID() : o["id"];
+  if (!idSeguro(id)) throw new Error("id inválido");
+  const pagina = o["pagina"];
+  if (!objeto(pagina) || typeof pagina["url"] !== "string") throw new Error("falta a página");
   const achados = Array.isArray(o["achados"]) ? (o["achados"] as AchadoAuditoria[]) : [];
   if (achados.length > 500) throw new Error("achados demais");
-  const viewport = (pagina["viewport"] ?? {}) as Record<string, unknown>;
+  for (const achado of achados) {
+    if (!objeto(achado)
+      || !["regra", "alvo", "evidencia"].every((campo) => typeof achado[campo] === "string")
+      || !["alta", "media", "baixa"].includes(String(achado["gravidade"]))) {
+      throw new Error("achado inválido");
+    }
+  }
+  const contexto = o["contexto"] ?? {};
+  if (!objeto(contexto) || !listaDeTextos(contexto["componentes"])) throw new Error("contexto inválido");
+  const estrutura = contexto["estrutura"];
+  if (estrutura !== undefined && (!objeto(estrutura) || !listaDeTextos(estrutura["cabecalhos"]) || !listaDeTextos(estrutura["marcos"]))) {
+    throw new Error("estrutura da página inválida");
+  }
+  const viewport = objeto(pagina["viewport"]) ? pagina["viewport"] : {};
+  const instantaneo = typeof o["instantaneo"] === "string" ? o["instantaneo"] : null;
+  if (instantaneo && instantaneo.length > 8 * 1024 * 1024) throw new Error("instantâneo grande demais");
   return {
-    id: typeof o["id"] === "string" ? o["id"] : crypto.randomUUID(),
+    id,
     em: new Date().toISOString(),
     pagina: {
       url: pagina["url"],
       caminho: typeof pagina["caminho"] === "string" ? pagina["caminho"] : "/",
       titulo: typeof pagina["titulo"] === "string" ? pagina["titulo"] : "",
       viewport: {
-        largura: Number(viewport["largura"]) || 0,
-        altura: Number(viewport["altura"]) || 0,
-        dpr: Number(viewport["dpr"]) || 1,
+        largura: medida(viewport["largura"]),
+        altura: medida(viewport["altura"]),
+        dpr: medida(viewport["dpr"], 1),
       },
       tema: typeof pagina["tema"] === "string" ? pagina["tema"] : null,
     },
-    contexto: (o["contexto"] ?? {}) as Record<string, unknown>,
+    contexto,
     achados,
     foco: typeof o["foco"] === "string" && o["foco"].trim() ? o["foco"].trim().slice(0, 500) : null,
-    instantaneo: typeof o["instantaneo"] === "string" ? o["instantaneo"] : null,
+    instantaneo,
   };
 }
 
@@ -245,20 +277,25 @@ export class Avaliacoes {
     await mkdir(this.dir, { recursive: true });
   }
 
+  private caminho(id: string, sufixo: string): string {
+    if (!idSeguro(id)) throw new Error("id inválido");
+    return join(this.dir, `${id}.${sufixo}`);
+  }
+
   caminhoMd(id: string): string {
-    return join(this.dir, `${id}.md`);
+    return this.caminho(id, "md");
   }
 
   async gravar(pedido: PedidoAvaliacao, dossie: string): Promise<void> {
     await this.preparar();
-    await writeFile(join(this.dir, `${pedido.id}.json`), JSON.stringify(pedido, null, 2));
-    await writeFile(this.caminhoMd(pedido.id), dossie);
-    if (pedido.instantaneo) await writeFile(join(this.dir, `${pedido.id}.instantaneo.html`), pedido.instantaneo);
+    await gravarAtomico(this.caminho(pedido.id, "json"), JSON.stringify(pedido, null, 2));
+    await gravarAtomico(this.caminhoMd(pedido.id), dossie);
+    if (pedido.instantaneo) await gravarAtomico(this.caminho(pedido.id, "instantaneo.html"), pedido.instantaneo);
   }
 
   async ler(id: string): Promise<PedidoAvaliacao | null> {
     try {
-      return JSON.parse(await readFile(join(this.dir, `${id}.json`), "utf8")) as PedidoAvaliacao;
+      return JSON.parse(await readFile(this.caminho(id, "json"), "utf8")) as PedidoAvaliacao;
     } catch {
       return null;
     }
@@ -274,7 +311,7 @@ export class Avaliacoes {
 
   async lerInstantaneo(id: string): Promise<string | null> {
     try {
-      return await readFile(join(this.dir, `${id}.instantaneo.html`), "utf8");
+      return await readFile(this.caminho(id, "instantaneo.html"), "utf8");
     } catch {
       return null;
     }
@@ -282,12 +319,12 @@ export class Avaliacoes {
 
   async gravarParecer(id: string, parecer: Parecer): Promise<void> {
     await this.preparar();
-    await writeFile(join(this.dir, `${id}.parecer.json`), JSON.stringify(parecer, null, 2));
+    await gravarAtomico(this.caminho(id, "parecer.json"), JSON.stringify(parecer, null, 2));
   }
 
   async lerParecer(id: string): Promise<Parecer | null> {
     try {
-      return JSON.parse(await readFile(join(this.dir, `${id}.parecer.json`), "utf8")) as Parecer;
+      return JSON.parse(await readFile(this.caminho(id, "parecer.json"), "utf8")) as Parecer;
     } catch {
       return null;
     }

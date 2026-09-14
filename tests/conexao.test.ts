@@ -102,6 +102,27 @@ describe("fontes da Apple", () => {
 });
 
 describe("registro de conexões", () => {
+  test("gravações e remoções simultâneas preservam as conexões entre instâncias", async () => {
+    const pasta = await mkdtemp(join(tmpdir(), "anotador-conexoes-concorrente-"));
+    try {
+      const arquivo = join(pasta, "conexoes.json");
+      const registros = [new RegistroConexoes(arquivo), new RegistroConexoes(arquivo)];
+      const entrada = (i: number) => ({ alvo: `http://localhost:${3000 + i}`, nome: `projeto-${i}`, fonte: `/tmp/projeto-${i}`, agente: "Teste" });
+      await Promise.all(Array.from({ length: 10 }, (_, i) => registros[i % 2]!.registrar(entrada(i))));
+      assert.equal((await registros[0]!.listar()).length, 10);
+      await Promise.all([
+        registros[0]!.esquecer(entrada(0).alvo, entrada(0).fonte),
+        registros[1]!.registrar(entrada(10)),
+      ]);
+      const lista = await registros[0]!.listar();
+      assert.equal(lista.length, 10);
+      assert.equal(lista.some((c) => c.nome === "projeto-0"), false);
+      assert.equal(lista.some((c) => c.nome === "projeto-10"), true);
+    } finally {
+      await rm(pasta, { recursive: true, force: true });
+    }
+  });
+
   test("grava, reencontra pela pasta e mantém a mais recente primeiro", async () => {
     const pasta = await mkdtemp(join(tmpdir(), "anotador-conexoes-"));
     try {

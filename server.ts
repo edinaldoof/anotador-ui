@@ -3,13 +3,15 @@
 
 import { createServer, request as pedidoHttp, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createServerTls } from "node:https";
+import { createServer as createServerTcp, type Socket } from "node:net";
 import { request as pedidoHttps } from "node:https";
 import * as modulo from "node:module";
 import { readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { homedir, networkInterfaces } from "node:os";
 import { basename, dirname, join } from "node:path";
-import type { Duplex } from "node:stream";
+import { Writable, type Duplex } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
@@ -165,21 +167,33 @@ function lerCorpo(req: IncomingMessage, limite = LIMITE_CORPO): Promise<Buffer> 
   });
 }
 
-function descomprimir(resposta: IncomingMessage): NodeJS.ReadableStream {
+async function coletarResposta(resposta: IncomingMessage): Promise<Buffer> {
+  const partes: Buffer[] = [];
+  const coletor = new Writable({
+    write(pedaco: Buffer, _codificacao, pronto) {
+      partes.push(pedaco);
+      pronto();
+    },
+  });
   const codificacao = String(resposta.headers["content-encoding"] ?? "").toLowerCase();
-  if (codificacao === "gzip") return resposta.pipe(createGunzip());
-  if (codificacao === "deflate") return resposta.pipe(createInflate());
-  if (codificacao === "br") return resposta.pipe(createBrotliDecompress());
-  return resposta;
+  const descompressor = codificacao === "gzip" ? createGunzip() : codificacao === "deflate" ? createInflate() : codificacao === "br" ? createBrotliDecompress() : null;
+  // pipeline propaga também o encerramento prematuro do alvo ao descompressor.
+  if (descompressor) await pipeline(resposta, descompressor, coletor);
+  else await pipeline(resposta, coletor);
+  return Buffer.concat(partes);
 }
 
-function coletar(fluxo: NodeJS.ReadableStream): Promise<Buffer> {
-  return new Promise((resolver, rejeitar) => {
-    const partes: Buffer[] = [];
-    fluxo.on("data", (p: Buffer) => partes.push(p));
-    fluxo.on("end", () => resolver(Buffer.concat(partes)));
-    fluxo.on("error", rejeitar);
-  });
+function urlDoPedido(req: IncomingMessage): URL | null {
+  try {
+    return new URL(req.url ?? "/", "http://interno");
+  } catch {
+    return null;
+  }
+}
+
+function motivoAlvoInvalido(url: URL, permitirExterno?: boolean): string | null {
+  if (url.protocol !== "http:" && url.protocol !== "https:") return "use uma URL http:// ou https://";
+  return permitirExterno ? null : alvoPermitido(url);
 }
 
 function paginaErro(alvo: URL, erro: string): string {
@@ -201,7 +215,8 @@ function origemPublicaDe(req: IncomingMessage, opcoes: OpcoesServidor): string {
 
 function enderecoInterno(opcoes: OpcoesServidor, porta: number): string {
   const host = opcoes.host === "0.0.0.0" || opcoes.host === "::" || opcoes.host === "" ? "127.0.0.1" : opcoes.host;
-  return `${opcoes.https ? "https" : "http"}://${host}:${porta}`;
+  const autoridade = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+  return `${opcoes.https ? "https" : "http"}://${autoridade}:${porta}`;
 }
 
 // ---------- proxy ----------
@@ -212,7 +227,7 @@ function encaminhar(req: IncomingMessage, res: ServerResponse, alvo: URL, opcoes
   const pedido = pedir(
     {
       protocol: alvo.protocol,
-      hostname: alvo.hostname,
+      hostname: alvo.hostname.replace(/^\[|\]$/g, ""),
       port: alvo.port || (alvo.protocol === "https:" ? 443 : 80),
       method: req.method,
       path: req.url ?? "/",
@@ -225,10 +240,10 @@ function encaminhar(req: IncomingMessage, res: ServerResponse, alvo: URL, opcoes
       const injetar = req.method === "GET" && resposta.statusCode === 200 && ehHtml(resposta.headers) && navegacao;
       if (!injetar) {
         res.writeHead(resposta.statusCode ?? 502, filtrarCabecalhosResposta(resposta.headers, { ...ctx, removerCsp: opcoes.removerCsp, bufferizado: false }));
-        resposta.pipe(res);
+        void pipeline(resposta, res).catch(() => undefined);
         return;
       }
-      coletar(descomprimir(resposta))
+      coletarResposta(resposta)
         .then((corpo) => {
           const html = corpo.toString("utf8");
           const nonce = extrairNonce(html);
@@ -240,14 +255,18 @@ function encaminhar(req: IncomingMessage, res: ServerResponse, alvo: URL, opcoes
         })
         .catch((erro: Error) => {
           registrar(opcoes, `falha ao reescrever HTML de ${req.url}: ${erro.message}`);
-          if (!res.headersSent) responderTexto(res, 502, paginaErro(alvo, erro.message), "text/html; charset=utf-8");
+          if (!res.headersSent && !res.destroyed) responderTexto(res, 502, paginaErro(alvo, erro.message), "text/html; charset=utf-8");
         });
     }
   );
   pedido.on("error", (erro: NodeJS.ErrnoException) => {
     registrar(opcoes, `alvo indisponível (${erro.code ?? erro.message}) em ${req.method} ${req.url}`);
-    if (!res.headersSent) responderTexto(res, 502, paginaErro(alvo, erro.code ?? erro.message), "text/html; charset=utf-8");
+    if (!res.headersSent && !res.destroyed) responderTexto(res, 502, paginaErro(alvo, erro.code ?? erro.message), "text/html; charset=utf-8");
+    else res.destroy();
   });
+  req.on("aborted", () => pedido.destroy());
+  req.on("error", () => pedido.destroy());
+  res.on("close", () => { if (!res.writableFinished) pedido.destroy(); });
   req.pipe(pedido);
 }
 
@@ -256,7 +275,7 @@ function tunelarWs(req: IncomingMessage, socket: Duplex, cabeca: Buffer, alvo: U
   const pedir = alvo.protocol === "https:" ? pedidoHttps : pedidoHttp;
   const pedido = pedir({
     protocol: alvo.protocol,
-    hostname: alvo.hostname,
+    hostname: alvo.hostname.replace(/^\[|\]$/g, ""),
     port: alvo.port || (alvo.protocol === "https:" ? 443 : 80),
     method: req.method,
     path: req.url ?? "/",
@@ -285,9 +304,12 @@ function tunelarWs(req: IncomingMessage, socket: Duplex, cabeca: Buffer, alvo: U
   });
   pedido.on("response", (resposta) => {
     socket.write(`HTTP/1.1 ${resposta.statusCode ?? 502} ${resposta.statusMessage ?? ""}\r\nConnection: close\r\n\r\n`);
+    resposta.resume();
     socket.end();
   });
   pedido.on("error", () => socket.destroy());
+  socket.on("error", () => pedido.destroy());
+  socket.once("close", () => pedido.destroy());
   pedido.end();
 }
 
@@ -727,7 +749,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       responderJson(res, 400, { ok: false, erro: "URL inválida" });
       return true;
     }
-    const motivo = opcoes.permitirExterno ? null : alvoPermitido(alvoUrl);
+    const motivo = motivoAlvoInvalido(alvoUrl, opcoes.permitirExterno);
     if (motivo) {
       responderJson(res, 400, { ok: false, erro: motivo });
       return true;
@@ -759,7 +781,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       responderJson(res, 400, { ok: false, erro: "URL inválida" });
       return true;
     }
-    const motivo = opcoes.permitirExterno ? null : alvoPermitido(alvoUrl);
+    const motivo = motivoAlvoInvalido(alvoUrl, opcoes.permitirExterno);
     if (motivo) {
       responderJson(res, 400, { ok: false, erro: motivo });
       return true;
@@ -1006,8 +1028,10 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
           responderJson(res, 404, { ok: false, erro: "lote não encontrado" });
           return true;
         }
-        difusor.transmitir({ tipo: "progresso", id, nota });
-        registrar(opcoes, `lote ${id} em andamento: ${nota}`);
+        if (status.estado === "em_andamento") {
+          difusor.transmitir({ tipo: "progresso", id, nota });
+          registrar(opcoes, `lote ${id} em andamento: ${nota}`);
+        }
         responderJson(res, 200, { ok: true, status });
         return true;
       }
@@ -1053,7 +1077,7 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
       return;
     }
     const url = new URL(texto);
-    const motivo = opcoes.permitirExterno ? null : alvoPermitido(url);
+    const motivo = motivoAlvoInvalido(url, opcoes.permitirExterno);
     if (motivo) throw new Error(`alvo ${url.origin} recusado: ${motivo} (--permitir-externo libera)`);
     alvoUrl = url;
     opcoes.alvo = url.origin;
@@ -1112,11 +1136,15 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
   const tls = opcoes.https ? await parTls(join(fila.dir, "tls"), ["localhost", "127.0.0.1", "::1", ...ipsDaRede()]) : null;
   if (opcoes.https && !tls) throw new Error("não consegui preparar o certificado");
   const tratar = (req: IncomingMessage, res: ServerResponse) => {
-    const url = new URL(req.url ?? "/", "http://interno");
+    const url = urlDoPedido(req);
+    if (!url) {
+      responderJson(res, 400, { ok: false, erro: "URL inválida" });
+      return;
+    }
     if (url.pathname === BASE || url.pathname.startsWith(BASE + "/")) {
       tratarApi(req, res, url, ctx).catch((erro: Error) => {
         registrar(opcoes, `erro na API ${req.url}: ${erro.message}`);
-        if (!res.headersSent) responderJson(res, 500, { ok: false, erro: erro.message });
+        if (!res.headersSent) responderJson(res, erro instanceof URIError ? 400 : 500, { ok: false, erro: erro.message });
       });
       return;
     }
@@ -1133,14 +1161,46 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
     }
     encaminhar(req, res, alvoUrl, opcoes);
   };
-  const servidor = tls ? createServerTls({ key: tls.key, cert: tls.cert }, tratar) : createServer(tratar);
+  // Com TLS ligado, a mesma porta atende os dois protocolos. O primeiro byte de uma
+  // conexão TLS é 0x16 (handshake); qualquer outro começa um verbo HTTP em texto claro.
+  // Isso existe porque o navegador precisa de HTTPS para liberar o microfone, e o
+  // agente na própria máquina fala ws:// simples — separar em duas portas obrigaria
+  // cada agente a saber qual usar.
+  const servidorHttp = createServer(tratar);
+  const servidorTls = tls ? createServerTls({ key: tls.key, cert: tls.cert }, tratar) : null;
+  const socketsTcp = new Set<Socket>();
+  const servidor = servidorTls
+    ? createServerTcp((socket: Socket) => {
+        socketsTcp.add(socket);
+        socket.once("close", () => socketsTcp.delete(socket));
+        socket.once("error", () => socket.destroy());
+        // `readable` + `read(1)`, e não `data`: ouvir `data` põe o socket em modo
+        // fluindo e os bytes do handshake chegam antes de o servidor TLS assumir,
+        // que é como a conexão cifrada morria em silêncio.
+        const espiar = () => {
+          const primeiro = socket.read(1) as Buffer | null;
+          if (!primeiro) {
+            socket.once("readable", espiar);
+            return;
+          }
+          socket.unshift(primeiro);
+          (primeiro[0] === 0x16 ? servidorTls : servidorHttp).emit("connection", socket);
+        };
+        socket.once("readable", espiar);
+      })
+    : servidorHttp;
 
   // Sockets promovidos a WebSocket saem do controle do http.Server: sem isto, fechar() espera por eles para sempre.
   const socketsPromovidos = new Set<Duplex>();
-  servidor.on("upgrade", (req, socket, cabeca) => {
+  const aoPromover = (req: IncomingMessage, socket: Duplex, cabeca: Buffer) => {
     socketsPromovidos.add(socket);
     socket.once("close", () => socketsPromovidos.delete(socket));
-    const url = new URL(req.url ?? "/", "http://interno");
+    socket.on("error", () => socket.destroy());
+    const url = urlDoPedido(req);
+    if (!url) {
+      socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+      return;
+    }
     if (url.pathname === BASE + "/eventos" && ehPedidoWs(req)) {
       const conexao = difusor.aceitar(req, socket);
       conexao.enviar(JSON.stringify({ tipo: "ola", nome: opcoes.nome, alvo: opcoes.alvo } satisfies EventoAnotador));
@@ -1153,7 +1213,9 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
       return;
     }
     tunelarWs(req, socket, cabeca, alvoUrl, opcoes);
-  });
+  };
+  servidorHttp.on("upgrade", aoPromover);
+  servidorTls?.on("upgrade", aoPromover);
 
   await new Promise<void>((resolver, rejeitar) => {
     servidor.once("error", rejeitar);
@@ -1185,7 +1247,13 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
         difusor.fecharTodas();
         for (const s of socketsPromovidos) s.destroy();
         socketsPromovidos.clear();
-        servidor.closeAllConnections();
+        // Inclui conexões que ainda não enviaram o primeiro byte do protocolo.
+        for (const s of socketsTcp) s.destroy();
+        socketsTcp.clear();
+        servidorHttp.closeAllConnections();
+        servidorTls?.closeAllConnections();
+        servidorHttp.close();
+        servidorTls?.close();
         servidor.close(() => resolver());
       }),
   };

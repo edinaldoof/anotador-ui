@@ -98,3 +98,47 @@ describe("servidor sob TLS", { skip: temFerramenta ? false : "openssl não encon
     }
   });
 });
+
+describe("a mesma porta atende http e https", { skip: temFerramenta ? false : "openssl não encontrado nesta máquina", timeout: 60_000 }, () => {
+  let alvo: AlvoFalso;
+  let proxy: ProxySobTeste;
+
+  before(async () => {
+    alvo = await criarAlvoFalso();
+    proxy = await criarProxy(alvo, { https: true });
+  });
+  after(async () => {
+    await proxy?.fechar();
+    await alvo?.fechar();
+  });
+
+  // O navegador precisa de TLS para liberar o microfone; o agente na própria máquina
+  // abre ws:// em texto claro. Se a porta só falasse TLS, ligar --https deixaria todo
+  // agente sem eventos — que foi exatamente o que aconteceu antes deste porteiro.
+  test("texto claro continua atendido, e o canal de eventos também", async () => {
+    const { pedir, abrirWs } = await import("./ajuda.ts");
+    const r = await pedir(proxy.origem + "/__anotador/saude");
+    assert.equal(r.status, 200, "pedido http simples na porta cifrada");
+    assert.equal(JSON.parse(r.corpo)["ok"], true);
+
+    const cliente = await abrirWs(`ws://127.0.0.1:${proxy.porta}/__anotador/eventos?agente=Teste`);
+    try {
+      const ola = JSON.parse(await cliente.proximo()) as { tipo: string };
+      assert.equal(ola.tipo, "ola", "o agente local recebe eventos sem falar TLS");
+    } finally {
+      cliente.fechar();
+    }
+  });
+
+  test("e o mesmo endereço responde cifrado", async () => {
+    const anterior = process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
+    process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
+    try {
+      const r = await fetch(proxy.origem.replace("http://", "https://") + "/__anotador/saude");
+      assert.equal(r.status, 200, "a mesma porta, agora sob TLS");
+    } finally {
+      if (anterior === undefined) delete process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
+      else process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = anterior;
+    }
+  });
+});

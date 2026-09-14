@@ -25,8 +25,9 @@ export function ehHtml(cabecalhos: IncomingHttpHeaders): boolean {
 }
 
 export function injetarScript(html: string, opcoes: { src: string; nonce: string | null }): string {
-  const nonce = opcoes.nonce ? ` nonce="${opcoes.nonce.replace(/"/g, "")}"` : "";
-  const tag = `<script${nonce} src="${opcoes.src}" defer></script>`;
+  const escaparAtributo = (valor: string) => valor.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const nonce = opcoes.nonce ? ` nonce="${escaparAtributo(opcoes.nonce)}"` : "";
+  const tag = `<script${nonce} src="${escaparAtributo(opcoes.src)}" defer></script>`;
   if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, tag + "</head>");
   if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, tag + "</body>");
   return html + tag;
@@ -35,6 +36,9 @@ export function injetarScript(html: string, opcoes: { src: string; nonce: string
 // Location absoluta apontando para o alvo vira a origem pela qual o navegador entrou.
 export function reescreverLocation(valor: string, alvo: URL, origemPublica: string): string {
   if (!valor) return valor;
+  // Referências como "entrar", "?pagina=2" e "#detalhes" dependem da URL da
+  // requisição, que o navegador já conhece; a origem do alvo não é uma base válida.
+  if (!/^(?:\/|[a-z][a-z\d+.-]*:)/i.test(valor)) return valor;
   let u: URL;
   try {
     u = new URL(valor, alvo.origin);
@@ -43,7 +47,7 @@ export function reescreverLocation(valor: string, alvo: URL, origemPublica: stri
   }
   const mesmaPorta = (u.port || portaPadrao(u.protocol)) === (alvo.port || portaPadrao(alvo.protocol));
   const mesmoHost = u.hostname === alvo.hostname || (HOSTS_LOCAIS.has(u.hostname) && HOSTS_LOCAIS.has(alvo.hostname));
-  if (mesmoHost && mesmaPorta) return origemPublica + u.pathname + u.search + u.hash;
+  if (mesmoHost && mesmaPorta && u.protocol === alvo.protocol) return origemPublica + u.pathname + u.search + u.hash;
   return valor;
 }
 
@@ -92,9 +96,16 @@ export function cabecalhosParaAlvo(cabecalhos: IncomingHttpHeaders, ctx: Context
       saida[nome] = ctx.alvo.origin;
       continue;
     }
-    if (chave === "referer" && String(valor).startsWith(ctx.origemPublica)) {
-      saida[nome] = ctx.alvo.origin + String(valor).slice(ctx.origemPublica.length);
-      continue;
+    if (chave === "referer") {
+      try {
+        const referer = new URL(String(valor));
+        if (referer.origin === ctx.origemPublica) {
+          saida[nome] = ctx.alvo.origin + referer.pathname + referer.search + referer.hash;
+          continue;
+        }
+      } catch {
+        /* cabeçalho inválido: preservar sem reescrever */
+      }
     }
     saida[nome] = valor;
   }

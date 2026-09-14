@@ -91,6 +91,7 @@ interface Estado {
   /** elemento exato sob o cursor no clique que criou o rascunho atual */
   exato: Element | null;
   gestoArea: GestoArea | null;
+  envioEmAndamento: Set<string> | null;
 }
 
 interface Posicao {
@@ -192,6 +193,7 @@ const estado: Estado = {
   arvore: { aberta: false, foco: null, fixado: false, abertos: new WeakSet(), fechados: new WeakSet(), area: null, linhaFocada: null },
   exato: null,
   gestoArea: null,
+  envioEmAndamento: null,
 };
 
 let host: HTMLDivElement | null = null;
@@ -269,7 +271,7 @@ function estilosComputados(el: Element): Record<string, string> {
 }
 
 function soTexto(el: Element): boolean {
-  return el.childNodes.length > 0 && Array.from(el.childNodes).every((n) => n.nodeType === 3);
+  return Array.from(el.childNodes).every((n) => n.nodeType === 3);
 }
 
 function valorComputado(a: AnotacaoLocal, el: Element, propriedade: string): string {
@@ -631,15 +633,18 @@ function posicionarFila(): void {
 function atualizarBarra(): void {
   const n = estado.anotacoes.length;
   ui.contador.textContent = String(n);
-  ui.btnEnviar.disabled = n === 0;
-  ui.btnLimpar.disabled = n === 0;
+  ui.btnEnviar.disabled = n === 0 || estado.envioEmAndamento !== null;
+  ui.btnLimpar.disabled = n === 0 || estado.envioEmAndamento !== null;
   ui.modoSel.classList.toggle("ativo", estado.armado);
   ui.modoNav.classList.toggle("ativo", !estado.armado);
   const comPergunta = estado.lotes.filter((l) => (l.perguntasAbertas ?? 0) > 0).pop();
   const emAndamento = estado.lotes.filter((l) => l.estado === "em_andamento").pop();
   const aguardando = estado.lotes.find((l) => l.estado === "recebido" || l.estado === "desconhecido");
   const ultimo = estado.lotes[estado.lotes.length - 1];
-  if (comPergunta) {
+  if (estado.envioEmAndamento) {
+    ui.estado.className = "an-estado";
+    ui.estado.textContent = "Enviando…";
+  } else if (comPergunta) {
     ui.estado.className = "an-estado pergunta";
     ui.estado.textContent = (comPergunta.perguntasAbertas ?? 1) > 1 ? `${AGENTE} perguntou (${comPergunta.perguntasAbertas})` : `${AGENTE} perguntou`;
     ui.estado.title = `${AGENTE} precisa de uma resposta sua · clique para responder`;
@@ -941,6 +946,10 @@ function iniciarAnotacao(el: ElementoEstilizavel, alvo: AlvoNoPonto): void {
 }
 
 function abrirEdicao(a: AnotacaoLocal): void {
+  if (estado.envioEmAndamento?.has(a.id)) {
+    avisar("Aguarde o envio desta anotação terminar.");
+    return;
+  }
   estado.atual = a;
   const el = estado.elementos.get(a.id) ?? null;
   a.snapshotEdicao = {
@@ -1012,6 +1021,10 @@ function confirmarEdicao(): void {
 }
 
 function excluirAnotacao(a: AnotacaoLocal): void {
+  if (estado.envioEmAndamento?.has(a.id)) {
+    avisar("Aguarde o envio desta anotação terminar.");
+    return;
+  }
   reverterElemento(a, estado.elementos.get(a.id) ?? null);
   estado.anotacoes = estado.anotacoes.filter((x) => x !== a);
   estado.elementos.delete(a.id);
@@ -1026,7 +1039,7 @@ function excluirAnotacao(a: AnotacaoLocal): void {
 }
 
 function limparFila(): void {
-  if (estado.anotacoes.length === 0) return;
+  if (estado.anotacoes.length === 0 || estado.envioEmAndamento) return;
   if (!confirm("Descartar " + estado.anotacoes.length + " anotação(ões) pendente(s) e reverter as alterações?")) return;
   for (const a of estado.anotacoes.slice()) excluirAnotacao(a);
   avisar("Fila limpa.");
@@ -1578,41 +1591,42 @@ function instantaneoHtml(anotacoes: AnotacaoLocal[]): string {
 }
 
 async function enviar(): Promise<void> {
-  if (estado.anotacoes.length === 0) return;
+  if (estado.anotacoes.length === 0 || estado.envioEmAndamento) return;
   if (estado.atual) cancelarEdicao();
-  ui.btnEnviar.disabled = true;
-  ui.estado.className = "an-estado";
-  ui.estado.textContent = "Enviando…";
   const anotacoes = estado.anotacoes.slice();
-  const lote: Lote = {
-    id: uuid(),
-    ferramenta: "anotador-ui",
-    versao: 1,
-    enviadoEm: new Date().toISOString(),
-    pagina: {
-      url: location.href,
-      caminho: location.pathname,
-      titulo: document.title,
-      viewport: { largura: innerWidth, altura: innerHeight, dpr: devicePixelRatio || 1, scrollX, scrollY },
-      tema: document.documentElement.getAttribute("data-theme"),
-      userAgent: navigator.userAgent,
-    },
-    anotacoes: anotacoes.map((a) => {
-      const el = estado.elementos.get(a.id);
-      const vivo = !!el && el.isConnected;
-      return {
-        id: a.id,
-        ordem: a.ordem,
-        comentario: a.comentario,
-        elemento: { ...a.elemento, rect: vivo ? rectTopo(el) : a.elemento.rect, rectPagina: vivo ? rectPagina(rectTopo(el)) : null, localizado: vivo },
-        alteracoes: a.alteracoes,
-        texto: a.texto,
-        criadaEm: a.criadaEm,
-      };
-    }),
-    instantaneo: CFG.capturas ? instantaneoHtml(anotacoes) : null,
-  };
+  const idsEnviados = new Set(anotacoes.map((a) => a.id));
+  estado.envioEmAndamento = idsEnviados;
+  atualizarBarra();
+  let falhou = false;
   try {
+    const lote: Lote = {
+      id: uuid(),
+      ferramenta: "anotador-ui",
+      versao: 1,
+      enviadoEm: new Date().toISOString(),
+      pagina: {
+        url: location.href,
+        caminho: location.pathname,
+        titulo: document.title,
+        viewport: { largura: innerWidth, altura: innerHeight, dpr: devicePixelRatio || 1, scrollX, scrollY },
+        tema: document.documentElement.getAttribute("data-theme"),
+        userAgent: navigator.userAgent,
+      },
+      anotacoes: anotacoes.map((a) => {
+        const el = estado.elementos.get(a.id);
+        const vivo = !!el && el.isConnected;
+        return {
+          id: a.id,
+          ordem: a.ordem,
+          comentario: a.comentario,
+          elemento: { ...a.elemento, rect: vivo ? rectTopo(el) : a.elemento.rect, rectPagina: vivo ? rectPagina(rectTopo(el)) : null, localizado: vivo },
+          alteracoes: a.alteracoes,
+          texto: a.texto,
+          criadaEm: a.criadaEm,
+        };
+      }),
+      instantaneo: CFG.capturas ? instantaneoHtml(anotacoes) : null,
+    };
     const resp = await fetch(CFG.base + "/lotes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(lote) });
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const corpo = (await resp.json()) as { id?: string };
@@ -1621,7 +1635,7 @@ async function enviar(): Promise<void> {
       a.enviadaEm = agora;
       estado.enviadas.push(a);
     }
-    estado.anotacoes = [];
+    estado.anotacoes = estado.anotacoes.filter((a) => !idsEnviados.has(a.id));
     estado.lotes.push({
       id: corpo.id ?? lote.id,
       enviadoEm: agora,
@@ -1629,15 +1643,19 @@ async function enviar(): Promise<void> {
       resumo: anotacoes.map((a) => a.comentario || a.elemento.meta.tag).join(" · ").slice(0, 120),
     });
     renderizarPins();
-    atualizarBarra();
     salvar();
     avisar(anotacoes.length + " anotação(ões) enviada(s) ao chat.");
     void acompanharLotes();
   } catch (erro) {
-    ui.estado.className = "an-estado erro";
-    ui.estado.textContent = "Falha ao enviar — fila preservada";
-    ui.btnEnviar.disabled = false;
+    falhou = true;
     avisar("Não foi possível enviar: " + (erro instanceof Error ? erro.message : String(erro)), 5000);
+  } finally {
+    estado.envioEmAndamento = null;
+    atualizarBarra();
+    if (falhou) {
+      ui.estado.className = "an-estado erro";
+      ui.estado.textContent = "Falha ao enviar — fila preservada";
+    }
   }
 }
 

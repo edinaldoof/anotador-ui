@@ -19,6 +19,13 @@ test("injetarScript entra antes de </head>, senão antes de </body>, senão no f
   assert.ok(!injetarScript("<head></head>", { src, nonce: 'a"b' }).includes('nonce="a"b"'), "aspas no nonce não podem quebrar o atributo");
 });
 
+test("injetarScript preserva os valores escapando atributos HTML", () => {
+  assert.equal(
+    injetarScript("<head></head>", { src: '/overlay.js?a=1&b="teste"', nonce: 'a&"<b>' }),
+    '<head><script nonce="a&amp;&quot;&lt;b&gt;" src="/overlay.js?a=1&amp;b=&quot;teste&quot;" defer></script></head>'
+  );
+});
+
 test("ehHtml só reconhece text/html", () => {
   assert.equal(ehHtml({ "content-type": "text/html; charset=utf-8" }), true);
   assert.equal(ehHtml({ "content-type": "text/x-component" }), false);
@@ -31,6 +38,14 @@ test("reescreverLocation troca a origem do alvo pela pública e deixa o resto em
   assert.equal(reescreverLocation("/relativo", alvo, publica), "http://192.168.3.19:3999/relativo");
   assert.equal(reescreverLocation("https://accounts.google.com/o/oauth2", alvo, publica), "https://accounts.google.com/o/oauth2");
   assert.equal(reescreverLocation("http://localhost:9000/minio", alvo, publica), "http://localhost:9000/minio");
+});
+
+test("reescreverLocation preserva caminhos relativos à requisição e mudanças de protocolo", () => {
+  for (const relativo of ["entrar", "../entrar", "?pagina=2", "#detalhes"]) {
+    assert.equal(reescreverLocation(relativo, alvo, publica), relativo);
+  }
+  assert.equal(reescreverLocation("//localhost:3001/entrar", alvo, publica), publica + "/entrar");
+  assert.equal(reescreverLocation("https://localhost:3001/entrar", alvo, publica), "https://localhost:3001/entrar");
 });
 
 test("filtrarCabecalhosResposta remove hop-a-hop, reescreve location e respeita bufferização/CSP", () => {
@@ -80,4 +95,13 @@ test("cabecalhosParaAlvo faz o dev server enxergar mesma origem", () => {
   assert.equal(saida["connection"], "Upgrade");
   const externo = cabecalhosParaAlvo({ origin: "https://outro.site" }, { alvo, origemPublica: publica });
   assert.equal(externo["origin"], "https://outro.site");
+});
+
+test("cabecalhosParaAlvo só reescreve Referer da origem pública exata", () => {
+  const local = "http://localhost:3999";
+  const ctx = { alvo, origemPublica: local };
+  for (const referer of [local + "0/caminho", local + "@outro.site/caminho"]) {
+    assert.equal(cabecalhosParaAlvo({ referer }, ctx)["referer"], referer);
+  }
+  assert.equal(cabecalhosParaAlvo({ referer: local + "/rota?q=1" }, ctx)["referer"], alvo.origin + "/rota?q=1");
 });
