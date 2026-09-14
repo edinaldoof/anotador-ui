@@ -1,8 +1,9 @@
 // Registro das conexões feitas (app alvo × pasta do projeto), para reconectar sem perguntar de novo.
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { gravarAtomico, serializar } from "./persistencia.ts";
 
 export interface Conexao {
   alvo: string;
@@ -46,20 +47,22 @@ export class RegistroConexoes {
 
   /** Grava (ou atualiza) a conexão; a mais recente fica em primeiro e o registro não passa de 20 entradas. */
   async registrar(entrada: Omit<Conexao, "usadoEm">): Promise<Conexao> {
-    const nova: Conexao = { ...entrada, fonte: entrada.fonte ? resolve(entrada.fonte) : null, usadoEm: new Date().toISOString() };
-    const restantes = (await this.listar()).filter((c) => !(c.alvo === nova.alvo && (c.fonte ?? "") === (nova.fonte ?? "")));
-    const conexoes = [nova, ...restantes].slice(0, LIMITE);
-    await mkdir(dirname(this.arquivo), { recursive: true });
-    const temporario = this.arquivo + ".tmp";
-    await writeFile(temporario, JSON.stringify({ conexoes }, null, 2) + "\n");
-    await rename(temporario, this.arquivo);
-    return nova;
+    return serializar(this.arquivo, async () => {
+      const nova: Conexao = { ...entrada, fonte: entrada.fonte ? resolve(entrada.fonte) : null, usadoEm: new Date().toISOString() };
+      const restantes = (await this.listar()).filter((c) => !(c.alvo === nova.alvo && (c.fonte ?? "") === (nova.fonte ?? "")));
+      const conexoes = [nova, ...restantes].slice(0, LIMITE);
+      await mkdir(dirname(this.arquivo), { recursive: true });
+      await gravarAtomico(this.arquivo, JSON.stringify({ conexoes }, null, 2) + "\n");
+      return nova;
+    });
   }
 
   async esquecer(alvo: string, fonte: string | null): Promise<void> {
-    const conexoes = (await this.listar()).filter((c) => !(c.alvo === alvo && (c.fonte ?? "") === (fonte ? resolve(fonte) : "")));
-    await mkdir(dirname(this.arquivo), { recursive: true });
-    await writeFile(this.arquivo, JSON.stringify({ conexoes }, null, 2) + "\n");
+    return serializar(this.arquivo, async () => {
+      const conexoes = (await this.listar()).filter((c) => !(c.alvo === alvo && (c.fonte ?? "") === (fonte ? resolve(fonte) : "")));
+      await mkdir(dirname(this.arquivo), { recursive: true });
+      await gravarAtomico(this.arquivo, JSON.stringify({ conexoes }, null, 2) + "\n");
+    });
   }
 }
 

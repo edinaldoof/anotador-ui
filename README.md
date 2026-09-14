@@ -263,7 +263,7 @@ anotador processado <id> --nota "borda de 2px em todos os marcadores"
 
 ```
 anotador                        sobe na porta 3999; reconecta ao último app desta pasta ou abre a página de conexão
-anotador servir [--alvo URL] [--porta 3999] [--host 0.0.0.0] [--nome slug] [--saida dir] [--fonte dir]
+anotador servir [--alvo URL] [--porta 3999] [--host 0.0.0.0] [--nome slug] [--saida dir] [--fonte dir] [--https]
                 [--agente Claude] [--publico http://ip:porta] [--sem-csp] [--sem-capturas] [--chrome caminho] [--permitir-externo]
 anotador conectar <url> | desconectar | saude | pendentes | ver <id> | conversa <id>
 anotador fontes [--compact] [--forcar]         instala a San Francisco da Apple nesta máquina
@@ -284,6 +284,7 @@ anotador progresso <id> --nota … | nota <id> --texto … | perguntar <id> --te
 ## Segurança e limites
 
 - Ferramenta de desenvolvimento: escuta em `0.0.0.0` para você anotar de outro aparelho da rede, e **só aceita como alvo** endereços da própria máquina ou da rede local.
+- **Microfone e câmera exigem conexão segura.** O navegador trata `localhost` como seguro e um endereço de rede não, então o ditado por voz some quando você abre do celular. `anotador servir --https` resolve: o anotador gera um certificado próprio com o `openssl` do sistema, cobrindo `localhost` e os endereços desta máquina. Na primeira visita o navegador avisa, você aceita uma vez, e o microfone passa a funcionar. O certificado fica em `tls/` dentro da pasta da fila e é refeito sozinho quando a máquina troca de rede.
 - As rotas que trocam a conexão, mexem na ponte ou **iniciam um agente** exigem identificação. Da própria máquina passam direto, e o cabeçalho de origem barra pedido de outro site aberto ao lado. De outro aparelho é preciso a **chave da sessão**, que o anotador imprime ao subir:
 
   ```

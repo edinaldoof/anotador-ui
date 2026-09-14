@@ -2,6 +2,7 @@
 // desenvolvimento e entrega as anotações ao chat do Claude Code.
 
 import { createServer, request as pedidoHttp, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer as createServerTls } from "node:https";
 import { request as pedidoHttps } from "node:https";
 import * as modulo from "node:module";
 import { readFileSync } from "node:fs";
@@ -15,6 +16,7 @@ import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { Ponte, detectarAgentes, mensagemDeAbertura, mensagemParaLote, modelosDe, sessoesClaude, sessoesCodex, type IdAgente } from "./lib/agentes.ts";
 import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, motivoDaRecusa } from "./lib/acesso.ts";
 import { descobrirComandos, idPeloNome } from "./lib/comandos.ts";
+import { parTls, temOpenssl } from "./lib/tls.ts";
 import { Avaliacoes, gerarDossie, validarParecer, validarPedido } from "./lib/avaliacao.ts";
 import { capturarAvaliacao, capturarLote } from "./lib/captura.ts";
 import { encontrarChromium } from "./lib/cdp.ts";
@@ -66,6 +68,12 @@ export interface OpcoesServidor {
   ponte?: PonteConfig | null;
   /** arquivo do registro de conexões; null desliga a persistência (testes) */
   registro?: string | null;
+  /**
+   * Serve por HTTPS com certificado próprio. Necessário para o ditado por voz e outras
+   * APIs que o navegador só libera em contexto seguro: `localhost` já conta como
+   * seguro, um endereço de rede não.
+   */
+  https?: boolean;
   /** aceita alvos fora da máquina/rede local */
   permitirExterno?: boolean;
   silencioso?: boolean;
@@ -185,13 +193,15 @@ main{max-width:560px;padding:32px;background:#242827;border:1px solid #343837;bo
 
 function origemPublicaDe(req: IncomingMessage, opcoes: OpcoesServidor): string {
   if (opcoes.publico) return opcoes.publico;
-  const proto = String(req.headers["x-forwarded-proto"] ?? "http").split(",")[0]?.trim() || "http";
+  // Servindo TLS direto, o socket é quem sabe; atrás de proxy, o cabeçalho.
+  const cifrado = Boolean((req.socket as { encrypted?: boolean }).encrypted);
+  const proto = String(req.headers["x-forwarded-proto"] ?? (cifrado ? "https" : "http")).split(",")[0]?.trim() || "http";
   return `${proto}://${req.headers.host ?? `localhost:${opcoes.porta}`}`;
 }
 
 function enderecoInterno(opcoes: OpcoesServidor, porta: number): string {
   const host = opcoes.host === "0.0.0.0" || opcoes.host === "::" || opcoes.host === "" ? "127.0.0.1" : opcoes.host;
-  return `http://${host}:${porta}`;
+  return `${opcoes.https ? "https" : "http"}://${host}:${porta}`;
 }
 
 // ---------- proxy ----------
@@ -1098,7 +1108,10 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
     await conectar({ alvo: inicial });
   }
 
-  const servidor = createServer((req, res) => {
+  // O par TLS cobre localhost e os endereços desta máquina; trocar de rede o refaz.
+  const tls = opcoes.https ? await parTls(join(fila.dir, "tls"), ["localhost", "127.0.0.1", "::1", ...ipsDaRede()]) : null;
+  if (opcoes.https && !tls) throw new Error("não consegui preparar o certificado");
+  const tratar = (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://interno");
     if (url.pathname === BASE || url.pathname.startsWith(BASE + "/")) {
       tratarApi(req, res, url, ctx).catch((erro: Error) => {
@@ -1119,7 +1132,8 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
       return;
     }
     encaminhar(req, res, alvoUrl, opcoes);
-  });
+  };
+  const servidor = tls ? createServerTls({ key: tls.key, cert: tls.cert }, tratar) : createServer(tratar);
 
   // Sockets promovidos a WebSocket saem do controle do http.Server: sem isto, fechar() espera por eles para sempre.
   const socketsPromovidos = new Set<Duplex>();
@@ -1185,6 +1199,7 @@ uso:
   anotador                        sobe na porta 3999; reconecta ao último app desta pasta ou abre a página de conexão
   anotador servir [--alvo http://localhost:3000] [--porta 3999] [--host 0.0.0.0] [--nome slug] [--saida dir] [--fonte dir]
                   [--agente Claude] [--publico http://ip:porta] [--sem-csp] [--sem-capturas] [--chrome caminho] [--permitir-externo]
+                [--https]  (certificado próprio; libera microfone e câmera quando você abre pelo endereço da rede)
   anotador conectar <url> [--porta 3999]        (troca o app de um anotador já no ar)
   anotador desconectar [--porta 3999]
   anotador fontes [--compact] [--forcar]        (instala a San Francisco da Apple nesta máquina)
@@ -1243,6 +1258,7 @@ async function principal(): Promise<void> {
       "sem-csp": { type: "boolean", default: false },
       "sem-capturas": { type: "boolean", default: false },
       "permitir-externo": { type: "boolean", default: false },
+      https: { type: "boolean", default: false },
       compact: { type: "boolean", default: false },
       tudo: { type: "boolean", default: false },
       tokens: { type: "boolean", default: false },
@@ -1450,6 +1466,7 @@ async function principal(): Promise<void> {
     agente: values.agente?.trim() || salva?.agente || "Claude",
     ponte: salva?.ponte && ["claude", "codex", "gemini", "opencode"].includes(salva.ponte.agente) ? { agente: salva.ponte.agente as IdAgente, sessao: salva.ponte.sessao, modelo: salva.ponte.modelo ?? null, esforco: salva.ponte.esforco ?? null } : null,
     permitirExterno: values["permitir-externo"],
+    https: values.https,
   };
   let servidor: ServidorAnotador;
   try {
@@ -1459,17 +1476,21 @@ async function principal(): Promise<void> {
     if (codigo === "EADDRINUSE") throw new Error(`a porta ${porta} já está em uso — escolha outra com --porta`);
     throw erro;
   }
+  const esquema = values.https ? "https" : "http";
   const linhas = [
     `anotador-ui ${VERSAO} · ${nome}`,
     servidor.alvo
       ? `  alvo:      ${servidor.alvo}${!values.alvo && salva ? " (última conexão desta pasta; --alvo troca)" : ""}`
       : `  alvo:      nenhum — abra a página de conexão para escolher o app em desenvolvimento`,
-    `  conexão:   http://localhost:${servidor.porta}${BASE}/`,
-    `  abra:      http://localhost:${servidor.porta}/`,
-    ...ipsDaRede().map((ip) => `             http://${ip}:${servidor.porta}/`),
+    `  conexão:   ${esquema}://localhost:${servidor.porta}${BASE}/`,
+    `  abra:      ${esquema}://localhost:${servidor.porta}/`,
+    ...ipsDaRede().map((ip) => `             ${esquema}://${ip}:${servidor.porta}/`),
     // De outra máquina, conectar e iniciar agente exigem a chave. Quem abre a página
     // por esta URL não precisa digitá-la de novo: ela fica guardada na aba.
-    ...(ipsDaRede().length ? [`  de fora:   http://${ipsDaRede()[0]}:${servidor.porta}${BASE}/?chave=${servidor.chave}`] : []),
+    ...(ipsDaRede().length ? [`  de fora:   ${esquema}://${ipsDaRede()[0]}:${servidor.porta}${BASE}/?chave=${servidor.chave}`] : []),
+    values.https
+      ? "  https:     certificado próprio; o navegador avisa na primeira visita, aceite uma vez e o microfone passa a funcionar"
+      : "  https:     desligado; pela rede o navegador bloqueia microfone e câmera (use --https)",
     `  fila:      ${servidor.fila.dir}`,
     `  fonte:     ${opcoes.fonte} (localização dos elementos no código)`,
     `  agente:    ${opcoes.agente}${opcoes.ponte ? ` · ponte automática: ${opcoes.ponte.agente}` : ""}`,

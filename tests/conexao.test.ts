@@ -23,6 +23,15 @@ describe("deteccao", () => {
     }
   });
 
+  test("IPv6 público não passa como nome simples de máquina", () => {
+    for (const local of ["http://[fc00::1]", "http://[fd12:3456::1]", "http://[fe80::1]"]) {
+      assert.equal(alvoPermitido(new URL(local)), null, local);
+    }
+    for (const publico of ["http://[2606:4700:4700::1111]", "http://[2001:4860:4860::8888]", "http://[::ffff:8.8.8.8]"]) {
+      assert.notEqual(alvoPermitido(new URL(publico)), null, publico);
+    }
+  });
+
   test("detectarFramework e extrairTitulo leem sinais do HTML e dos cabeçalhos", () => {
     assert.equal(detectarFramework(new Headers({ "x-powered-by": "Next.js" }), ""), "Next.js");
     assert.equal(detectarFramework(new Headers(), '<script type="module" src="/@vite/client"></script>'), "Vite");

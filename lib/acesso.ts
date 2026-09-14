@@ -39,7 +39,9 @@ export function daPropriaMaquina(ip: string | undefined): boolean {
 /** Igualdade em tempo constante; comprimentos diferentes respondem falso sem comparar. */
 export function chaveConfere(dada: unknown, esperada: string): boolean {
   if (typeof dada !== "string" || dada.length !== esperada.length) return false;
-  return timingSafeEqual(Buffer.from(dada, "utf8"), Buffer.from(esperada, "utf8"));
+  const recebida = Buffer.from(dada, "utf8");
+  const correta = Buffer.from(esperada, "utf8");
+  return recebida.length === correta.length && timingSafeEqual(recebida, correta);
 }
 
 /**

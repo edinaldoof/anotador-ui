@@ -337,6 +337,7 @@ export class Navegador {
     process.once("exit", aoSair);
     processo.once("exit", () => process.off("exit", aoSair));
     const abortar = async (motivo: string): Promise<never> => {
+      process.off("exit", aoSair);
       processo.kill("SIGKILL");
       await rm(perfil, { recursive: true, force: true }).catch(() => undefined);
       throw new Error(motivo);
@@ -357,6 +358,10 @@ export class Navegador {
         processo.on("exit", (codigo) => {
           clearTimeout(temporizador);
           rejeitar(new Error("Chromium encerrou com código " + codigo));
+        });
+        processo.on("error", (erro) => {
+          clearTimeout(temporizador);
+          rejeitar(new Error("não foi possível iniciar o Chromium: " + erro.message));
         });
       });
     } catch (erro) {

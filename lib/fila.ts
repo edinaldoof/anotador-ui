@@ -2,8 +2,9 @@
 // ciclo recebido → processado. A gravação é idempotente pelo id do lote.
 
 import { randomUUID } from "node:crypto";
-import { access, appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { gravarAtomico, serializar } from "./persistencia.ts";
 
 const ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const LIMITE_ANOTACOES = 200;
@@ -350,30 +351,32 @@ export class Fila {
   }
 
   async gravar(lote: Lote): Promise<{ registro: RegistroLote; novo: boolean }> {
-    if (await this.existe(lote.id)) {
-      const registro = await this.registro(lote.id);
-      if (registro) return { registro, novo: false };
-    }
-    const recebidoEm = new Date().toISOString();
-    const { instantaneo, ...resto } = lote;
-    const persistido: LotePersistido = { ...resto, recebidoEm, temInstantaneo: !!instantaneo };
-    await writeFile(this.caminhoJson(lote.id), JSON.stringify(persistido, null, 2));
-    if (instantaneo) await writeFile(this.caminhoInstantaneo(lote.id), instantaneo);
-    await writeFile(this.caminhoMd(lote.id), gerarMarkdown(lote));
-    const status: StatusLote = { id: lote.id, estado: "recebido" };
-    await writeFile(this.caminhoStatus(lote.id), JSON.stringify(status));
-    const registro: RegistroLote = {
-      id: lote.id,
-      recebidoEm,
-      enviadoEm: lote.enviadoEm,
-      url: lote.pagina.url,
-      titulo: lote.pagina.titulo,
-      quantidade: lote.anotacoes.length,
-      caminhoMd: this.caminhoMd(lote.id),
-      caminhoJson: this.caminhoJson(lote.id),
-    };
-    await appendFile(join(this.dir, "fila.jsonl"), JSON.stringify(registro) + "\n");
-    return { registro, novo: true };
+    return serializar(this.caminhoJson(lote.id), async () => {
+      if (await this.existe(lote.id)) {
+        const registro = await this.registro(lote.id);
+        if (registro) return { registro, novo: false };
+      }
+      const recebidoEm = new Date().toISOString();
+      const { instantaneo, ...resto } = lote;
+      const persistido: LotePersistido = { ...resto, recebidoEm, temInstantaneo: !!instantaneo };
+      if (instantaneo) await gravarAtomico(this.caminhoInstantaneo(lote.id), instantaneo);
+      await gravarAtomico(this.caminhoMd(lote.id), gerarMarkdown(lote));
+      const status: StatusLote = { id: lote.id, estado: "recebido" };
+      await gravarAtomico(this.caminhoStatus(lote.id), JSON.stringify(status));
+      await gravarAtomico(this.caminhoJson(lote.id), JSON.stringify(persistido, null, 2));
+      const registro: RegistroLote = {
+        id: lote.id,
+        recebidoEm,
+        enviadoEm: lote.enviadoEm,
+        url: lote.pagina.url,
+        titulo: lote.pagina.titulo,
+        quantidade: lote.anotacoes.length,
+        caminhoMd: this.caminhoMd(lote.id),
+        caminhoJson: this.caminhoJson(lote.id),
+      };
+      await appendFile(join(this.dir, "fila.jsonl"), JSON.stringify(registro) + "\n");
+      return { registro, novo: true };
+    });
   }
 
   async ler(id: string): Promise<LotePersistido | null> {
@@ -416,13 +419,17 @@ export class Fila {
   }
 
   async anexarCapturas(id: string, capturas: CapturaLote): Promise<void> {
-    await writeFile(this.caminhoCapturas(id), JSON.stringify(capturas, null, 2));
-    await this.regerarMarkdown(id);
+    return serializar(this.caminhoJson(id), async () => {
+      await gravarAtomico(this.caminhoCapturas(id), JSON.stringify(capturas, null, 2));
+      await this.regerarMarkdown(id);
+    });
   }
 
   async anexarAnalise(id: string, analise: AnaliseLote): Promise<void> {
-    await writeFile(this.caminhoAnalise(id), JSON.stringify(analise, null, 2));
-    await this.regerarMarkdown(id);
+    return serializar(this.caminhoJson(id), async () => {
+      await gravarAtomico(this.caminhoAnalise(id), JSON.stringify(analise, null, 2));
+      await this.regerarMarkdown(id);
+    });
   }
 
   async capturas(id: string): Promise<CapturaLote | null> {
@@ -445,7 +452,7 @@ export class Fila {
     const lote = await this.ler(id);
     if (!lote) return;
     const [capturas, analise] = await Promise.all([this.capturas(id), this.analise(id)]);
-    await writeFile(this.caminhoMd(id), gerarMarkdown({ ...lote, instantaneo: null }, capturas, analise));
+    await gravarAtomico(this.caminhoMd(id), gerarMarkdown({ ...lote, instantaneo: null }, capturas, analise));
   }
 
   async status(id: string): Promise<StatusLote> {
@@ -480,27 +487,29 @@ export class Fila {
   }
 
   async registrarMensagem(entrada: Omit<Mensagem, "id" | "em"> & { id?: string }): Promise<Mensagem | null> {
-    if (!(await this.existe(entrada.lote))) return null;
-    if (entrada.responde) {
-      const anteriores = await this.conversa(entrada.lote);
-      const alvo = anteriores.find((m) => m.id === entrada.responde);
-      if (!alvo || alvo.autor !== "agente" || alvo.tipo === "nota") throw new Error("resposta a mensagem que não é pergunta deste lote");
-      if (anteriores.some((m) => m.responde === entrada.responde)) throw new Error("pergunta já respondida");
-    }
-    const mensagem: Mensagem = {
-      id: entrada.id && idSeguro(entrada.id) ? entrada.id : randomUUID(),
-      lote: entrada.lote,
-      autor: entrada.autor,
-      tipo: entrada.tipo,
-      texto: entrada.texto.slice(0, 4000),
-      em: new Date().toISOString(),
-    };
-    if (entrada.autor === "agente" && entrada.agente) mensagem.agente = entrada.agente.slice(0, 60);
-    if (entrada.opcoes?.length) mensagem.opcoes = entrada.opcoes.slice(0, 12).map((o) => o.slice(0, 200));
-    if (entrada.responde) mensagem.responde = entrada.responde;
-    if (entrada.multipla) mensagem.multipla = true;
-    await appendFile(this.caminhoConversa(entrada.lote), JSON.stringify(mensagem) + "\n");
-    return mensagem;
+    return serializar(this.caminhoJson(entrada.lote), async () => {
+      if (!(await this.existe(entrada.lote))) return null;
+      if (entrada.responde) {
+        const anteriores = await this.conversa(entrada.lote);
+        const alvo = anteriores.find((m) => m.id === entrada.responde);
+        if (!alvo || alvo.autor !== "agente" || alvo.tipo === "nota") throw new Error("resposta a mensagem que não é pergunta deste lote");
+        if (anteriores.some((m) => m.responde === entrada.responde)) throw new Error("pergunta já respondida");
+      }
+      const mensagem: Mensagem = {
+        id: entrada.id && idSeguro(entrada.id) ? entrada.id : randomUUID(),
+        lote: entrada.lote,
+        autor: entrada.autor,
+        tipo: entrada.tipo,
+        texto: entrada.texto.slice(0, 4000),
+        em: new Date().toISOString(),
+      };
+      if (entrada.autor === "agente" && entrada.agente) mensagem.agente = entrada.agente.slice(0, 60);
+      if (entrada.opcoes?.length) mensagem.opcoes = entrada.opcoes.slice(0, 12).map((o) => o.slice(0, 200));
+      if (entrada.responde) mensagem.responde = entrada.responde;
+      if (entrada.multipla) mensagem.multipla = true;
+      await appendFile(this.caminhoConversa(entrada.lote), JSON.stringify(mensagem) + "\n");
+      return mensagem;
+    });
   }
 
   async perguntasAbertas(id: string): Promise<Mensagem[]> {
@@ -510,21 +519,25 @@ export class Fila {
   }
 
   async marcarProgresso(id: string, nota: string): Promise<StatusLote | null> {
-    if (!(await this.existe(id))) return null;
-    const atual = await this.status(id);
-    if (atual.estado === "processado") return atual;
-    const status: StatusLote = { id, estado: "em_andamento", nota: nota.slice(0, 2000), atualizadoEm: new Date().toISOString() };
-    await writeFile(this.caminhoStatus(id), JSON.stringify(status));
-    return status;
+    return serializar(this.caminhoJson(id), async () => {
+      if (!(await this.existe(id))) return null;
+      const atual = await this.status(id);
+      if (atual.estado === "processado") return atual;
+      const status: StatusLote = { id, estado: "em_andamento", nota: nota.slice(0, 2000), atualizadoEm: new Date().toISOString() };
+      await gravarAtomico(this.caminhoStatus(id), JSON.stringify(status));
+      return status;
+    });
   }
 
   async marcarProcessado(id: string, nota?: string): Promise<StatusLote | null> {
-    if (!(await this.existe(id))) return null;
-    const status: StatusLote = { id, estado: "processado", processadoEm: new Date().toISOString() };
-    if (nota) status.nota = nota.slice(0, 2000);
-    await writeFile(this.caminhoStatus(id), JSON.stringify(status));
-    await appendFile(join(this.dir, "processadas.jsonl"), JSON.stringify(status) + "\n");
-    return status;
+    return serializar(this.caminhoJson(id), async () => {
+      if (!(await this.existe(id))) return null;
+      const status: StatusLote = { id, estado: "processado", processadoEm: new Date().toISOString() };
+      if (nota) status.nota = nota.slice(0, 2000);
+      await gravarAtomico(this.caminhoStatus(id), JSON.stringify(status));
+      await appendFile(join(this.dir, "processadas.jsonl"), JSON.stringify(status) + "\n");
+      return status;
+    });
   }
 
   async listar(): Promise<RegistroLote[]> {

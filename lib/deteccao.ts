@@ -122,6 +122,6 @@ export function alvoPermitido(url: URL): string | null {
     return "só endereços da própria máquina ou da rede local (10.x, 172.16-31.x, 192.168.x)";
   }
   if (/^f[cd][0-9a-f]{2}:|^fe80:/i.test(host)) return null;
-  if (!host.includes(".")) return null; // nome de máquina simples (ex.: minha-maquina, container do docker)
+  if (!host.includes(".") && !host.includes(":")) return null; // nome de máquina simples (ex.: minha-maquina, container do docker)
   return "só endereços da própria máquina ou da rede local; nomes públicos não são aceitos";
 }

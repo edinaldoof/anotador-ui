@@ -2,8 +2,8 @@
 // e como "iniciar a conversa" — a ponte que chama o agente pela linha de comando quando
 // nenhuma sessão está ouvindo os eventos.
 
-import { spawn } from "node:child_process";
-import { existsSync, openSync, readFileSync } from "node:fs";
+import { spawn, type ChildProcess } from "node:child_process";
+import { closeSync, existsSync, openSync, readFileSync } from "node:fs";
 import { mkdir, open, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
@@ -442,7 +442,14 @@ export class Ponte {
     // Um agente iniciado de dentro de outro herda marcas de ambiente que o fazem recusar rodar aninhado.
     const env = { ...process.env };
     for (const chave of Object.keys(env)) if (/^(CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|CODEX_SANDBOX)/.test(chave)) delete env[chave];
-    const filho = spawn(binario, args, { cwd: pedido.fonte ?? process.cwd(), env, detached: true, stdio: ["ignore", fd, fd] });
+    let filho: ChildProcess;
+    try {
+      filho = spawn(binario, args, { cwd: pedido.fonte ?? process.cwd(), env, detached: true, stdio: ["ignore", fd, fd] });
+    } finally {
+      // O filho recebe suas próprias cópias; manter a do servidor aberta vaza um
+      // descritor a cada lote, mesmo depois de o agente terminar.
+      closeSync(fd);
+    }
     const execucao: Execucao = { id, agente: pedido.agente, sessao: pedido.sessao, modelo: pedido.modelo ?? null, comando, pid: filho.pid ?? null, iniciadoEm: new Date().toISOString(), terminadoEm: null, codigo: null, log, motivo: pedido.motivo };
     this.execucoes.unshift(execucao);
     if (this.execucoes.length > 30) this.execucoes.length = 30;

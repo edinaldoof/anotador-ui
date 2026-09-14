@@ -1139,7 +1139,15 @@ function alternarDitado(campo: HTMLInputElement, botao: HTMLButtonElement, a: An
     return;
   }
   if (!window.isSecureContext) {
-    avisar("Microfone bloqueado em http. Marque esta origem em chrome://flags/#unsafely-treat-insecure-origin-as-secure", 7000);
+    // A flag do Chrome que o navegador sugere não existe no celular e some a cada
+    // atualização. As duas saídas que funcionam são abrir por localhost, quando se está
+    // na mesma máquina, ou subir o anotador com --https.
+    avisar(
+      location.hostname === "localhost" || location.hostname === "127.0.0.1"
+        ? "Microfone bloqueado: este navegador exige uma conexão segura."
+        : "Microfone bloqueado fora de localhost. Abra por localhost, ou reinicie o anotador com --https e aceite o certificado uma vez.",
+      8000
+    );
     return;
   }
   const rec = new Reconhecimento();
@@ -2021,7 +2029,15 @@ function alternarDitadoEm(campo: HTMLTextAreaElement, botao: HTMLButtonElement):
     return;
   }
   if (!window.isSecureContext) {
-    avisar("Microfone bloqueado em http. Marque esta origem em chrome://flags/#unsafely-treat-insecure-origin-as-secure", 7000);
+    // A flag do Chrome que o navegador sugere não existe no celular e some a cada
+    // atualização. As duas saídas que funcionam são abrir por localhost, quando se está
+    // na mesma máquina, ou subir o anotador com --https.
+    avisar(
+      location.hostname === "localhost" || location.hostname === "127.0.0.1"
+        ? "Microfone bloqueado: este navegador exige uma conexão segura."
+        : "Microfone bloqueado fora de localhost. Abra por localhost, ou reinicie o anotador com --https e aceite o certificado uma vez.",
+      8000
+    );
     return;
   }
   const rec = new Reconhecimento();

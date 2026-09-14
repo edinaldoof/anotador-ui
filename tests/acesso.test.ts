@@ -37,6 +37,11 @@ test("a chave só confere igual a si mesma", () => {
   assert.equal(chaveConfere("", CHAVE), false);
   assert.equal(chaveConfere(undefined, CHAVE), false);
   assert.equal(chaveConfere(["igual"], CHAVE), false, "cabeçalho repetido chega como lista e não vale chave");
+  assert.equal(chaveConfere("é".repeat(32), CHAVE), false, "caracteres com mais de um byte recusam sem lançar erro");
+  assert.deepEqual(
+    avaliarAcesso({ ip: "192.168.3.19", headers: { [CABECALHO_CHAVE]: "é".repeat(32) } }, CHAVE),
+    { ok: false, motivo: "chave-errada" }
+  );
 });
 
 test("de fora da máquina, sem a chave não passa — com ela, passa", () => {
