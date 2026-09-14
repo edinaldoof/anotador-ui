@@ -321,7 +321,7 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-arvore .cab .an-ico.ativo { background: var(--an-marca-fundo); color: var(--an-marca-clara); }
 .an-btn.mini { padding: 5px 10px; font-size: 12px; flex: none; }
 .an-arvore .corpo { position: relative; flex: 1; overflow: auto; padding: 6px 6px 8px; scrollbar-width: thin; scrollbar-color: var(--an-borda-forte) transparent; outline: 0; }
-.an-arvore .dica-uso { padding: 6px 12px 8px; border-top: 1px solid var(--an-superficie-alta); color: var(--an-texto-3); font-size: 10.5px; line-height: 1.35; }
+.an-arvore .dica-uso { padding: 6px 12px 8px; border-top: 1px solid var(--an-superficie-alta); color: var(--an-texto-3); font-size: 10.5px; line-height: 1.4; display: flex; flex-direction: column; gap: 1px; }
 .an-no {
   display: flex; align-items: center; gap: 5px; height: 22px; padding-right: 8px; border-radius: 6px; cursor: pointer;
   font-size: 12px; white-space: nowrap; color: var(--an-texto); outline: 0; min-width: 0;

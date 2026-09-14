@@ -105,7 +105,7 @@ a:hover { text-decoration: underline; }
 .corpo { padding: 14px 20px 18px; }
 
 /* ---------- formulário ---------- */
-.rotulo-secao { color: var(--texto-3); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; gap: 10px; margin: 4px 0 9px; }
+.rotulo-secao { color: var(--texto-2); font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 10px; margin: 4px 0 9px; }
 .rotulo-secao .esp { flex: 1; }
 input[type=text], input[type=url] {
   width: 100%; background: var(--fundo); border: 1px solid var(--borda-forte); border-radius: 10px;
@@ -196,7 +196,7 @@ details.ajustes[open] summary::before { transform: rotate(90deg); }
   background: var(--superficie); border: 1px solid var(--borda); border-radius: 14px; box-shadow: var(--sombra-forte); padding: 5px;
 }
 .seletor-menu.abaixo { bottom: auto; top: calc(100% + 8px); }
-.seletor-grupo { display: flex; align-items: center; gap: 7px; padding: 8px 10px 5px; color: var(--texto-3); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.seletor-grupo { display: flex; align-items: center; gap: 7px; padding: 8px 10px 5px; color: var(--texto-2); font-size: 11.5px; font-weight: 600; }
 .seletor-grupo .logo svg { width: 14px; height: 14px; }
 .seletor-item {
   position: relative; display: flex; align-items: center; gap: 9px; width: 100%; min-height: 38px; padding: 7px 34px 7px 10px;
@@ -473,7 +473,9 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
       if (s.app && s.app.framework) d.push(s.app.framework);
       if (s.app && s.app.status) d.push("HTTP " + s.app.status);
       if (s.pendentes) d.push(s.pendentes + " lote(s) pendente(s)");
-      $("app-detalhe").textContent = d.join(" · ");
+      // Vírgulas: quatro informações emendadas por ponto médio são o que a régua
+      // desta ferramenta acusa como marca de interface montada no automático.
+      $("app-detalhe").textContent = d.join(", ");
     }
     if (!preencheuOpcoes) {
       preencheuOpcoes = true;
@@ -551,7 +553,7 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     const s = r.sondagem;
     if (s.anotador) { mostrarResultado("Essa URL é o próprio anotador — aponte para o servidor do app.", "erro"); return s; }
     if (!s.alcancavel) { mostrarResultado("Sem resposta (" + (s.erro || "desconhecido") + "). O servidor de desenvolvimento está rodando?", "erro"); return s; }
-    mostrarResultado("Respondeu HTTP " + s.status + (s.framework ? " · " + s.framework : "") + (s.titulo ? " · “" + s.titulo + "”" : "") + (s.html ? "" : " · não é HTML (API?)"), "ok");
+    mostrarResultado("Respondeu HTTP " + s.status + (s.framework ? ", " + s.framework : "") + (s.titulo ? ", “" + s.titulo + "”" : "") + (s.html ? "" : ", não é HTML (API?)"), "ok");
     return s;
   }
   async function conectar() {
@@ -597,7 +599,7 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
       h("span", { class: "av" }, s.id.slice(0, 2).toUpperCase()),
       h("div", { class: "info" },
         h("div", { class: "nome" }, s.nome || s.titulo || "sessão " + s.id.slice(0, 8)),
-        h("div", { class: "det" }, [s.nome && s.titulo ? s.titulo : null, s.origem, hora(s.em), s.id.slice(0, 8)].filter(Boolean).join(" · "))),
+        h("div", { class: "det" }, [s.nome && s.titulo ? s.titulo : null, s.origem, hora(s.em), s.id.slice(0, 8)].filter(Boolean).join(", "))),
       s.ativa ? h("span", { class: "selo viva" }, "aberta") : null,
       estaOuvindo ? h("span", { class: "selo ouvindo" }, "ouvindo") : null,
       ...acoes);

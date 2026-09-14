@@ -721,8 +721,8 @@ function atualizarReligar(): void {
     contador.textContent = "?";
     contador.hidden = false;
   }
-  const situacao = perguntas > 0 ? `${AGENTE} perguntou — abra para responder · ` : aberto ? (aberto.estado === "em_andamento" ? `${AGENTE}: ${aberto.nota || "trabalhando"} · ` : `Lote aguardando ${AGENTE} · `) : n ? `${n} anotação(ões) na fila · ` : "";
-  ui.religar.title = situacao + "Reabrir anotador (Alt+Shift+A) · arraste para mover";
+  const situacao = perguntas > 0 ? `${AGENTE} perguntou — abra para responder. ` : aberto ? (aberto.estado === "em_andamento" ? `${AGENTE}: ${aberto.nota || "trabalhando"}. ` : `Lote aguardando ${AGENTE}. `) : n ? `${n} anotação(ões) na fila. ` : "";
+  ui.religar.title = situacao + "Reabrir anotador (Alt+Shift+A). Arraste para mover.";
 }
 
 function religar(): void {
@@ -1385,7 +1385,7 @@ function campoQuatro(a: AnotacaoLocal, el: ElementoEstilizavel, rotulo: string, 
     });
     return wrap;
   });
-  return linha(rotulo, h("div", { class: "an-quatro" }, ...campos), "cima · direita · baixo · esquerda", true);
+  return linha(rotulo, h("div", { class: "an-quatro" }, ...campos), "cima, direita, baixo, esquerda", true);
 }
 
 function construirCampos(a: AnotacaoLocal, el: ElementoEstilizavel): HTMLElement[] {
@@ -2128,7 +2128,15 @@ function montarArvore(raizUi: HTMLDivElement): void {
     { class: "an-arvore", hidden: true },
     cab,
     ui.arvoreCorpo,
-    h("div", { class: "dica-uso" }, "Clique seleciona · duplo clique abre propriedades · arraste na página para listar uma área · setas navegam aqui · Alt+seta na página: pai, filho, irmãos")
+    // Cinco instruções emendadas por ponto médio é a mesma coisa que a régua acusa nas
+    // páginas alheias; separadas em frases, lê-se sem decifrar.
+    h(
+      "div",
+      { class: "dica-uso" },
+      h("span", {}, "Clique seleciona, duplo clique abre as propriedades."),
+      h("span", {}, "Arraste na página para listar uma área."),
+      h("span", {}, "Setas navegam aqui; com Alt, na página: pai, filho, irmãos.")
+    )
   );
   raizUi.append(ui.arvore);
   tornarArrastavel(ui.arvore, [alca, cab], "arvore");
