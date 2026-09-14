@@ -372,6 +372,9 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
       "raio inconsistente",
       "altura de controle desigual",
       "vãos desiguais",
+      "rótulo em versalete",
+      "seta presa ao rótulo",
+      "metadados colados por ponto",
     ]) {
       assert.ok(regras.has(esperada), `a regra "${esperada}" não acendeu na página de defeitos. Achados: ${detalhe()}`);
     }

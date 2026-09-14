@@ -6,7 +6,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { Navegador, encontrarChromium, type Pagina } from "../lib/cdp.ts";
+import { MODIFICADORES, Navegador, encontrarChromium, type Pagina } from "../lib/cdp.ts";
 import { iniciarServidor } from "../server.ts";
 
 const { values } = parseArgs({
@@ -22,6 +22,16 @@ const { values } = parseArgs({
 });
 
 const noOverlay = (seletor: string) => `document.getElementById("__anotador_host").shadowRoot.querySelector(${JSON.stringify(seletor)})`;
+
+/** Recorta um painel do overlay com uma folga, em coordenadas do documento. */
+async function recorteDoOverlay(pagina: Pagina, seletor: string, folga = 14): Promise<Rect> {
+  const r = await pagina.avaliar<Rect>(
+    `(() => { const e = document.getElementById("__anotador_host").shadowRoot.querySelector(${JSON.stringify(seletor)});
+      const b = e.getBoundingClientRect();
+      return { left: b.left + scrollX, top: b.top + scrollY, width: b.width, height: b.height }; })()`
+  );
+  return { left: r.left - folga, top: r.top - folga, width: r.width + folga * 2, height: r.height + folga * 2 };
+}
 
 async function esperarAte(condicao: () => Promise<boolean>, timeoutMs = 15_000): Promise<void> {
   const inicio = Date.now();
@@ -155,6 +165,23 @@ async function principal(): Promise<void> {
     await esperarAte(async () => pagina.avaliar<boolean>(`!!${noOverlay(".an-conversa")} && ${noOverlay(".an-conversa")}.checkVisibility() && /Como prefere/.test(${noOverlay(".an-conversa .fluxo")}.textContent)`), 20_000);
     await pagina.esperar(600);
     await salvar("conversa", pagina);
+
+    // 4b. comandos de barra: a mesma lista que a linha de comando do agente ofereceria
+    const campoConversa = noOverlay(".an-conversa .entrada textarea");
+    await clicarEm(pagina, campoConversa);
+    await pagina.digitar("/");
+    await esperarAte(async () => pagina.avaliar<boolean>(`document.getElementById("__anotador_host").shadowRoot.querySelectorAll(".an-comando").length > 0`), 10_000);
+    await pagina.esperar(400);
+    await salvar("comandos", pagina, await recorteDoOverlay(pagina, ".an-conversa"));
+    await pagina.avaliar(`(() => { const c = ${campoConversa}; c.value = ""; c.dispatchEvent(new Event("input")); })()`);
+
+    // 4c. avaliação da página: a régua da casa e o motor emprestado na mesma lista
+    await pagina.pressionar("e", MODIFICADORES.alt);
+    await esperarAte(async () => pagina.avaliar<boolean>(`!!${noOverlay(".an-avaliacao")} && !${noOverlay(".an-avaliacao")}.hidden`), 10_000);
+    await pagina.esperar(2500);
+    await salvar("avaliacao", pagina, await recorteDoOverlay(pagina, ".an-avaliacao"));
+    await pagina.pressionar("Escape");
+
     // 5. banner de apresentação (imagem de compartilhamento do repositório, 1200×630)
     const capa = join(tmpdir(), "anotador-capa.html");
     await writeFile(capa, banner(resolve(values.saida, "anotar.png")));

@@ -285,6 +285,51 @@ function auditarPagina(): ResultadoAuditoria {
     }
   }
 
+  // 13-15. marcas de interface montada no piloto automático, da lista de tells que a
+  // Anthropic publica na skill frontend-design. Nenhuma é erro; todas são sinal de que
+  // a tela foi montada com o repertório padrão em vez de com o assunto dela. Cada uma
+  // rende no máximo três linhas, porque um vício de estilo se repete na página inteira
+  // e listar tudo afogaria o resto do painel.
+  const limitar = (lista: Element[], regra: string, evidencia: (el: Element) => string, texto: string) => {
+    for (const el of lista.slice(0, 3)) {
+      add({ regra, categoria: "originalidade", gravidade: "baixa", alvo: descreverCurto(el), evidencia: evidencia(el) }, el);
+    }
+    if (lista.length > 3) {
+      add({ regra, categoria: "originalidade", gravidade: "baixa", alvo: `e mais ${lista.length - 3} elemento(s)`, evidencia: texto }, null);
+    }
+  };
+
+  const versaletes: Element[] = [];
+  const setas: Element[] = [];
+  const pontosMedios: Element[] = [];
+  for (const { el, cs } of visiveis) {
+    const t = textoDireto(el);
+    if (!t) continue;
+    const espacamento = parseFloat(cs.letterSpacing);
+    const tamanho = parseFloat(cs.fontSize);
+    if (cs.textTransform === "uppercase" && espacamento >= tamanho * 0.05 && tamanho <= 13 && t.length <= 40) versaletes.push(el);
+    if (/[→⟶]\s*$/.test(t) && (el.tagName === "A" || el.tagName === "BUTTON" || el.getAttribute("role") === "button")) setas.push(el);
+    if ((t.match(/\s·\s/g) ?? []).length >= 2) pontosMedios.push(el);
+  }
+  limitar(
+    versaletes,
+    "rótulo em versalete",
+    (el) => `"${textoDireto(el).slice(0, 28)}" em caixa alta com espaçamento entre letras; peso e cor separam igual, sem o ar de modelo pronto`,
+    "o mesmo rótulo em versalete se repete pela página"
+  );
+  limitar(
+    setas,
+    "seta presa ao rótulo",
+    (el) => `"${textoDireto(el).slice(0, 28)}" termina em seta; o elemento já é clicável e a seta não acrescenta destino`,
+    "vários rótulos terminam em seta"
+  );
+  limitar(
+    pontosMedios,
+    "metadados colados por ponto",
+    (el) => `"${textoDireto(el).slice(0, 34)}" emenda três informações com ponto médio; vírgula ou linhas separadas leem melhor`,
+    "a mesma emenda aparece em outros lugares"
+  );
+
   const ordem = { alta: 0, media: 1, baixa: 2 };
   achados.sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade] || a.regra.localeCompare(b.regra));
   for (const a of achados) a.origem = "regua";
@@ -686,12 +731,14 @@ function acompanharParecer(): void {
   }, 3000);
 }
 
-/** "25 elementos medidos · 13 pela régua · 5 pela norma" — sem motor, só a primeira metade. */
+/** "25 elementos medidos, 13 da régua e 5 da norma" — sem motor, só a primeira metade. */
 function resumoDaMedicao(m: ResultadoAuditoria): string {
   const daNorma = m.achados.filter((a) => a.origem === "norma").length;
-  if (!daNorma) return `${m.medidos} elementos medidos · ${m.achados.length} achado(s)`;
+  const daRegua = m.achados.length - daNorma;
+  const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+  if (!daNorma) return `${m.medidos} elementos medidos, ${plural(m.achados.length, "achado", "achados")}`;
   // Cabe numa linha só: o cabeçalho tem 400px e quebrar empurra a lista para baixo.
-  return `${m.medidos} elementos · ${m.achados.length - daNorma} da régua · ${daNorma} da norma`;
+  return `${m.medidos} elementos, ${plural(daRegua, "achado", "achados")} da régua e ${daNorma} da norma`;
 }
 
 function linhaDeAchado(a: AchadoAuditoria): HTMLElement {

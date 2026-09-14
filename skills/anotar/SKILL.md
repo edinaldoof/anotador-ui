@@ -59,7 +59,7 @@ Não marque como processado antes de aplicar. Se decidir não aplicar algo, marq
 
 ## 2b. Ao chegar `{"tipo":"mensagem"}` com `mensagem.autor === "usuario"`
 
-É o usuário respondendo pela interface (a uma pergunta sua, se `responde` estiver preenchido; recado livre, se não). `opcoes` traz o que ele clicou; `texto`, o que escreveu. Continue o lote de onde parou; confirme com `anotador nota <id>` o que vai fazer com a resposta.
+É o usuário respondendo pela interface (a uma pergunta sua, se `responde` estiver preenchido; recado livre, se não). `opcoes` traz o que ele clicou; `texto`, o que escreveu. O texto pode começar com `/nome`: são os comandos de barra que o chat oferece, lidos das skills e comandos deste projeto, da conta e dos plugins ligados — trate como se ele tivesse digitado o mesmo comando no terminal. Continue o lote de onde parou; confirme com `anotador nota <id>` o que vai fazer com a resposta.
 
 ## 2c. Ao chegar `{"tipo":"avaliacao", id, caminhoMd, resumo}`
 

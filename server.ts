@@ -14,6 +14,7 @@ import { parseArgs } from "node:util";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { Ponte, detectarAgentes, mensagemDeAbertura, mensagemParaLote, modelosDe, sessoesClaude, sessoesCodex, type IdAgente } from "./lib/agentes.ts";
 import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, motivoDaRecusa } from "./lib/acesso.ts";
+import { descobrirComandos, idPeloNome } from "./lib/comandos.ts";
 import { Avaliacoes, gerarDossie, validarParecer, validarPedido } from "./lib/avaliacao.ts";
 import { capturarAvaliacao, capturarLote } from "./lib/captura.ts";
 import { encontrarChromium } from "./lib/cdp.ts";
@@ -648,6 +649,18 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       "x-anotador-norma": motor.versao,
     });
     res.end(codigo);
+    return true;
+  }
+  if (caminho === "/agente/comandos" && metodo === "GET") {
+    // Os comandos de barra que o agente entende neste projeto. Quem pergunta é o chat
+    // do overlay, para oferecer a mesma lista que a linha de comando ofereceria.
+    const pedido = url.searchParams.get("agente");
+    const id = (pedido ? idPeloNome(pedido) : null) ?? idPeloNome(opcoes.ponte?.agente ?? opcoes.agente);
+    if (!id) {
+      responderJson(res, 200, { ok: true, agente: null, comandos: [] });
+      return true;
+    }
+    responderJson(res, 200, { ok: true, agente: id, comandos: await descobrirComandos(id, opcoes.fonte) });
     return true;
   }
   if (caminho === "/norma" && metodo === "GET") {

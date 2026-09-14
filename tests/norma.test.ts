@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { lerSistemaDeDesign, paraDtcg } from "../lib/design.ts";
 import { REGRAS_A_LIGAR, REGRAS_QUE_FICAM_FORA, localizarNorma } from "../lib/norma.ts";
+import { descobrirComandos } from "../lib/comandos.ts";
 import { criarAlvoFalso, criarProxy, pedir } from "./ajuda.ts";
 
 function sistemaDe(css: string) {
@@ -163,5 +164,59 @@ test("a rota de tokens devolve o sistema do projeto no formato do W3C", async ()
   } finally {
     await proxy.fechar();
     await alvo.fechar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// COMANDOS DE BARRA DO AGENTE
+// ---------------------------------------------------------------------------
+
+test("descobrirComandos lê skills e comandos do projeto e da conta, e o projeto ganha o empate", async () => {
+  const raiz = await mkdtemp(join(tmpdir(), "anotador-comandos-"));
+  try {
+    const skill = join(raiz, ".claude", "skills", "publicar");
+    await mkdir(skill, { recursive: true });
+    await writeFile(join(skill, "SKILL.md"), "---\nname: publicar\ndescription: Sobe a versão e publica o pacote\n---\n\n# Publicar\n");
+
+    const comandos = join(raiz, ".claude", "commands");
+    await mkdir(comandos, { recursive: true });
+    await writeFile(join(comandos, "revisar.md"), "Revisa o diff atual antes do commit\n");
+    await writeFile(join(comandos, "leia-me.txt"), "não é comando");
+
+    const achados = await descobrirComandos("claude", raiz);
+    const porNome = new Map(achados.map((c) => [c.nome, c]));
+
+    assert.equal(porNome.get("publicar")?.descricao, "Sobe a versão e publica o pacote");
+    assert.equal(porNome.get("publicar")?.tipo, "skill");
+    assert.equal(porNome.get("publicar")?.origem, "projeto");
+    assert.equal(porNome.get("revisar")?.descricao, "Revisa o diff atual antes do commit", "sem frontmatter, vale a primeira linha útil");
+    assert.ok(!porNome.has("leia-me"), "extensão fora do padrão do CLI não vira comando");
+
+    assert.deepEqual(await descobrirComandos("gemini", raiz), [], "cada agente procura na pasta dele, não na dos outros");
+  } finally {
+    await rm(raiz, { recursive: true, force: true });
+  }
+});
+
+test("a rota de comandos responde pelo agente conectado e aceita outro por parâmetro", async () => {
+  const raiz = await mkdtemp(join(tmpdir(), "anotador-comandos-http-"));
+  const alvo = await criarAlvoFalso();
+  const skill = join(raiz, ".claude", "skills", "anotar");
+  await mkdir(skill, { recursive: true });
+  await writeFile(join(skill, "SKILL.md"), "---\nname: anotar\ndescription: Liga a sessão ao anotador\n---\n");
+  const proxy = await criarProxy(alvo, { fonte: raiz, agente: "Claude Code" });
+  try {
+    const r = JSON.parse((await pedir(proxy.origem + "/__anotador/agente/comandos")).corpo) as Record<string, unknown>;
+    assert.equal(r["agente"], "claude", "o rótulo livre do agente vira o identificador certo");
+    const lista = r["comandos"] as Array<{ nome: string; descricao: string }>;
+    assert.ok(lista.some((c) => c.nome === "anotar" && c.descricao === "Liga a sessão ao anotador"));
+
+    const outro = JSON.parse((await pedir(proxy.origem + "/__anotador/agente/comandos?agente=gemini")).corpo) as Record<string, unknown>;
+    assert.equal(outro["agente"], "gemini");
+    assert.deepEqual(outro["comandos"], []);
+  } finally {
+    await proxy.fechar();
+    await alvo.fechar();
+    await rm(raiz, { recursive: true, force: true });
   }
 });

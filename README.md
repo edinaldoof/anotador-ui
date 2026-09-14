@@ -130,6 +130,12 @@ A barra segue o ciclo em tempo real — *aguardando* → *aplicando em…* → *
 
 ![Painel de conversa: o agente explica que o estilo vem de um componente compartilhado e pergunta qual passo da escala usar, com três opções clicáveis](docs/imagens/conversa.png)
 
+No campo da conversa, `/` abre os comandos do agente conectado, como a linha de comando faria. A lista é lida do disco: as skills e os comandos que o projeto declara, os da sua conta e os dos plugins ligados, cada um com a descrição e a origem. Setas escolhem, Enter completa, o primeiro espaço começa os argumentos e fecha a lista.
+
+![Campo da conversa com a barra digitada e a lista de comandos do agente, cada um com descrição e a etiqueta de origem](docs/imagens/comandos.png)
+
+Só entra o que existe no disco. Comandos embutidos do terminal, como limpar ou compactar a sessão, ficam de fora de propósito: valem para a sessão do terminal, não para uma mensagem que chega pelo anotador, e oferecê-los prometeria um efeito que não acontece.
+
 ### Claude Code
 
 ```bash
@@ -182,11 +188,15 @@ As regras foram calibradas contra projetos reais, porque linter que grita demais
 
 A lupa na barra (`Alt+E`) mede a página com uma régua objetiva e, se você quiser, pede um **parecer ao agente conectado**. São duas coisas separadas de propósito:
 
-**A régua** roda no navegador e não opina — mede. Doze regras: contraste contra o mínimo da norma, alvo de toque, campo sem rótulo, botão sem nome, salto e inversão de nível nos cabeçalhos, transbordo que faz a página rolar de lado, texto cortado, elemento a poucos pixels de uma coluna que os irmãos respeitam, raio e altura desiguais entre controles vizinhos, e vãos irregulares numa mesma linha. Cada achado traz o seletor, e passar o mouse acende o elemento.
+**A régua** roda no navegador e não opina — mede. Quinze regras: contraste contra o mínimo da norma, alvo de toque, campo sem rótulo, botão sem nome, salto e inversão de nível nos cabeçalhos, transbordo que faz a página rolar de lado, texto cortado, elemento a poucos pixels de uma coluna que os irmãos respeitam, raio e altura desiguais entre controles vizinhos, e vãos irregulares numa mesma linha. Cada achado traz o seletor, e passar o mouse acende o elemento.
+
+As três últimas vêm da lista de *tells* que a Anthropic publica na skill [frontend-design](https://github.com/anthropics/claude-code/blob/main/plugins/frontend-design/skills/frontend-design/SKILL.md): rótulo em caixa alta com espaçamento entre letras, seta presa ao fim de um rótulo que já é clicável, e três informações emendadas por ponto médio. Nenhuma é erro. Todas são sinal de que a tela foi montada com o repertório padrão em vez de com o assunto dela, e por isso saem com gravidade baixa e no máximo três linhas cada.
 
 **O motor emprestado** entra quando o projeto anotado já tem o `axe-core` instalado — e todo projeto Next com o lint padrão tem, por transitividade. O anotador o serve a partir do `node_modules` do próprio projeto, sem virar dependência de nada, e some sem alarde onde não houver. Ele mede o que a régua não mede: ARIA, semântica, landmarks, tabelas. Sete regras normativas que o motor entrega **desligadas de fábrica** são ligadas aqui pelo nome, entre elas o alvo de toque da WCAG 2.2 — quem roda o motor puro recebe um verde que não mediu o que diz medir. Fora ficam o nível AAA, os critérios que a WCAG 2.2 removeu e as regras experimentais, cada exclusão com o motivo escrito no código. Achado que repete o que a régua já disse sobre o mesmo elemento não aparece duas vezes, e a régua ganha o empate: ela tem calibração que a norma não tem, como a exceção do próprio critério 2.5.8 para link no meio de um parágrafo. No painel, o que veio de fora leva o selo `norma`.
 
 **O parecer** é do agente. O anotador monta um dossiê com tudo que já foi medido, a estrutura da página, os componentes em cena, o sistema de design com a intenção de cada token, e a captura da tela; então pede que ele julgue só o que a régua não alcança — hierarquia visual, clareza da ação principal, consistência, densidade, elegância. Cada item volta apontando um elemento, o problema e uma sugestão na linguagem do projeto, com botão para virar anotação e você mandar aplicar.
+
+![Painel de avaliação sobre a tela de entrada do Portal, com um achado do motor emprestado e um da régua da casa](docs/imagens/avaliacao.png)
 
 ```bash
 anotador avaliacoes       # pedidos, com e sem parecer

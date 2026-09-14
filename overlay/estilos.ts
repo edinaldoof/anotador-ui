@@ -206,7 +206,7 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-fila .txt .com { color: var(--an-sobre-cor); }
 .an-fila .txt .alt { color: var(--an-ok-claro); font-size: 12px; }
 .an-fila .vazio { padding: 16px; color: var(--an-texto-2); text-align: center; }
-.an-fila .cab-lotes { padding: 8px 12px 4px; color: var(--an-texto-2); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.an-fila .cab-lotes { padding: 8px 12px 4px; color: var(--an-texto-2); font-size: 11.5px; font-weight: 600; }
 .an-fila .item.lote { cursor: pointer; }
 .an-fila .item.lote:hover { background: var(--an-superficie); }
 .an-fila .item.lote .perg { color: var(--an-aviso-claro); font-size: 12px; }
@@ -240,7 +240,7 @@ button { cursor: pointer; border: 0; background: transparent; }
 
 /* perguntas com opções */
 .an-perguntas { display: flex; flex-direction: column; gap: 6px; padding: 9px; background: var(--an-superficie); border: 1px solid var(--an-superficie-alta); border-radius: 14px; }
-.an-perguntas .rot { color: var(--an-texto-2); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 1px 3px 3px; }
+.an-perguntas .rot { color: var(--an-texto-2); font-size: 11px; font-weight: 600; padding: 1px 3px 3px; }
 .an-opcao {
   display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 9px 11px; border-radius: 10px;
   background: var(--an-fundo); border: 1px solid var(--an-borda); color: var(--an-texto); font-size: 12.5px; line-height: 1.35;
@@ -266,6 +266,26 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-conversa .entrada .acoes { display: flex; align-items: center; gap: 6px; padding: 4px 7px 7px; }
 .an-conversa .entrada .acoes .esp { flex: 1; }
 .an-conversa .entrada .acoes .atalho { color: var(--an-texto-3); font-size: 10.5px; padding-left: 4px; }
+.an-conversa .entrada .an-comandos {
+  order: -1; border-bottom: 1px solid var(--an-borda); background: var(--an-fundo);
+  max-height: 232px; overflow-y: auto; overscroll-behavior: contain;
+}
+.an-conversa .an-comandos-lista { display: flex; flex-direction: column; padding: 5px; gap: 1px; }
+.an-conversa .an-comandos-vazio { padding: 11px 12px; font-size: 11.5px; color: var(--an-texto-3); }
+.an-conversa .an-comando {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 9px;
+  padding: 7px 9px; border: 0; border-radius: 9px; background: transparent; cursor: pointer;
+  text-align: left; font: inherit; color: var(--an-sobre-cor); width: 100%;
+}
+.an-conversa .an-comando.foco { background: var(--an-superficie-alta); }
+.an-conversa .an-comando .nome { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.an-conversa .an-comando .desc {
+  font-size: 11.5px; color: var(--an-texto-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.an-conversa .an-comando .origem {
+  font-size: 10px; font-weight: 600;
+  color: var(--an-texto-3); border: 1px solid var(--an-borda); border-radius: 999px; padding: 0 6px; white-space: nowrap;
+}
 .an-conversa .entrada .an-ok { width: 32px; height: 32px; background: var(--an-marca); }
 .an-conversa .entrada .an-ok:hover { background: var(--an-marca-forte); }
 .an-conversa .entrada .an-ok:disabled { background: var(--an-superficie-alta); color: var(--an-texto-3); cursor: default; }
@@ -378,7 +398,7 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-avaliacao .cab .tit { flex: 1; min-width: 0; font-weight: 700; font-size: 13.5px; }
 .an-avaliacao .cab .tit .sub { display: block; color: var(--an-texto-2); font-size: 11px; font-weight: 400; }
 .an-avaliacao .corpo { flex: 1; overflow: auto; padding: 6px; scrollbar-width: thin; scrollbar-color: var(--an-borda-forte) transparent; }
-.an-avaliacao .secao { color: var(--an-texto-3); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 10px 8px 5px; }
+.an-avaliacao .secao { color: var(--an-texto-2); font-size: 11.5px; font-weight: 600; padding: 10px 8px 5px; }
 .an-avaliacao .vazio { color: var(--an-texto-2); font-size: 12.5px; padding: 10px 8px; }
 .an-avaliacao .aguardando { color: var(--an-aviso-claro); font-size: 12.5px; padding: 10px 8px; }
 .an-avaliacao .resumo { color: var(--an-texto); font-size: 12.5px; line-height: 1.5; padding: 4px 8px 8px; }
@@ -391,7 +411,7 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-achado .col { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .an-achado .titulo { font-size: 12.5px; font-weight: 600; color: var(--an-texto); display: flex; align-items: center; gap: 7px; }
 .an-achado .cat { font-size: 10px; font-weight: 600; color: var(--an-marca-clara); background: var(--an-marca-fundo); border-radius: 999px; padding: 1px 7px; }
-.an-achado .an-selo { font-size: 9.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--an-texto-3); border: 1px solid var(--an-borda); border-radius: 999px; padding: 0 6px; flex: none; }
+.an-achado .an-selo { font-size: 10px; font-weight: 600; color: var(--an-texto-3); border: 1px solid var(--an-borda); border-radius: 999px; padding: 0 6px; flex: none; }
 .an-achado .sub { font-size: 11.5px; color: var(--an-texto-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .an-achado .evid { font-size: 11.5px; color: var(--an-texto-3); line-height: 1.45; }
 .an-achado .sugestao { font-size: 11.5px; color: var(--an-ok-claro); line-height: 1.45; }

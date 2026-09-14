@@ -1807,6 +1807,8 @@ function renderizarConversa(): void {
   };
   enviarBtn.addEventListener("click", enviarTexto);
   campo.addEventListener("keydown", (e) => {
+    // Com o menu aberto, as setas e o Enter pertencem a ele.
+    if (comandos.teclado(e)) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       enviarTexto();
@@ -1823,8 +1825,9 @@ function renderizarConversa(): void {
     "div",
     { class: "entrada" },
     campo,
-    h("div", { class: "acoes" }, btnMic, h("span", { class: "atalho" }, "Enter envia · Shift+Enter quebra linha"), h("span", { class: "esp" }), enviarBtn)
+    h("div", { class: "acoes" }, btnMic, h("span", { class: "atalho" }, "/ para comandos · Enter envia"), h("span", { class: "esp" }), enviarBtn)
   );
+  const comandos = ligarComandos(campo, caixa);
   // Clicar em qualquer lugar da caixa foca o campo, como no Prompt Input do Nexus UI.
   caixa.addEventListener("click", (e) => {
     if (!(e.target as Element).closest("button")) campo.focus();
@@ -1832,6 +1835,146 @@ function renderizarConversa(): void {
   painel.append(caixa);
   if (coladoNoFim) fluxo.scrollTop = fluxo.scrollHeight;
   (painel as HTMLDivElement & { __campo?: HTMLTextAreaElement }).__campo = campo;
+}
+
+// ---------------------------------------------------------------------------
+// COMANDOS DE BARRA NO CHAT
+// ---------------------------------------------------------------------------
+//
+// A mesma lista que a linha de comando do agente ofereceria: digitou `/`, viu o que
+// existe neste projeto e nesta máquina, escolheu. O servidor descobre lendo as pastas
+// de skills e comandos do agente conectado; aqui só se apresenta o resultado.
+
+interface ComandoNoChat {
+  nome: string;
+  descricao: string;
+  origem: string;
+  tipo: string;
+}
+
+let comandosDoAgente: ComandoNoChat[] | null = null;
+let buscaDeComandos: Promise<void> | null = null;
+
+function carregarComandos(): Promise<void> {
+  buscaDeComandos ??= fetch(CFG.base + "/agente/comandos", { cache: "no-store" })
+    .then((r) => r.json() as Promise<{ comandos?: ComandoNoChat[] }>)
+    .then((j) => {
+      comandosDoAgente = Array.isArray(j.comandos) ? j.comandos : [];
+    })
+    .catch(() => {
+      comandosDoAgente = [];
+    });
+  return buscaDeComandos;
+}
+
+/**
+ * Liga o menu ao campo. Devolve quem pergunta se o menu está aberto, porque enquanto
+ * estiver, Enter escolhe em vez de enviar — que é o comportamento de qualquer chat de
+ * agente, e o contrário disso manda "/" sozinho para o outro lado.
+ */
+function ligarComandos(campo: HTMLTextAreaElement, caixa: HTMLElement): { aberto: () => boolean; teclado: (e: KeyboardEvent) => boolean } {
+  const lista = h("div", { class: "an-comandos-lista" });
+  const menu = h("div", { class: "an-comandos" }, lista);
+  menu.hidden = true;
+  caixa.append(menu);
+  let visiveis: ComandoNoChat[] = [];
+  let foco = 0;
+
+  // Só enquanto a linha inteira for uma palavra começada por barra: o primeiro espaço
+  // é o começo dos argumentos, e aí o menu sai da frente.
+  const termo = (): string | null => {
+    const m = /^\/(\S*)$/.exec(campo.value);
+    return m ? (m[1] ?? "") : null;
+  };
+
+  const escolher = (c: ComandoNoChat): void => {
+    campo.value = "/" + c.nome + " ";
+    menu.hidden = true;
+    campo.focus();
+    campo.dispatchEvent(new Event("input"));
+  };
+
+  const pintar = (): void => {
+    lista.replaceChildren();
+    if (!visiveis.length) {
+      lista.append(
+        h(
+          "div",
+          { class: "an-comandos-vazio" },
+          comandosDoAgente === null ? "procurando comandos…" : `${AGENTE} não tem comandos de barra neste projeto`
+        )
+      );
+      return;
+    }
+    visiveis.forEach((c, i) => {
+      const item = h(
+        "button",
+        {
+          type: "button",
+          class: "an-comando" + (i === foco ? " foco" : ""),
+          onmouseenter: () => {
+            foco = i;
+            pintar();
+          },
+          onclick: () => escolher(c),
+        },
+        h("span", { class: "nome" }, "/" + c.nome),
+        h("span", { class: "desc" }, c.descricao),
+        h("span", { class: "origem" }, c.origem)
+      );
+      lista.append(item);
+    });
+    lista.children[foco]?.scrollIntoView({ block: "nearest" });
+  };
+
+  const atualizar = (): void => {
+    const t = termo();
+    if (t === null) {
+      menu.hidden = true;
+      return;
+    }
+    menu.hidden = false;
+    if (comandosDoAgente === null) {
+      pintar();
+      void carregarComandos().then(atualizar);
+      return;
+    }
+    const alvo = t.toLowerCase();
+    visiveis = comandosDoAgente.filter((c) => c.nome.toLowerCase().includes(alvo)).slice(0, 8);
+    foco = 0;
+    pintar();
+  };
+
+  campo.addEventListener("input", atualizar);
+  campo.addEventListener("blur", () => setTimeout(() => (menu.hidden = true), 150));
+
+  return {
+    aberto: () => !menu.hidden,
+    teclado: (e: KeyboardEvent) => {
+      if (menu.hidden) return false;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (visiveis.length) {
+          foco = (foco + (e.key === "ArrowDown" ? 1 : visiveis.length - 1)) % visiveis.length;
+          pintar();
+        }
+        return true;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        menu.hidden = true;
+        return true;
+      }
+      if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+        const c = visiveis[foco];
+        if (!c) return false;
+        e.preventDefault();
+        escolher(c);
+        return true;
+      }
+      return false;
+    },
+  };
 }
 
 function focarEntrada(pergunta: Mensagem): void {

@@ -217,7 +217,7 @@ interface EventoAnotador {
 
 interface AchadoAuditoria {
   regra: string;
-  categoria: "acessibilidade" | "hierarquia" | "consistencia" | "escala" | "layout";
+  categoria: "acessibilidade" | "hierarquia" | "consistencia" | "escala" | "layout" | "originalidade";
   gravidade: "alta" | "media" | "baixa";
   alvo: string;
   evidencia: string;
