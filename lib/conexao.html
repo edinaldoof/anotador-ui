@@ -386,8 +386,27 @@ pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); bor
     for (const f of filhos.flat()) if (f !== null && f !== undefined && f !== false) el.append(f instanceof Node ? f : document.createTextNode(String(f)));
     return el;
   };
+  // A chave chega pela URL que o anotador imprime no terminal e fica guardada na aba.
+  // Sai da barra de endereço logo em seguida: link copiado ou print de tela não deve
+  // carregar consigo a permissão de iniciar um agente nesta máquina.
+  const CHAVE = (() => {
+    const daUrl = new URLSearchParams(location.search).get("chave");
+    let guardada = null;
+    try { guardada = sessionStorage.getItem("anotador.chave"); } catch {}
+    if (daUrl) {
+      try { sessionStorage.setItem("anotador.chave", daUrl); } catch {}
+      const limpa = new URL(location.href);
+      limpa.searchParams.delete("chave");
+      history.replaceState(null, "", limpa.pathname + limpa.search + limpa.hash);
+      return daUrl;
+    }
+    return guardada;
+  })();
   const api = async (caminho, corpo) => {
-    const r = await fetch(caminho, corpo === undefined ? { cache: "no-store" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpo) });
+    const cabecalhos = CHAVE ? { "x-anotador-chave": CHAVE } : {};
+    const r = await fetch(caminho, corpo === undefined
+      ? { cache: "no-store", headers: cabecalhos }
+      : { method: "POST", headers: { ...cabecalhos, "content-type": "application/json" }, body: JSON.stringify(corpo) });
     const texto = await r.text();
     let json;
     try { json = JSON.parse(texto); } catch { json = { ok: r.ok, erro: texto }; }

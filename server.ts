@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { Ponte, detectarAgentes, mensagemDeAbertura, mensagemParaLote, modelosDe, sessoesClaude, sessoesCodex, type IdAgente } from "./lib/agentes.ts";
+import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, motivoDaRecusa } from "./lib/acesso.ts";
 import { Avaliacoes, gerarDossie, validarParecer, validarPedido } from "./lib/avaliacao.ts";
 import { capturarAvaliacao, capturarLote } from "./lib/captura.ts";
 import { encontrarChromium } from "./lib/cdp.ts";
@@ -78,6 +79,8 @@ export interface PedidoConexao {
 
 export interface ServidorAnotador {
   porta: number;
+  /** chave desta sessão, exigida de quem pede de outra máquina */
+  readonly chave: string;
   readonly fila: Fila;
   readonly avaliacoes: Avaliacoes;
   difusor: Difusor;
@@ -280,6 +283,8 @@ function tunelarWs(req: IncomingMessage, socket: Duplex, cabeca: Buffer, alvo: U
 // ---------- API da fila ----------
 interface ContextoApi {
   fila: Fila;
+  /** chave desta sessão; pedido de fora da máquina precisa apresentá-la */
+  chave: string;
   avaliacoes: Avaliacoes;
   difusor: Difusor;
   opcoes: OpcoesServidor;
@@ -294,17 +299,7 @@ interface ContextoApi {
 }
 
 // POSTs que mudam a conexão só de quem está na própria página (ou de uma CLI, que não manda Origin).
-function mesmaOrigem(req: IncomingMessage): boolean {
-  const site = String(req.headers["sec-fetch-site"] ?? "");
-  if (site) return site === "same-origin" || site === "none";
-  const origem = req.headers.origin;
-  if (!origem) return true;
-  try {
-    return new URL(String(origem)).host === String(req.headers.host ?? "");
-  } catch {
-    return false;
-  }
-}
+
 
 async function lerJson(req: IncomingMessage, limite = 64 * 1024): Promise<Record<string, unknown>> {
   const bruto = (await lerCorpo(req, limite)).toString("utf8");
@@ -718,8 +713,8 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     return true;
   }
   if (caminho === "/conectar" && metodo === "POST") {
-    if (!mesmaOrigem(req)) {
-      responderJson(res, 403, { ok: false, erro: "só a própria página de conexão pode trocar o alvo" });
+    if (!autorizado(req, ctx.chave)) {
+      responderJson(res, 403, { ok: false, erro: "só a própria página de conexão pode trocar o alvo: " + motivoDaRecusa(req, ctx.chave) });
       return true;
     }
     let corpo: Record<string, unknown>;
@@ -771,8 +766,8 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     return true;
   }
   if (caminho === "/desconectar" && metodo === "POST") {
-    if (!mesmaOrigem(req)) {
-      responderJson(res, 403, { ok: false, erro: "só a própria página de conexão pode desconectar" });
+    if (!autorizado(req, ctx.chave)) {
+      responderJson(res, 403, { ok: false, erro: "só a própria página de conexão pode desconectar: " + motivoDaRecusa(req, ctx.chave) });
       return true;
     }
     ctx.desconectar();
@@ -786,8 +781,8 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     return true;
   }
   if (caminho === "/agente/iniciar" && metodo === "POST") {
-    if (!mesmaOrigem(req)) {
-      responderJson(res, 403, { ok: false, erro: "só a própria página de conexão pode iniciar um agente" });
+    if (!autorizado(req, ctx.chave)) {
+      responderJson(res, 403, { ok: false, erro: "só a própria página de conexão pode iniciar um agente: " + motivoDaRecusa(req, ctx.chave) });
       return true;
     }
     let corpo: Record<string, unknown>;
@@ -824,8 +819,8 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     return true;
   }
   if (caminho === "/agente/ponte" && metodo === "POST") {
-    if (!mesmaOrigem(req)) {
-      responderJson(res, 403, { ok: false, erro: "só a própria página de conexão pode mudar a ponte" });
+    if (!autorizado(req, ctx.chave)) {
+      responderJson(res, 403, { ok: false, erro: "só a própria página de conexão pode mudar a ponte: " + motivoDaRecusa(req, ctx.chave) });
       return true;
     }
     let corpo: Record<string, unknown>;
@@ -1079,7 +1074,10 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
     registrar(opcoes, "desconectado do app; a página em " + BASE + "/ pede um novo alvo");
   };
 
-  const ctx: ContextoApi = { fila, avaliacoes, difusor, opcoes, porta: () => portaReal, alvo: () => alvoUrl, conectar, desconectar, ponte, registro, sondagem: { em: 0, alvo: null, valor: null } };
+  // A chave nasce com a fila e vive ao lado dela; trocar de projeto pela página não a
+  // renova, porque quem já estava autorizado continua sendo a mesma pessoa.
+  const chave = await chaveDaSessao(caminhoDaChave(fila.dir));
+  const ctx: ContextoApi = { fila, chave, avaliacoes, difusor, opcoes, porta: () => portaReal, alvo: () => alvoUrl, conectar, desconectar, ponte, registro, sondagem: { em: 0, alvo: null, valor: null } };
 
   if (opcoes.alvo) {
     const inicial = opcoes.alvo;
@@ -1142,6 +1140,7 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
 
   return {
     porta: portaReal,
+    chave,
     get fila() {
       return ctx.fila;
     },
@@ -1455,6 +1454,9 @@ async function principal(): Promise<void> {
     `  conexão:   http://localhost:${servidor.porta}${BASE}/`,
     `  abra:      http://localhost:${servidor.porta}/`,
     ...ipsDaRede().map((ip) => `             http://${ip}:${servidor.porta}/`),
+    // De outra máquina, conectar e iniciar agente exigem a chave. Quem abre a página
+    // por esta URL não precisa digitá-la de novo: ela fica guardada na aba.
+    ...(ipsDaRede().length ? [`  de fora:   http://${ipsDaRede()[0]}:${servidor.porta}${BASE}/?chave=${servidor.chave}`] : []),
     `  fila:      ${servidor.fila.dir}`,
     `  fonte:     ${opcoes.fonte} (localização dos elementos no código)`,
     `  agente:    ${opcoes.agente}${opcoes.ponte ? ` · ponte automática: ${opcoes.ponte.agente}` : ""}`,

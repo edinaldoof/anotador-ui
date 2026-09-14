@@ -273,7 +273,18 @@ anotador progresso <id> --nota … | nota <id> --texto … | perguntar <id> --te
 
 ## Segurança e limites
 
-- Ferramenta de desenvolvimento: escuta em `0.0.0.0` para você anotar de outro aparelho da rede, mas **só aceita como alvo** endereços da própria máquina ou da rede local, e as rotas que trocam a conexão ou iniciam agentes só respondem à própria página, nunca a outro site.
+- Ferramenta de desenvolvimento: escuta em `0.0.0.0` para você anotar de outro aparelho da rede, e **só aceita como alvo** endereços da própria máquina ou da rede local.
+- As rotas que trocam a conexão, mexem na ponte ou **iniciam um agente** exigem identificação. Da própria máquina passam direto, e o cabeçalho de origem barra pedido de outro site aberto ao lado. De outro aparelho é preciso a **chave da sessão**, que o anotador imprime ao subir:
+
+  ```
+  de fora:   http://192.168.0.10:3999/__anotador/?chave=<32 dígitos>
+  ```
+
+  Abrir a página por essa URL basta: a chave fica guardada na aba e sai da barra de endereço, para não viajar em link copiado nem em print de tela. Ela vive em `chave` na pasta da fila, com permissão só para o dono, e sobrevive a reinícios. Apagar o arquivo gera outra.
+
+  Isso existe porque cabeçalho não autentica ninguém: quem manda o pedido também escolhe o `Origin` e o `Sec-Fetch-Site`. A rota que inicia um agente aceita um prompt de até 4000 caracteres e o entrega a um agente com acesso de escrita ao repositório, então ela precisava de mais que um cabeçalho.
+
+  Uma ressalva: com um proxy reverso na sua frente (o caso de `--publico`), os pedidos chegam com o endereço do proxy, e se ele roda na mesma máquina tudo parece local. Nesse arranjo, quem controla o acesso é o proxy.
 - A ponte roda o agente com permissões limitadas (`claude -p --permission-mode acceptEdits`, `codex exec --full-auto`) e guarda os logs em `agentes/`.
 - Iframes de outra origem e texto de elementos com filhos não são editáveis; conteúdo de Server Component não traz componente React — a localização vai por classes e texto.
 
