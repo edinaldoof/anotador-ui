@@ -756,6 +756,7 @@ async function alternarAvaliacao(): Promise<void> {
     fecharAvaliacao();
     return;
   }
+  recolherPaineisConcorrentes("avaliacao");
   avaliacao.aberto = true;
   ui.btnAvaliar.classList.add("ativo");
   if (!ui.avaliacao) {

@@ -170,6 +170,7 @@ async function alternarExplorador(): Promise<void> {
     fecharExplorador();
     return;
   }
+  recolherPaineisConcorrentes("design");
   design.aberto = true;
   ui.btnDesign.classList.add("ativo");
   if (!ui.design) {
