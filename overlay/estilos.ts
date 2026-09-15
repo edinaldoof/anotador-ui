@@ -251,7 +251,15 @@ button { cursor: pointer; border: 0; background: transparent; }
 }
 .an-tunel .an-tunel-depois { color: var(--an-ok-claro); }
 .an-tunel .an-tunel-nota { font-size: 12px; }
-.an-tunel .an-tunel-abrir { width: 100%; }
+.an-tunel .an-tunel-abrir, .an-tunel .an-tunel-https { width: 100%; }
+.an-tunel .an-tunel-certificado { display: block; text-align: center; text-decoration: none; }
+.an-tunel .an-tunel-ssh { border-top: 1px solid var(--an-superficie-alta); padding-top: 12px; }
+.an-tunel .an-tunel-ssh > summary { cursor: pointer; color: var(--an-texto-2); font-size: 12.5px; list-style: none; }
+.an-tunel .an-tunel-ssh > summary::-webkit-details-marker { display: none; }
+.an-tunel .an-tunel-ssh > summary::before { content: "▸ "; }
+.an-tunel .an-tunel-ssh[open] > summary::before { content: "▾ "; }
+.an-tunel .an-tunel-ssh > summary:hover { color: var(--an-sobre-cor); }
+.an-tunel .an-tunel-ssh > *:not(summary) { margin-top: 12px; }
 
 .an-conversa {
   position: fixed; left: 14px; bottom: 14px; width: 420px; max-height: min(74vh, 680px); pointer-events: auto;

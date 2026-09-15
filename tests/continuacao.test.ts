@@ -67,7 +67,7 @@ test("API faz a troca apenas em TLS, entrega sessão segura e nunca encaminha to
   const proxy = await criarProxy(alvo, { https: true, host: "0.0.0.0" });
   const seguro = proxy.origem.replace("http:", "https:");
   try {
-    const ca = await readFile(join(proxy.saida, "tls", "certificado.pem"));
+    const ca = await readFile(join(proxy.saida, "tls", "autoridade.pem"));
     const tls = (caminho: string, corpo?: unknown, headers: Record<string, string> = {}) => new Promise<{ status: number; corpo: string; headers: Record<string, string | string[] | undefined> }>((resolve, reject) => {
       const req = request(seguro + caminho, { ca, method: corpo === undefined ? "GET" : "POST", headers: { "content-type": "application/json", ...headers } }, (res) => {
         const partes: Buffer[] = [];
