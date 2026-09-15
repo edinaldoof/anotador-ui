@@ -5,8 +5,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { Navegador } from "./cdp.ts";
 import type { Fila } from "./fila.ts";
+import { LARGURAS_PADRAO, SCRIPT_MEDIDA, type MedidaTela } from "./tela.ts";
 
 export interface OpcoesCaptura {
+  /** Larguras extras a medir na avaliação. Vazio desliga a medida. */
+  larguras?: readonly number[];
   /** endereços do instantâneo, do preferido (mesma origem da página) ao interno */
   urlsInstantaneo: string[];
   chrome?: string | null;
@@ -75,13 +78,17 @@ async function capturar(fila: Fila, lote: Lote, opcoes: OpcoesCaptura): Promise<
   }
 }
 
-/** Print da página inteira para a avaliação; falha vira só um aviso, nunca derruba o pedido. */
+/**
+ * Print da página inteira para a avaliação e, no mesmo navegador já navegado, a medida
+ * do que ela faz em outras larguras. Falha vira só um aviso, nunca derruba o pedido.
+ */
 export async function capturarAvaliacao(
   destino: string,
   viewport: { largura: number; altura: number; dpr: number },
   opcoes: OpcoesCaptura
-): Promise<{ caminho: string | null; erro?: string }> {
-  const tentar = async (): Promise<{ caminho: string | null; erro?: string }> => {
+): Promise<{ caminho: string | null; erro?: string; medidas: MedidaTela[] }> {
+  const medidas: MedidaTela[] = [];
+  const tentar = async (): Promise<{ caminho: string | null; erro?: string; medidas: MedidaTela[] }> => {
     const navegador = await Navegador.abrir({ caminho: opcoes.chrome ?? null });
     try {
       const pagina = await navegador.novaPagina();
@@ -102,17 +109,26 @@ export async function capturarAvaliacao(
       await mkdir(join(destino, ".."), { recursive: true }).catch(() => undefined);
       await mkdir(destino.replace(/\/[^/]+$/, ""), { recursive: true });
       await writeFile(destino, await pagina.capturar({ paginaInteira: true }));
-      return { caminho: destino };
+      // Depois do print, e no mesmo navegador: reaproveita a navegação que já custou.
+      // Uma largura que falhe não leva as outras junto nem invalida a captura.
+      for (const largura of opcoes.larguras ?? LARGURAS_PADRAO) {
+        try {
+          await pagina.definirViewport(largura, viewport.altura || 800, 1);
+          await pagina.esperar(250);
+          medidas.push(await pagina.avaliar<MedidaTela>(SCRIPT_MEDIDA));
+        } catch { /* uma largura sem medida é menos grave que uma avaliação sem dossiê */ }
+      }
+      return { caminho: destino, medidas };
     } finally {
       await navegador.fechar();
     }
   };
-  const limite = new Promise<{ caminho: string | null; erro?: string }>((_, rejeitar) =>
-    setTimeout(() => rejeitar(new Error("tempo esgotado na captura")), opcoes.timeoutMs ?? 30_000).unref()
+  const limite = new Promise<{ caminho: string | null; erro?: string; medidas: MedidaTela[] }>((_, rejeitar) =>
+    setTimeout(() => rejeitar(new Error("tempo esgotado na captura")), opcoes.timeoutMs ?? 45_000).unref()
   );
   try {
     return await Promise.race([tentar(), limite]);
   } catch (erro) {
-    return { caminho: null, erro: erro instanceof Error ? erro.message : String(erro) };
+    return { caminho: null, erro: erro instanceof Error ? erro.message : String(erro), medidas };
   }
 }

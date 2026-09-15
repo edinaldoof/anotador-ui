@@ -484,11 +484,17 @@ export function comandoDaPonte(agente: IdAgente, sessao: string | null, mensagem
         ...(escolha.saidaEstruturada ? ["--output-format", "stream-json", "--verbose"] : []),
         "--permission-mode",
         "acceptEdits",
+        // `--allowedTools <tools...>` é variádico: sem o `--` abaixo ele engole a
+        // mensagem como se fosse mais um nome de ferramenta, e o CLI recusa com
+        // "Input must be provided". Só não acontecia quando havia --model ou --effort
+        // no meio para interromper a lista — por isso a avaliação passava e o lote sem
+        // modelo escolhido falhava.
         "--allowedTools",
         "Bash(anotador *) Bash(node *anotador*) Read Edit Write Grep Glob",
         ...(modelo ? ["--model", modelo] : []),
         ...(esforco ? ["--effort", esforco] : []),
         ...(sessao ? ["--resume", sessao] : escolha.sessaoNova ? ["--session-id", escolha.sessaoNova] : []),
+        "--",
         mensagem,
       ];
     case "codex": {

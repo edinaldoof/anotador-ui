@@ -21,6 +21,7 @@ import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, chaveConfer
 import { descobrirComandos, idPeloNome } from "./lib/comandos.ts";
 import { ChatAgentes, ErroChat } from "./lib/chat.ts";
 import { saidaPublicaAvaliacao } from "./lib/avaliacao-conversa.ts";
+import { achadosDaTela, resumoDaTela, type MedidaTela } from "./lib/tela.ts";
 import { serializar } from "./lib/persistencia.ts";
 import { lerLimitesConta } from "./lib/limites.ts";
 import { sessoesExternasChat, ID_SESSAO_NATIVA } from "./lib/chat-sessoes.ts";
@@ -485,8 +486,8 @@ function rotuloDoModelo(ponte: PonteConfig | null | undefined): string | null {
   return ponte.esforco ? `${titulo} · ${ponte.esforco}` : titulo;
 }
 
-async function extrasDoDossie(fonte: string | null, caminho: string, porta: number, captura: string | null): Promise<Parameters<typeof gerarDossie>[1]> {
-  const base = { porta, captura, sistema: await resumoDoSistema(fonte) };
+async function extrasDoDossie(fonte: string | null, caminho: string, porta: number, captura: string | null, medidas: MedidaTela[] = []): Promise<Parameters<typeof gerarDossie>[1]> {
+  const base = { porta, captura, sistema: await resumoDoSistema(fonte), tela: resumoDaTela(medidas, achadosDaTela(medidas)) || null };
   if (!fonte) return base;
   try {
     const arquivos = await lerProjeto(fonte);
@@ -661,7 +662,7 @@ async function processarAvaliacao(ctx: ContextoApi, pedido: Parameters<typeof ge
     const r = await capturarAvaliacao(destino, pedido.pagina.viewport, { urlsInstantaneo: urls, chrome: opcoes.chrome });
     captura = r.caminho;
     if (r.erro) registrar(opcoes, `captura da avaliação ${pedido.id}: ${r.erro}`);
-    if (captura) await avaliacoes.gravar(pedido, gerarDossie(pedido, { ...await extrasDoDossie(opcoes.fonte, pedido.pagina.caminho, ctx.porta(), captura), respostaDireta: !!opcoes.ponte }));
+    if (captura) await avaliacoes.gravar(pedido, gerarDossie(pedido, { ...await extrasDoDossie(opcoes.fonte, pedido.pagina.caminho, ctx.porta(), captura, r.medidas), respostaDireta: !!opcoes.ponte }));
   }
   // Cada avaliação com ponte tem uma execução própria, identificada no chat.
   const entregues = opcoes.ponte ? 0 : difusor.transmitir({
