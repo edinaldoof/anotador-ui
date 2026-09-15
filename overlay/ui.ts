@@ -15,6 +15,8 @@ interface AnotacaoLocal extends Anotacao {
   textoOriginal: string | null;
   confirmada: boolean;
   enviadaEm?: string | null;
+  /** lote que levou esta anotação, para o marcador sair da tela junto com ele */
+  loteId?: string;
   snapshotEdicao?: SnapshotEdicao;
 }
 
@@ -699,6 +701,24 @@ idiomasInterface?.registrar({
     "Trocar agente e iniciar nova conversa": "Change agent and start a new conversation",
     "Nova conversa de avaliação": "New evaluation conversation",
     "Nova avaliação": "New evaluation",
+    "Para o microfone, o navegador precisa de localhost": "For the microphone, the browser needs localhost",
+    "Pelo endereço da rede o navegador bloqueia o microfone. Rode este comando no seu computador — ele encaminha a porta por SSH e não pede certificado nenhum:": "Over the network address the browser blocks the microphone. Run this command on your computer — it forwards the port over SSH and asks for no certificate at all:",
+    "Com ele rodando, abra {endereco} — o microfone funciona direto.": "With it running, open {endereco} — the microphone just works.",
+    "Vale enquanto o comando estiver aberto. Guardado uma vez no ~/.ssh/config da sua máquina, ele vira só `ssh -N anotador`.": "It lasts while the command is open. Saved once in your machine’s ~/.ssh/config, it becomes just `ssh -N anotador`.",
+    "Não tenho SSH · continuar pelo endereço seguro": "No SSH here · continue over the secure address",
+    "Por esse caminho o navegador pede para aceitar o certificado do Anotador na primeira vez.": "On that path the browser asks you to accept the Anotador certificate the first time.",
+    "Comando para encaminhar a porta": "Port forwarding command",
+    "Copiar comando": "Copy command",
+    "Comando copiado. Rode-o no seu computador.": "Command copied. Run it on your computer.",
+    "Selecionei o comando: copie com Ctrl+C.": "Command selected: copy it with Ctrl+C.",
+    "Liberar o microfone": "Enable the microphone",
+    "Tirar este lote e seus marcadores da tela": "Clear this batch and its markers from the screen",
+    "Remover lote aplicado da tela": "Remove applied batch from the screen",
+    "Lote removido da tela, com {n} marcador(es). O histórico no disco continua.": "Batch cleared from the screen, along with {n} marker(s). The history on disk stays.",
+    "Lote removido da tela. O histórico no disco continua.": "Batch cleared from the screen. The history on disk stays.",
+    "Marcador removido da tela.": "Marker cleared from the screen.",
+    "Alt+clique remove este marcador da tela.": "Alt+click clears this marker from the screen.",
+    "já enviada; Alt+clique remove da tela": "already sent; Alt+click clears it from the screen",
     "Iniciar com {agente}": "Start with {agente}",
     "Foco da nova avaliação (opcional)": "Focus for the new evaluation (optional)",
     "Nenhum agente instalado está disponível para avaliar a página.": "No installed agent is available to evaluate the page.",
@@ -748,6 +768,24 @@ idiomasInterface?.registrar({
     "Trocar agente e iniciar nova conversa": "Cambiar agente e iniciar una nueva conversación",
     "Nova conversa de avaliação": "Nueva conversación de evaluación",
     "Nova avaliação": "Nueva evaluación",
+    "Para o microfone, o navegador precisa de localhost": "Para el micrófono, el navegador necesita localhost",
+    "Pelo endereço da rede o navegador bloqueia o microfone. Rode este comando no seu computador — ele encaminha a porta por SSH e não pede certificado nenhum:": "Por la dirección de red el navegador bloquea el micrófono. Ejecute este comando en su computadora — reenvía el puerto por SSH y no pide ningún certificado:",
+    "Com ele rodando, abra {endereco} — o microfone funciona direto.": "Con él en ejecución, abra {endereco} — el micrófono funciona directo.",
+    "Vale enquanto o comando estiver aberto. Guardado uma vez no ~/.ssh/config da sua máquina, ele vira só `ssh -N anotador`.": "Vale mientras el comando esté abierto. Guardado una vez en el ~/.ssh/config de su máquina, se convierte en solo `ssh -N anotador`.",
+    "Não tenho SSH · continuar pelo endereço seguro": "No tengo SSH · continuar por la dirección segura",
+    "Por esse caminho o navegador pede para aceitar o certificado do Anotador na primeira vez.": "Por ese camino el navegador pide aceptar el certificado del Anotador la primera vez.",
+    "Comando para encaminhar a porta": "Comando para reenviar el puerto",
+    "Copiar comando": "Copiar comando",
+    "Comando copiado. Rode-o no seu computador.": "Comando copiado. Ejecútelo en su computadora.",
+    "Selecionei o comando: copie com Ctrl+C.": "Comando seleccionado: cópielo con Ctrl+C.",
+    "Liberar o microfone": "Habilitar el micrófono",
+    "Tirar este lote e seus marcadores da tela": "Quitar este lote y sus marcadores de la pantalla",
+    "Remover lote aplicado da tela": "Quitar lote aplicado de la pantalla",
+    "Lote removido da tela, com {n} marcador(es). O histórico no disco continua.": "Lote quitado de la pantalla, con {n} marcador(es). El historial en disco continúa.",
+    "Lote removido da tela. O histórico no disco continua.": "Lote quitado de la pantalla. El historial en disco continúa.",
+    "Marcador removido da tela.": "Marcador quitado de la pantalla.",
+    "Alt+clique remove este marcador da tela.": "Alt+clic quita este marcador de la pantalla.",
+    "já enviada; Alt+clique remove da tela": "ya enviada; Alt+clic la quita de la pantalla",
     "Iniciar com {agente}": "Iniciar con {agente}",
     "Foco da nova avaliação (opcional)": "Enfoque de la nueva evaluación (opcional)",
     "Nenhum agente instalado está disponível para avaliar a página.": "No hay ningún agente instalado disponible para evaluar la página.",
@@ -2299,6 +2337,60 @@ function limparFila(): void {
   avisar("Fila limpa.");
 }
 
+/**
+ * Quando o lote foi enviado. A hora basta para o que saiu hoje; a partir de ontem o
+ * dia é o que localiza a pessoa, porque a lista guarda lote de semanas atrás.
+ */
+function quandoEnviado(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const hora = d.toLocaleTimeString(idiomaInterface(), { hour: "2-digit", minute: "2-digit" });
+  const hoje = new Date();
+  const mesmoDia = d.getFullYear() === hoje.getFullYear() && d.getMonth() === hoje.getMonth() && d.getDate() === hoje.getDate();
+  if (mesmoDia) return hora;
+  const dia = d.toLocaleDateString(idiomaInterface(), d.getFullYear() === hoje.getFullYear()
+    ? { day: "2-digit", month: "short" }
+    : { day: "2-digit", month: "2-digit", year: "numeric" });
+  return dia + " · " + hora;
+}
+
+/**
+ * Tira da tela um lote já aplicado e os marcadores que ele deixou.
+ *
+ * O marcador existe para mostrar o que foi anotado enquanto o pedido está de pé.
+ * Depois de aplicado ele vira poluição: fica sobre o elemento indefinidamente, sem
+ * nada para fazer ao ser clicado, e a lista só cresce. Isto apaga a memória desta
+ * página, e nada além dela — o lote continua no disco, com o Markdown que o agente
+ * leu e a conversa que vocês tiveram, alcançáveis por `anotador ver <id>`.
+ */
+function removerLote(l: LoteLocal): void {
+  const marcadores = estado.enviadas.filter((a) => a.loteId === l.id);
+  estado.lotes = estado.lotes.filter((x) => x.id !== l.id);
+  estado.enviadas = estado.enviadas.filter((a) => a.loteId !== l.id);
+  for (const a of marcadores) estado.elementos.delete(a.id);
+  if (estado.conversa?.lote.id === l.id) fecharConversa();
+  renderizarPins();
+  atualizarBarra();
+  salvar();
+  alternarFila(true);
+  avisar(marcadores.length
+    ? traduzirInterface("Lote removido da tela, com {n} marcador(es). O histórico no disco continua.", { n: marcadores.length })
+    : traduzirInterface("Lote removido da tela. O histórico no disco continua."));
+}
+
+/**
+ * Marcador solto: a anotação foi enviada num lote que não está mais na lista (lote
+ * removido, ou memória de uma versão anterior da página). Sem isto ele não teria como
+ * sair da tela, porque toda remoção passa pelo lote.
+ */
+function removerMarcadorEnviado(a: AnotacaoLocal): void {
+  estado.enviadas = estado.enviadas.filter((x) => x.id !== a.id);
+  estado.elementos.delete(a.id);
+  renderizarPins();
+  salvar();
+  avisar(traduzirInterface("Marcador removido da tela."));
+}
+
 // ---------- pins e balão ----------
 function renderizarPins(): void {
   ui.camadaPins.textContent = "";
@@ -2322,12 +2414,19 @@ function renderizarPins(): void {
       "button",
       {
         class: "an-pin" + (enviada ? " enviado" : "") + (!el && !a.area ? " perdido" : ""),
-        title: (a.comentario || "(sem comentário)") + (el || a.area ? "" : " — elemento não localizado nesta versão da página"),
+        title: (a.comentario || "(sem comentário)") + (el || a.area ? "" : " — elemento não localizado nesta versão da página") + (enviada ? " — " + traduzirInterface("já enviada; Alt+clique remove da tela") : ""),
         style: "left:" + r.left + "px;top:" + r.top + "px;" + (rascunho ? "opacity:.75" : ""),
         onclick: (e: Event) => {
           e.stopPropagation();
           if (enviada) {
-            avisar("Anotação " + a.ordem + " já enviada" + (a.comentario ? ": " + a.comentario : "."));
+            // Alt+clique remove aqui mesmo, sem diálogo nativo. O aviso ensina o
+            // atalho, porque um marcador aplicado não tem outra ação possível e
+            // ficaria na tela para sempre.
+            if ((e as MouseEvent).altKey) {
+              removerMarcadorEnviado(a);
+              return;
+            }
+            avisar("Anotação " + a.ordem + " já enviada" + (a.comentario ? ": " + a.comentario : ".") + " " + traduzirInterface("Alt+clique remove este marcador da tela."));
             return;
           }
           if (estado.atual === a) return;
@@ -2518,8 +2617,7 @@ function iniciarDitado(campo: HTMLInputElement | HTMLTextAreaElement, botao: HTM
   }
   const idioma = idiomaDitado;
   if (!window.isSecureContext) {
-    if (CFG.https) void continuarDitadoSeguro(campo, botao);
-    else avisar("O microfone precisa de uma conexão segura. O responsável pelo Anotador precisa habilitar o acesso HTTPS.", 7000);
+    pedirContextoSeguro(campo, botao);
     return;
   }
   // A presença de SpeechRecognition não garante que o serviço do navegador
@@ -2767,8 +2865,7 @@ function iniciarReconhecimentoNavegador(campo: HTMLInputElement | HTMLTextAreaEl
     aoAtualizar?.(campo.value);
   };
   if (!window.isSecureContext) {
-    if (CFG.https) void continuarDitadoSeguro(campo, botao);
-    else avisar("O microfone precisa de uma conexão segura. O responsável pelo Anotador precisa habilitar o acesso HTTPS.", 7000);
+    pedirContextoSeguro(campo, botao);
     return;
   }
   const Reconhecimento = window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -2828,6 +2925,69 @@ function iniciarReconhecimentoNavegador(campo: HTMLInputElement | HTMLTextAreaEl
     sessao.parar();
     avisar(mensagemErroVoz(erro instanceof DOMException && erro.name === "NotAllowedError" ? "not-allowed" : ""), 6000);
   }
+}
+
+/**
+ * O que fazer quando o microfone é pedido fora de um contexto seguro.
+ *
+ * Pelo endereço da rede o navegador nem oferece o microfone, e as duas saídas têm
+ * custos diferentes. O encaminhamento de porta por SSH entrega `localhost`, que todo
+ * navegador confia, sem certificado e sem aviso nenhum — é o caminho oferecido
+ * primeiro. O endereço HTTPS continua ali para quem não tem SSH à mão (o celular, por
+ * exemplo), com a ressalva de que o navegador vai pedir para aceitar o certificado.
+ *
+ * Sem nenhuma das duas, resta dizer o que falta e para quem pedir.
+ */
+function pedirContextoSeguro(campo: HTMLInputElement | HTMLTextAreaElement, botao: HTMLButtonElement): void {
+  if (!CFG.tunel) {
+    if (CFG.https) void continuarDitadoSeguro(campo, botao);
+    else avisar("O microfone precisa de uma conexão segura. O responsável pelo Anotador precisa habilitar o acesso HTTPS.", 7000);
+    return;
+  }
+  abrirCaminhoSeguro(CFG.tunel, () => void continuarDitadoSeguro(campo, botao));
+}
+
+let painelTunel: HTMLElement | null = null;
+
+function abrirCaminhoSeguro(comando: string, continuarPorHttps: () => void): void {
+  painelTunel?.remove();
+  const fechar = (): void => {
+    painelTunel?.remove();
+    painelTunel = null;
+  };
+  const endereco = "http://localhost:" + (location.port || "80") + location.pathname;
+  const campoComando = h("input", { type: "text", readonly: "", value: comando, class: "an-tunel-comando", "aria-label": textoInterface("Comando para encaminhar a porta") }) as HTMLInputElement;
+  const copiar = h("button", {
+    type: "button",
+    class: "an-btn primario",
+    onclick: () => {
+      campoComando.select();
+      // `navigator.clipboard` não existe fora de contexto seguro — que é exatamente
+      // onde este painel aparece. O caminho antigo ainda funciona, e se nem ele
+      // funcionar o texto fica selecionado para o Ctrl+C.
+      let copiou = false;
+      try { copiou = document.execCommand("copy"); } catch { copiou = false; }
+      avisar(traduzirInterface(copiou ? "Comando copiado. Rode-o no seu computador." : "Selecionei o comando: copie com Ctrl+C."), 5000);
+    },
+  }, textoInterface("Copiar comando"));
+  painelTunel = h("div", { class: "an-tunel", role: "dialog", "aria-modal": "false", "aria-label": textoInterface("Liberar o microfone") },
+    h("div", { class: "an-tunel-cab" },
+      h("strong", null, textoInterface("Para o microfone, o navegador precisa de localhost")),
+      h("button", { type: "button", class: "an-ico", "aria-label": textoInterface("Fechar"), onclick: fechar }, "✕")),
+    h("p", null, textoInterface("Pelo endereço da rede o navegador bloqueia o microfone. Rode este comando no seu computador — ele encaminha a porta por SSH e não pede certificado nenhum:")),
+    h("div", { class: "an-tunel-linha" }, campoComando, copiar),
+    h("p", { class: "an-tunel-depois" }, textoInterface("Com ele rodando, abra {endereco} — o microfone funciona direto.", { endereco })),
+    h("p", { class: "an-tunel-nota" }, textoInterface("Vale enquanto o comando estiver aberto. Guardado uma vez no ~/.ssh/config da sua máquina, ele vira só `ssh -N anotador`.")),
+    CFG.https
+      ? h("button", {
+          type: "button",
+          class: "an-btn an-tunel-https",
+          onclick: () => { fechar(); continuarPorHttps(); },
+        }, textoInterface("Não tenho SSH · continuar pelo endereço seguro"))
+      : null,
+    CFG.https ? h("p", { class: "an-tunel-nota" }, textoInterface("Por esse caminho o navegador pede para aceitar o certificado do Anotador na primeira vez.")) : null);
+  raiz?.append(painelTunel);
+  campoComando.select();
 }
 
 async function continuarDitadoSeguro(campo: HTMLInputElement | HTMLTextAreaElement, botao: HTMLButtonElement): Promise<void> {
@@ -3246,8 +3406,11 @@ function alternarFila(forcar?: boolean): void {
     ui.fila.append(h("div", { class: "cab-lotes" }, "Lotes enviados"));
     for (const l of estado.lotes.slice(-5).reverse()) {
       const rotulo = l.estado === "processado" ? `Aplicado por ${AGENTE}` : l.estado === "em_andamento" ? `${AGENTE} trabalhando` : `Aguardando ${AGENTE}`;
-      const hora = new Date(l.enviadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      const hora = quandoEnviado(l.enviadoEm);
       const perguntas = l.perguntasAbertas ?? 0;
+      // Só o que já foi aplicado sai da lista: remover um lote em andamento
+      // esconderia o trabalho do agente enquanto ele ainda responde por ele.
+      const concluido = l.estado === "processado" && perguntas === 0;
       ui.fila.append(
         h(
           "div",
@@ -3266,7 +3429,19 @@ function alternarFila(forcar?: boolean): void {
             h("div", { class: "com" }, rotulo + " · " + hora),
             perguntas ? h("div", { class: "perg" }, perguntas > 1 ? `${perguntas} perguntas de ${AGENTE} aguardam resposta` : `${AGENTE} fez uma pergunta — clique para responder`) : null,
             l.nota ? h("div", { class: "nota" }, l.nota) : null
-          )
+          ),
+          concluido
+            ? h("button", {
+                type: "button",
+                class: "an-lote-remover",
+                title: textoInterface("Tirar este lote e seus marcadores da tela"),
+                "aria-label": textoInterface("Remover lote aplicado da tela"),
+                onclick: (e: Event) => {
+                  e.stopPropagation();
+                  removerLote(l);
+                },
+              }, "✕")
+            : null
         )
       );
     }
@@ -3457,13 +3632,15 @@ async function enviar(): Promise<void> {
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const corpo = (await resp.json()) as { id?: string };
     const agora = new Date().toISOString();
+    const idDoLote = corpo.id ?? lote.id;
     for (const a of anotacoes) {
       a.enviadaEm = agora;
+      a.loteId = idDoLote;
       estado.enviadas.push(a);
     }
     estado.anotacoes = estado.anotacoes.filter((a) => !idsEnviados.has(a.id));
     estado.lotes.push({
-      id: corpo.id ?? lote.id,
+      id: idDoLote,
       enviadoEm: agora,
       estado: "recebido",
       resumo: anotacoes.map((a) => a.comentario || a.elemento.meta.tag).join(" · ").slice(0, 120),

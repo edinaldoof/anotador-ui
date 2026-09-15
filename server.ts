@@ -9,7 +9,7 @@ import { request as pedidoHttps } from "node:https";
 import * as modulo from "node:module";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { homedir, networkInterfaces } from "node:os";
+import { homedir, networkInterfaces, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Writable, type Duplex } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -437,6 +437,29 @@ function ipsDaRede(): string[] {
   return saida;
 }
 
+/**
+ * Como alcançar o anotador por `localhost` de outra máquina, encaminhando a porta
+ * por SSH.
+ *
+ * O microfone e a câmera só existem em contexto seguro, e um IP da rede não conta —
+ * `http://192.168.0.10:3999` chega ao navegador sem essas APIs. A saída óbvia é
+ * HTTPS, mas o certificado é o próprio anotador quem assina, então a primeira visita
+ * esbarra na tela de "conexão não é particular". Pedir a alguém que atravesse um
+ * aviso de segurança para usar uma ferramenta de desenvolvimento é um mau começo, e
+ * ensina o hábito errado.
+ *
+ * Encaminhar a porta dispensa a conversa toda: a página passa a ser servida em
+ * `http://localhost:<porta>`, que todo navegador trata como confiável, e o tráfego
+ * ainda vai cifrado pelo SSH. Serve para quem alcança a máquina por SSH — o caso de
+ * quem roda o anotador numa VM e anota do computador de trabalho. Para o celular,
+ * que não tem SSH, o caminho continua sendo o endereço HTTPS.
+ */
+function comandoDeTunel(porta: number): string | null {
+  const ip = ipsDaRede()[0];
+  if (!ip) return null;
+  return `ssh -N -L ${porta}:localhost:${porta} ${userInfo().username}@${ip}`;
+}
+
 async function sondagemDoAlvo(ctx: ContextoApi): Promise<Sondagem | null> {
   const alvo = ctx.opcoes.alvo;
   if (!alvo) return null;
@@ -525,6 +548,7 @@ async function saude(ctx: ContextoApi): Promise<Record<string, unknown>> {
     quemOuve: difusor.ouvintes(),
     capturas: opcoes.capturas,
     https: opcoes.https === true,
+    tunel: comandoDeTunel(ctx.porta()),
     norma: motor ? { versao: motor.versao, origem: motor.origem, ligadas: Object.keys(REGRAS_A_LIGAR).length } : null,
     ponte: opcoes.ponte ?? null,
     app,
@@ -904,7 +928,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     try {
       const corpo = await lerJson(req, 4096);
       const estado = ctx.continuacoes.consumir(corpo["token"], hostContinuacao(req.headers.host));
-      definirSessaoNavegador(req, res, ctx.chave);
+      definirSessaoNavegador(res, ctx.chave);
       responderJson(res, 200, { ok: true, ...estado });
     } catch (erro) {
       responderJson(res, erro instanceof ErroContinuacao ? erro.status : 400, { ok: false, erro: erro instanceof Error ? erro.message : "Não foi possível retomar o ditado." });
@@ -918,7 +942,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       return true;
     }
     // GET confirma o cookie recebido sem emitir credenciais nem renovar a sessão.
-    if (metodo === "POST") definirSessaoNavegador(req, res, ctx.chave);
+    if (metodo === "POST") definirSessaoNavegador(res, ctx.chave);
     responderJson(res, 200, { ok: true });
     return true;
   }
@@ -940,15 +964,16 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       responderTexto(res, 403, '<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conectar navegador</title><body style="font:16px system-ui;max-width:540px;margin:10vh auto;padding:24px"><h1>Este link de acesso expirou</h1><p>Peça um novo link a quem compartilhou o Anotador.</p><a href="' + BASE + '/">Voltar à conexão</a></body></html>', "text/html; charset=utf-8");
       return true;
     }
-    definirSessaoNavegador(req, res, ctx.chave);
+    definirSessaoNavegador(res, ctx.chave);
     res.writeHead(303, { location: destinoDeAcesso(url.searchParams.get("voltar")), "cache-control": "no-store" });
     res.end();
     return true;
   }
   if (caminho === "/" && metodo === "GET") {
-    // O cookie Secure emitido por HTTPS não é enviado na versão HTTP do menu.
-    // Navegar para a mesma origem segura reutiliza a sessão; a API/CLI continua
-    // disponível em HTTP na própria máquina.
+    // O menu fica no endereço seguro quando ele existe: é de lá que o microfone é
+    // liberado. A sessão emitida aqui vale nos dois protocolos (ver
+    // `definirSessaoNavegador`), então subir para HTTPS não deixa o overlay, que roda
+    // sobre o app alvo em HTTP, sem acesso.
     if (opcoes.https && !(req.socket as { encrypted?: boolean }).encrypted) {
       const destino = new URL(BASE + "/" + url.search, origemPublicaDe(req, opcoes));
       destino.protocol = "https:";
@@ -962,7 +987,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
         responderTexto(res, 403, "Link de acesso inválido. Peça um novo link a quem compartilhou o Anotador.");
         return true;
       }
-      definirSessaoNavegador(req, res, ctx.chave);
+      definirSessaoNavegador(res, ctx.chave);
       url.searchParams.delete("chave");
       res.writeHead(303, { location: BASE + "/" + url.search, "cache-control": "no-store" });
       res.end();
@@ -1471,6 +1496,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       base: BASE,
       capturas: opcoes.capturas,
       https: opcoes.https === true,
+      tunel: comandoDeTunel(ctx.porta()),
       nome: opcoes.nome,
       agente: opcoes.agente,
       marca: marcaPeloNome(opcoes.ponte?.agente ?? opcoes.agente),

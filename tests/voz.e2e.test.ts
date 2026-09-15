@@ -90,6 +90,11 @@ describe("ditado na mesma aba, com retomada segura de HTTP para HTTPS", {
   };
   const migrar = async (botao = micComentario) => {
     await clicar(botao);
+    // Pelo endereço da rede o clique oferece primeiro o encaminhamento de porta, que
+    // libera o microfone sem certificado. Estes testes cobrem a outra saída, a
+    // travessia para HTTPS na mesma aba.
+    await pagina.esperarPor(`!!${noOverlay(".an-tunel .an-tunel-https")}`);
+    await clicar(noOverlay(".an-tunel .an-tunel-https"));
     await esperarAte(async () => {
       try { return await pagina.avaliar<boolean>(`location.origin === ${JSON.stringify(segura)} && location.pathname === "/" && !!window.__anotadorCarregado && !!window.recVozTeste`); }
       catch { return false; }

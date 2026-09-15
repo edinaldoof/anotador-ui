@@ -316,6 +316,12 @@ interface ResumoArvore {
 interface ConfigOverlay {
   /** O mesmo endereço também oferece HTTPS para a janela de ditado. */
   https?: boolean;
+  /**
+   * Comando de encaminhamento de porta por SSH, para alcançar o anotador por
+   * `localhost` — a única origem que o navegador confia sem certificado, e por isso
+   * o caminho mais curto até o microfone de outra máquina.
+   */
+  tunel?: string | null;
   base: string;
   capturas: boolean;
   nome: string;
