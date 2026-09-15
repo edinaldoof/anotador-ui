@@ -173,7 +173,7 @@ describe("idioma dos controles sem alterar conteúdo do usuário", { skip: chrom
     assert.equal(await pagina.avaliar(`${no(".an-avaliacao-consultar")}.textContent`), "Volver a consultar");
     assert.equal(await pagina.avaliar(`${no(".an-avaliacao .erro p")}.textContent`), "Erro original: autorização expirada.");
     assert.equal(await pagina.avaliar(`${no(".an-avaliacao .rodape input")}.value`), "Verificar hierarquia");
-    assert.equal(await pagina.avaliar(`${no(".an-avaliacao .rodape button")}.textContent`), "Solicitar de nuevo");
+    assert.equal(await pagina.avaliar(`${no(".an-avaliacao .rodape button")}.textContent`), "Nueva evaluación");
     await pagina.avaliar("window.avIdiomaResposta.estado={fase:'sem_parecer',agente:'Claude Code'}");
     await clicar(no(".an-avaliacao-consultar"));
     await pagina.esperarPor(`${no(".an-avaliacao")}.textContent.includes('sin devolver una revisión')`);
