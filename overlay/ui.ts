@@ -15,6 +15,8 @@ interface AnotacaoLocal extends Anotacao {
   textoOriginal: string | null;
   confirmada: boolean;
   enviadaEm?: string | null;
+  /** lote que levou esta anotação, para o marcador sair da tela junto com ele */
+  loteId?: string;
   snapshotEdicao?: SnapshotEdicao;
 }
 
@@ -346,6 +348,27 @@ idiomasInterface?.registrar({
     "Ainda não há conversas deste agente no projeto.": "This agent has no conversations in the project yet.",
     "Lista parcial das sessões localizadas neste projeto.": "Partial list of sessions found in this project.",
     "Mensagens da conversa": "Conversation messages",
+    "Aguarde a conversa carregar.": "Wait for the conversation to load.",
+    "Aguarde a troca de modelo terminar.": "Wait for the model change to finish.",
+    "Aguarde o envio atual terminar.": "Wait for the current message to finish sending.",
+    "Esta conversa está aberta só para leitura.": "This conversation is read-only.",
+    "Aguarde a resposta atual antes de enviar outra mensagem.": "Wait for the current reply before sending another message.",
+    "Encerre o ditado antes de enviar.": "Stop dictation before sending.",
+    "Conecte este agente no menu do Anotador para conversar.": "Connect this agent in the Anotador menu to chat.",
+    "{agente} está avaliando a página": "{agente} is evaluating the page",
+    "{agente} está respondendo": "{agente} is replying",
+    "lendo {alvo}": "reading {alvo}",
+    "procurando {alvo}": "searching {alvo}",
+    "rodando {alvo}": "running {alvo}",
+    "acompanhando um comando": "watching a command",
+    "abrindo {alvo}": "opening {alvo}",
+    "pesquisando {alvo}": "searching the web for {alvo}",
+    "escrevendo {alvo}": "writing {alvo}",
+    "editando {alvo}": "editing {alvo}",
+    "delegando uma busca": "delegating a search",
+    "organizando o roteiro": "organising its plan",
+    "usando {ferramenta}": "using {ferramenta}",
+    " · {passos} passos": " · {passos} steps",
     "Abra uma sessão para enviar mensagens": "Open a session to send messages",
     "Converse sobre o projeto…": "Chat about the project…",
     "Mensagem para o agente": "Message for the agent",
@@ -561,6 +584,27 @@ idiomasInterface?.registrar({
     "Ainda não há conversas deste agente no projeto.": "Este agente aún no tiene conversaciones en el proyecto.",
     "Lista parcial das sessões localizadas neste projeto.": "Lista parcial de las sesiones encontradas en este proyecto.",
     "Mensagens da conversa": "Mensajes de la conversación",
+    "Aguarde a conversa carregar.": "Espera a que la conversación cargue.",
+    "Aguarde a troca de modelo terminar.": "Espera a que termine el cambio de modelo.",
+    "Aguarde o envio atual terminar.": "Espera a que termine el envío actual.",
+    "Esta conversa está aberta só para leitura.": "Esta conversación es de solo lectura.",
+    "Aguarde a resposta atual antes de enviar outra mensagem.": "Espera la respuesta actual antes de enviar otro mensaje.",
+    "Encerre o ditado antes de enviar.": "Detén el dictado antes de enviar.",
+    "Conecte este agente no menu do Anotador para conversar.": "Conecta este agente en el menú del Anotador para conversar.",
+    "{agente} está avaliando a página": "{agente} está evaluando la página",
+    "{agente} está respondendo": "{agente} está respondiendo",
+    "lendo {alvo}": "leyendo {alvo}",
+    "procurando {alvo}": "buscando {alvo}",
+    "rodando {alvo}": "ejecutando {alvo}",
+    "acompanhando um comando": "siguiendo un comando",
+    "abrindo {alvo}": "abriendo {alvo}",
+    "pesquisando {alvo}": "buscando en la web {alvo}",
+    "escrevendo {alvo}": "escribiendo {alvo}",
+    "editando {alvo}": "editando {alvo}",
+    "delegando uma busca": "delegando una búsqueda",
+    "organizando o roteiro": "organizando su plan",
+    "usando {ferramenta}": "usando {ferramenta}",
+    " · {passos} passos": " · {passos} pasos",
     "Abra uma sessão para enviar mensagens": "Abre una sesión para enviar mensajes",
     "Converse sobre o projeto…": "Conversa sobre el proyecto…",
     "Mensagem para o agente": "Mensaje para el agente",
@@ -699,6 +743,36 @@ idiomasInterface?.registrar({
     "Trocar agente e iniciar nova conversa": "Change agent and start a new conversation",
     "Nova conversa de avaliação": "New evaluation conversation",
     "Nova avaliação": "New evaluation",
+    "O microfone precisa de uma conexão segura": "The microphone needs a secure connection",
+    "Pelo endereço da rede o navegador bloqueia o microfone. Instale o certificado deste Anotador uma vez e o aviso não volta — neste computador nem no celular.": "Over the network address the browser blocks the microphone. Install this Anotador’s certificate once and the warning stops coming back — on this computer and on your phone.",
+    "Baixar certificado": "Download certificate",
+    "Continuar pelo endereço seguro": "Continue over the secure address",
+    "Sem instalar, dá para seguir assim mesmo: o navegador pede para aceitar o certificado uma vez, em cada navegador.": "Without installing it you can still go ahead: the browser asks you to accept the certificate once, in each browser.",
+    "Prefiro não instalar nada · tenho SSH": "I’d rather install nothing · I have SSH",
+    "Encaminhe a porta e o endereço passa a ser localhost, que o navegador confia sem certificado nenhum:": "Forward the port and the address becomes localhost, which the browser trusts with no certificate at all:",
+    "Abra o arquivo baixado › Instalar certificado › Usuário atual › Colocar todos os certificados no repositório a seguir › Autoridades de Certificação Raiz Confiáveis. Depois feche e reabra o navegador.": "Open the downloaded file › Install Certificate › Current User › Place all certificates in the following store › Trusted Root Certification Authorities. Then close and reopen the browser.",
+    "Abra o arquivo baixado no Acesso às Chaves, encontre “Anotador UI”, abra-o e, em Confiar, escolha Confiar sempre.": "Open the downloaded file in Keychain Access, find “Anotador UI”, open it and, under Trust, choose Always Trust.",
+    "Abra Ajustes › Segurança › Criptografia e credenciais › Instalar certificado › Certificado CA e escolha o arquivo baixado.": "Open Settings › Security › Encryption & credentials › Install a certificate › CA certificate and pick the downloaded file.",
+    "Abra o arquivo baixado, confirme em Ajustes › Perfil Baixado › Instalar. Depois vá em Ajustes › Geral › Sobre › Ajustes de Confiança em Certificados e ligue o Anotador.": "Open the downloaded file, confirm under Settings › Profile Downloaded › Install. Then go to Settings › General › About › Certificate Trust Settings and turn Anotador on.",
+    "Adicione o arquivo baixado às autoridades confiáveis do seu sistema e reabra o navegador.": "Add the downloaded file to your system’s trusted authorities and reopen the browser.",
+    "Com ele rodando, abra {endereco} — o microfone funciona direto.": "With it running, open {endereco} — the microphone just works.",
+    "Já encaminhei · abrir por localhost": "Already forwarded · open over localhost",
+    "Indo por localhost com suas anotações. Se a porta não estiver encaminhada, volte e rode o comando.": "Heading to localhost with your annotations. If the port is not forwarded, come back and run the command.",
+    "Vale enquanto o comando estiver aberto. Guardado uma vez no ~/.ssh/config da sua máquina, ele vira só `ssh -N anotador`.": "It lasts while the command is open. Saved once in your machine’s ~/.ssh/config, it becomes just `ssh -N anotador`.",
+    "Não tenho SSH · continuar pelo endereço seguro": "No SSH here · continue over the secure address",
+    "Por esse caminho o navegador pede para aceitar o certificado do Anotador na primeira vez.": "On that path the browser asks you to accept the Anotador certificate the first time.",
+    "Comando para encaminhar a porta": "Port forwarding command",
+    "Copiar comando": "Copy command",
+    "Comando copiado. Rode-o no seu computador.": "Command copied. Run it on your computer.",
+    "Selecionei o comando: copie com Ctrl+C.": "Command selected: copy it with Ctrl+C.",
+    "Liberar o microfone": "Enable the microphone",
+    "Tirar este lote e seus marcadores da tela": "Clear this batch and its markers from the screen",
+    "Remover lote aplicado da tela": "Remove applied batch from the screen",
+    "Lote removido da tela, com {n} marcador(es). O histórico no disco continua.": "Batch cleared from the screen, along with {n} marker(s). The history on disk stays.",
+    "Lote removido da tela. O histórico no disco continua.": "Batch cleared from the screen. The history on disk stays.",
+    "Marcador removido da tela.": "Marker cleared from the screen.",
+    "Alt+clique remove este marcador da tela.": "Alt+click clears this marker from the screen.",
+    "já enviada; Alt+clique remove da tela": "already sent; Alt+click clears it from the screen",
     "Iniciar com {agente}": "Start with {agente}",
     "Foco da nova avaliação (opcional)": "Focus for the new evaluation (optional)",
     "Nenhum agente instalado está disponível para avaliar a página.": "No installed agent is available to evaluate the page.",
@@ -748,6 +822,36 @@ idiomasInterface?.registrar({
     "Trocar agente e iniciar nova conversa": "Cambiar agente e iniciar una nueva conversación",
     "Nova conversa de avaliação": "Nueva conversación de evaluación",
     "Nova avaliação": "Nueva evaluación",
+    "O microfone precisa de uma conexão segura": "El micrófono necesita una conexión segura",
+    "Pelo endereço da rede o navegador bloqueia o microfone. Instale o certificado deste Anotador uma vez e o aviso não volta — neste computador nem no celular.": "Por la dirección de red el navegador bloquea el micrófono. Instale el certificado de este Anotador una vez y el aviso no vuelve — ni en esta computadora ni en el celular.",
+    "Baixar certificado": "Descargar certificado",
+    "Continuar pelo endereço seguro": "Continuar por la dirección segura",
+    "Sem instalar, dá para seguir assim mesmo: o navegador pede para aceitar o certificado uma vez, em cada navegador.": "Sin instalarlo se puede seguir igual: el navegador pide aceptar el certificado una vez, en cada navegador.",
+    "Prefiro não instalar nada · tenho SSH": "Prefiero no instalar nada · tengo SSH",
+    "Encaminhe a porta e o endereço passa a ser localhost, que o navegador confia sem certificado nenhum:": "Reenvíe el puerto y la dirección pasa a ser localhost, en la que el navegador confía sin ningún certificado:",
+    "Abra o arquivo baixado › Instalar certificado › Usuário atual › Colocar todos os certificados no repositório a seguir › Autoridades de Certificação Raiz Confiáveis. Depois feche e reabra o navegador.": "Abra el archivo descargado › Instalar certificado › Usuario actual › Colocar todos los certificados en el siguiente almacén › Entidades de certificación raíz de confianza. Luego cierre y vuelva a abrir el navegador.",
+    "Abra o arquivo baixado no Acesso às Chaves, encontre “Anotador UI”, abra-o e, em Confiar, escolha Confiar sempre.": "Abra el archivo descargado en Acceso a Llaveros, busque “Anotador UI”, ábralo y, en Confiar, elija Confiar siempre.",
+    "Abra Ajustes › Segurança › Criptografia e credenciais › Instalar certificado › Certificado CA e escolha o arquivo baixado.": "Abra Ajustes › Seguridad › Cifrado y credenciales › Instalar certificado › Certificado CA y elija el archivo descargado.",
+    "Abra o arquivo baixado, confirme em Ajustes › Perfil Baixado › Instalar. Depois vá em Ajustes › Geral › Sobre › Ajustes de Confiança em Certificados e ligue o Anotador.": "Abra el archivo descargado, confirme en Ajustes › Perfil descargado › Instalar. Luego vaya a Ajustes › General › Información › Ajustes de confianza de certificados y active el Anotador.",
+    "Adicione o arquivo baixado às autoridades confiáveis do seu sistema e reabra o navegador.": "Agregue el archivo descargado a las entidades de confianza de su sistema y vuelva a abrir el navegador.",
+    "Com ele rodando, abra {endereco} — o microfone funciona direto.": "Con él en ejecución, abra {endereco} — el micrófono funciona directo.",
+    "Já encaminhei · abrir por localhost": "Ya lo reenvié · abrir por localhost",
+    "Indo por localhost com suas anotações. Se a porta não estiver encaminhada, volte e rode o comando.": "Yendo por localhost con sus anotaciones. Si el puerto no está reenviado, vuelva y ejecute el comando.",
+    "Vale enquanto o comando estiver aberto. Guardado uma vez no ~/.ssh/config da sua máquina, ele vira só `ssh -N anotador`.": "Vale mientras el comando esté abierto. Guardado una vez en el ~/.ssh/config de su máquina, se convierte en solo `ssh -N anotador`.",
+    "Não tenho SSH · continuar pelo endereço seguro": "No tengo SSH · continuar por la dirección segura",
+    "Por esse caminho o navegador pede para aceitar o certificado do Anotador na primeira vez.": "Por ese camino el navegador pide aceptar el certificado del Anotador la primera vez.",
+    "Comando para encaminhar a porta": "Comando para reenviar el puerto",
+    "Copiar comando": "Copiar comando",
+    "Comando copiado. Rode-o no seu computador.": "Comando copiado. Ejecútelo en su computadora.",
+    "Selecionei o comando: copie com Ctrl+C.": "Comando seleccionado: cópielo con Ctrl+C.",
+    "Liberar o microfone": "Habilitar el micrófono",
+    "Tirar este lote e seus marcadores da tela": "Quitar este lote y sus marcadores de la pantalla",
+    "Remover lote aplicado da tela": "Quitar lote aplicado de la pantalla",
+    "Lote removido da tela, com {n} marcador(es). O histórico no disco continua.": "Lote quitado de la pantalla, con {n} marcador(es). El historial en disco continúa.",
+    "Lote removido da tela. O histórico no disco continua.": "Lote quitado de la pantalla. El historial en disco continúa.",
+    "Marcador removido da tela.": "Marcador quitado de la pantalla.",
+    "Alt+clique remove este marcador da tela.": "Alt+clic quita este marcador de la pantalla.",
+    "já enviada; Alt+clique remove da tela": "ya enviada; Alt+clic la quita de la pantalla",
     "Iniciar com {agente}": "Iniciar con {agente}",
     "Foco da nova avaliação (opcional)": "Enfoque de la nueva evaluación (opcional)",
     "Nenhum agente instalado está disponível para avaliar a página.": "No hay ningún agente instalado disponible para evaluar la página.",
@@ -2299,6 +2403,60 @@ function limparFila(): void {
   avisar("Fila limpa.");
 }
 
+/**
+ * Quando o lote foi enviado. A hora basta para o que saiu hoje; a partir de ontem o
+ * dia é o que localiza a pessoa, porque a lista guarda lote de semanas atrás.
+ */
+function quandoEnviado(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const hora = d.toLocaleTimeString(idiomaInterface(), { hour: "2-digit", minute: "2-digit" });
+  const hoje = new Date();
+  const mesmoDia = d.getFullYear() === hoje.getFullYear() && d.getMonth() === hoje.getMonth() && d.getDate() === hoje.getDate();
+  if (mesmoDia) return hora;
+  const dia = d.toLocaleDateString(idiomaInterface(), d.getFullYear() === hoje.getFullYear()
+    ? { day: "2-digit", month: "short" }
+    : { day: "2-digit", month: "2-digit", year: "numeric" });
+  return dia + " · " + hora;
+}
+
+/**
+ * Tira da tela um lote já aplicado e os marcadores que ele deixou.
+ *
+ * O marcador existe para mostrar o que foi anotado enquanto o pedido está de pé.
+ * Depois de aplicado ele vira poluição: fica sobre o elemento indefinidamente, sem
+ * nada para fazer ao ser clicado, e a lista só cresce. Isto apaga a memória desta
+ * página, e nada além dela — o lote continua no disco, com o Markdown que o agente
+ * leu e a conversa que vocês tiveram, alcançáveis por `anotador ver <id>`.
+ */
+function removerLote(l: LoteLocal): void {
+  const marcadores = estado.enviadas.filter((a) => a.loteId === l.id);
+  estado.lotes = estado.lotes.filter((x) => x.id !== l.id);
+  estado.enviadas = estado.enviadas.filter((a) => a.loteId !== l.id);
+  for (const a of marcadores) estado.elementos.delete(a.id);
+  if (estado.conversa?.lote.id === l.id) fecharConversa();
+  renderizarPins();
+  atualizarBarra();
+  salvar();
+  alternarFila(true);
+  avisar(marcadores.length
+    ? traduzirInterface("Lote removido da tela, com {n} marcador(es). O histórico no disco continua.", { n: marcadores.length })
+    : traduzirInterface("Lote removido da tela. O histórico no disco continua."));
+}
+
+/**
+ * Marcador solto: a anotação foi enviada num lote que não está mais na lista (lote
+ * removido, ou memória de uma versão anterior da página). Sem isto ele não teria como
+ * sair da tela, porque toda remoção passa pelo lote.
+ */
+function removerMarcadorEnviado(a: AnotacaoLocal): void {
+  estado.enviadas = estado.enviadas.filter((x) => x.id !== a.id);
+  estado.elementos.delete(a.id);
+  renderizarPins();
+  salvar();
+  avisar(traduzirInterface("Marcador removido da tela."));
+}
+
 // ---------- pins e balão ----------
 function renderizarPins(): void {
   ui.camadaPins.textContent = "";
@@ -2322,12 +2480,19 @@ function renderizarPins(): void {
       "button",
       {
         class: "an-pin" + (enviada ? " enviado" : "") + (!el && !a.area ? " perdido" : ""),
-        title: (a.comentario || "(sem comentário)") + (el || a.area ? "" : " — elemento não localizado nesta versão da página"),
+        title: (a.comentario || "(sem comentário)") + (el || a.area ? "" : " — elemento não localizado nesta versão da página") + (enviada ? " — " + traduzirInterface("já enviada; Alt+clique remove da tela") : ""),
         style: "left:" + r.left + "px;top:" + r.top + "px;" + (rascunho ? "opacity:.75" : ""),
         onclick: (e: Event) => {
           e.stopPropagation();
           if (enviada) {
-            avisar("Anotação " + a.ordem + " já enviada" + (a.comentario ? ": " + a.comentario : "."));
+            // Alt+clique remove aqui mesmo, sem diálogo nativo. O aviso ensina o
+            // atalho, porque um marcador aplicado não tem outra ação possível e
+            // ficaria na tela para sempre.
+            if ((e as MouseEvent).altKey) {
+              removerMarcadorEnviado(a);
+              return;
+            }
+            avisar("Anotação " + a.ordem + " já enviada" + (a.comentario ? ": " + a.comentario : ".") + " " + traduzirInterface("Alt+clique remove este marcador da tela."));
             return;
           }
           if (estado.atual === a) return;
@@ -2518,8 +2683,7 @@ function iniciarDitado(campo: HTMLInputElement | HTMLTextAreaElement, botao: HTM
   }
   const idioma = idiomaDitado;
   if (!window.isSecureContext) {
-    if (CFG.https) void continuarDitadoSeguro(campo, botao);
-    else avisar("O microfone precisa de uma conexão segura. O responsável pelo Anotador precisa habilitar o acesso HTTPS.", 7000);
+    pedirContextoSeguro(campo, botao);
     return;
   }
   // A presença de SpeechRecognition não garante que o serviço do navegador
@@ -2767,8 +2931,7 @@ function iniciarReconhecimentoNavegador(campo: HTMLInputElement | HTMLTextAreaEl
     aoAtualizar?.(campo.value);
   };
   if (!window.isSecureContext) {
-    if (CFG.https) void continuarDitadoSeguro(campo, botao);
-    else avisar("O microfone precisa de uma conexão segura. O responsável pelo Anotador precisa habilitar o acesso HTTPS.", 7000);
+    pedirContextoSeguro(campo, botao);
     return;
   }
   const Reconhecimento = window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -2830,7 +2993,127 @@ function iniciarReconhecimentoNavegador(campo: HTMLInputElement | HTMLTextAreaEl
   }
 }
 
-async function continuarDitadoSeguro(campo: HTMLInputElement | HTMLTextAreaElement, botao: HTMLButtonElement): Promise<void> {
+/**
+ * O que fazer quando o microfone é pedido fora de um contexto seguro.
+ *
+ * Pelo endereço da rede o navegador nem oferece o microfone, e há três saídas, com
+ * custos bem diferentes. Instalar o certificado do anotador é uma vez por aparelho e
+ * vale para sempre, inclusive no celular, onde não há como encaminhar porta — é o
+ * caminho principal. Encaminhar a porta por SSH entrega `localhost` sem instalar nada,
+ * para quem prefere não mexer nas autoridades do sistema. E seguir agora pelo endereço
+ * seguro resolve na hora, ao custo de atravessar o aviso do navegador desta vez.
+ *
+ * Sem HTTPS nenhum, resta dizer o que falta e para quem pedir.
+ */
+function pedirContextoSeguro(campo: HTMLInputElement | HTMLTextAreaElement, botao: HTMLButtonElement): void {
+  if (!CFG.https && !CFG.tunel) {
+    avisar("O microfone precisa de uma conexão segura. O responsável pelo Anotador precisa habilitar o acesso HTTPS.", 7000);
+    return;
+  }
+  abrirCaminhoSeguro(CFG.tunel ?? null,
+    () => void continuarDitadoSeguro(campo, botao),
+    () => void continuarDitadoSeguro(campo, botao, true));
+}
+
+/**
+ * Onde cada sistema guarda as autoridades em que confia. Mostrar só o passo do
+ * aparelho em uso: uma lista com os cinco sistemas transforma um passo simples numa
+ * página de manual, e a pessoa ainda precisa achar o dela.
+ */
+function comoInstalarCertificado(): TextoInterface {
+  const agente = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(agente)) {
+    return textoInterface("Abra o arquivo baixado, confirme em Ajustes › Perfil Baixado › Instalar. Depois vá em Ajustes › Geral › Sobre › Ajustes de Confiança em Certificados e ligue o Anotador.");
+  }
+  if (/Android/.test(agente)) {
+    return textoInterface("Abra Ajustes › Segurança › Criptografia e credenciais › Instalar certificado › Certificado CA e escolha o arquivo baixado.");
+  }
+  if (/Macintosh|Mac OS X/.test(agente)) {
+    return textoInterface("Abra o arquivo baixado no Acesso às Chaves, encontre “Anotador UI”, abra-o e, em Confiar, escolha Confiar sempre.");
+  }
+  if (/Windows/.test(agente)) {
+    return textoInterface("Abra o arquivo baixado › Instalar certificado › Usuário atual › Colocar todos os certificados no repositório a seguir › Autoridades de Certificação Raiz Confiáveis. Depois feche e reabra o navegador.");
+  }
+  return textoInterface("Adicione o arquivo baixado às autoridades confiáveis do seu sistema e reabra o navegador.");
+}
+
+let painelTunel: HTMLElement | null = null;
+
+function abrirCaminhoSeguro(comando: string | null, continuarPorHttps: () => void, continuarPorLocalhost: () => void): void {
+  painelTunel?.remove();
+  const fechar = (): void => {
+    painelTunel?.remove();
+    painelTunel = null;
+  };
+  const endereco = "http://localhost:" + (location.port || "80") + location.pathname;
+  const campoComando = comando
+    ? h("input", { type: "text", readonly: "", value: comando, class: "an-tunel-comando", "aria-label": textoInterface("Comando para encaminhar a porta") }) as HTMLInputElement
+    : null;
+  const copiar = campoComando
+    ? h("button", {
+        type: "button",
+        class: "an-btn",
+        onclick: () => {
+          campoComando.select();
+          // `navigator.clipboard` não existe fora de contexto seguro — que é exatamente
+          // onde este painel aparece. O caminho antigo ainda funciona, e se nem ele
+          // funcionar o texto fica selecionado para o Ctrl+C.
+          let copiou = false;
+          try { copiou = document.execCommand("copy"); } catch { copiou = false; }
+          avisar(traduzirInterface(copiou ? "Comando copiado. Rode-o no seu computador." : "Selecionei o comando: copie com Ctrl+C."), 5000);
+        },
+      }, textoInterface("Copiar comando"))
+    : null;
+  painelTunel = h("div", { class: "an-tunel", role: "dialog", "aria-modal": "false", "aria-label": textoInterface("Liberar o microfone") },
+    h("div", { class: "an-tunel-cab" },
+      h("strong", null, textoInterface("O microfone precisa de uma conexão segura")),
+      h("button", { type: "button", class: "an-ico", "aria-label": textoInterface("Fechar"), onclick: fechar }, "✕")),
+    h("p", null, textoInterface("Pelo endereço da rede o navegador bloqueia o microfone. Instale o certificado deste Anotador uma vez e o aviso não volta — neste computador nem no celular.")),
+    CFG.https
+      ? h("a", { class: "an-btn primario an-tunel-certificado", href: CFG.base + "/autoridade.crt", download: "anotador-ui.crt" }, textoInterface("Baixar certificado"))
+      : null,
+    CFG.https ? h("p", { class: "an-tunel-nota" }, comoInstalarCertificado()) : null,
+    CFG.https
+      ? h("button", {
+          type: "button",
+          class: "an-btn an-tunel-https",
+          onclick: () => { fechar(); continuarPorHttps(); },
+        }, textoInterface("Continuar pelo endereço seguro"))
+      : null,
+    CFG.https ? h("p", { class: "an-tunel-nota" }, textoInterface("Sem instalar, dá para seguir assim mesmo: o navegador pede para aceitar o certificado uma vez, em cada navegador.")) : null,
+    // O encaminhamento de porta fica recolhido: resolve sem instalar nada, mas só
+    // serve a quem alcança esta máquina por SSH, e não ao celular. Quem precisa dele
+    // sabe o que está procurando; quem não precisa não deveria tropeçar nele.
+    campoComando && copiar
+      ? h("details", { class: "an-tunel-ssh" },
+          h("summary", null, textoInterface("Prefiro não instalar nada · tenho SSH")),
+          h("p", null, textoInterface("Encaminhe a porta e o endereço passa a ser localhost, que o navegador confia sem certificado nenhum:")),
+          h("div", { class: "an-tunel-linha" }, campoComando, copiar),
+          h("p", { class: "an-tunel-depois" }, textoInterface("Com ele rodando, abra {endereco} — o microfone funciona direto.", { endereco })),
+          // Quem já encaminha a porta — por um túnel aberto antes, ou pelo editor que
+          // faz isso sozinho ao abrir o projeto por SSH — não precisa de comando
+          // nenhum: só não sabe que já pode. Este botão é o teste, e a resposta vem na
+          // hora. Vai pela travessia, e não por um link, para as anotações irem junto:
+          // localhost é outra origem, com outro armazenamento.
+          h("button", {
+            type: "button",
+            class: "an-btn an-tunel-abrir",
+            onclick: () => { fechar(); continuarPorLocalhost(); },
+          }, textoInterface("Já encaminhei · abrir por localhost")),
+          h("p", { class: "an-tunel-nota" }, textoInterface("Vale enquanto o comando estiver aberto. Guardado uma vez no ~/.ssh/config da sua máquina, ele vira só `ssh -N anotador`.")))
+      : null);
+  raiz?.append(painelTunel);
+}
+
+/**
+ * Atravessa para um contexto seguro sem perder o que está na tela.
+ *
+ * `localhost` e o endereço HTTPS são origens diferentes da atual, e cada origem tem o
+ * seu próprio armazenamento no navegador: ir para lá por um link comum deixaria as
+ * anotações, os prints e o rascunho para trás. O servidor guarda esse estado por cinco
+ * minutos atrás de um token de uso único, e a página de chegada o recolhe.
+ */
+async function continuarDitadoSeguro(campo: HTMLInputElement | HTMLTextAreaElement, botao: HTMLButtonElement, porLocalhost = false): Promise<void> {
   if (capturasEmAndamento.size || estado.envioEmAndamento) {
     avisar("Aguarde o print ou o envio terminar antes de ligar o microfone.");
     return;
@@ -2859,19 +3142,25 @@ async function continuarDitadoSeguro(campo: HTMLInputElement | HTMLTextAreaEleme
     // de protocolo não pode descartar a última letra digitada ou um novo print.
     for (let tentativa = 0; tentativa < 4; tentativa++) {
       const armazenamento = JSON.stringify(dadosParaGuardar(true));
-      const r = await pedirApi("/voz/continuar", { voltar, armazenamento, campo: destinoCampo }, controlador.signal);
+      const r = await pedirApi("/voz/continuar", porLocalhost
+        ? { voltar, armazenamento, campo: destinoCampo, destino: "localhost" }
+        : { voltar, armazenamento, campo: destinoCampo }, controlador.signal);
       if (controlador.signal.aborted || !campo.isConnected) return;
       if (!r.ok || typeof r.dados.url !== "string") {
         throw new Error(typeof r.dados.erro === "string" ? r.dados.erro : "Não consegui conectar o microfone. Tente novamente.");
       }
       if (armazenamento !== JSON.stringify(dadosParaGuardar(true))) continue;
       const destino = new URL(r.dados.url, location.href);
-      if (destino.protocol !== "https:" || destino.hostname !== location.hostname
-        || (destino.port || "443") !== (location.port || "80") || destino.pathname !== CFG.base + "/voz/retomar") {
+      const esperado = porLocalhost
+        ? destino.protocol === "http:" && destino.hostname === "localhost"
+        : destino.protocol === "https:" && destino.hostname === location.hostname;
+      if (!esperado || (destino.port || (porLocalhost ? "80" : "443")) !== (location.port || "80") || destino.pathname !== CFG.base + "/voz/retomar") {
         throw new Error("O endereço seguro do microfone não corresponde a esta página.");
       }
       salvar(true);
-      avisar("Conectando nesta aba. Se o navegador pedir, confirme o certificado desta máquina.", 10000);
+      avisar(porLocalhost
+        ? traduzirInterface("Indo por localhost com suas anotações. Se a porta não estiver encaminhada, volte e rode o comando.")
+        : traduzirInterface("Conectando nesta aba. Se o navegador pedir, confirme o certificado desta máquina."), 10000);
       location.assign(destino.href);
       return;
     }
@@ -3246,8 +3535,11 @@ function alternarFila(forcar?: boolean): void {
     ui.fila.append(h("div", { class: "cab-lotes" }, "Lotes enviados"));
     for (const l of estado.lotes.slice(-5).reverse()) {
       const rotulo = l.estado === "processado" ? `Aplicado por ${AGENTE}` : l.estado === "em_andamento" ? `${AGENTE} trabalhando` : `Aguardando ${AGENTE}`;
-      const hora = new Date(l.enviadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      const hora = quandoEnviado(l.enviadoEm);
       const perguntas = l.perguntasAbertas ?? 0;
+      // Só o que já foi aplicado sai da lista: remover um lote em andamento
+      // esconderia o trabalho do agente enquanto ele ainda responde por ele.
+      const concluido = l.estado === "processado" && perguntas === 0;
       ui.fila.append(
         h(
           "div",
@@ -3266,7 +3558,19 @@ function alternarFila(forcar?: boolean): void {
             h("div", { class: "com" }, rotulo + " · " + hora),
             perguntas ? h("div", { class: "perg" }, perguntas > 1 ? `${perguntas} perguntas de ${AGENTE} aguardam resposta` : `${AGENTE} fez uma pergunta — clique para responder`) : null,
             l.nota ? h("div", { class: "nota" }, l.nota) : null
-          )
+          ),
+          concluido
+            ? h("button", {
+                type: "button",
+                class: "an-lote-remover",
+                title: textoInterface("Tirar este lote e seus marcadores da tela"),
+                "aria-label": textoInterface("Remover lote aplicado da tela"),
+                onclick: (e: Event) => {
+                  e.stopPropagation();
+                  removerLote(l);
+                },
+              }, "✕")
+            : null
         )
       );
     }
@@ -3457,13 +3761,15 @@ async function enviar(): Promise<void> {
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const corpo = (await resp.json()) as { id?: string };
     const agora = new Date().toISOString();
+    const idDoLote = corpo.id ?? lote.id;
     for (const a of anotacoes) {
       a.enviadaEm = agora;
+      a.loteId = idDoLote;
       estado.enviadas.push(a);
     }
     estado.anotacoes = estado.anotacoes.filter((a) => !idsEnviados.has(a.id));
     estado.lotes.push({
-      id: corpo.id ?? lote.id,
+      id: idDoLote,
       enviadoEm: agora,
       estado: "recebido",
       resumo: anotacoes.map((a) => a.comentario || a.elemento.meta.tag).join(" · ").slice(0, 120),
@@ -4223,6 +4529,7 @@ function montarArvore(raizUi: HTMLDivElement): void {
 
 function abrirArvore(gravar = true): void {
   if (!raiz || !ui.arvore) return;
+  recolherPaineisConcorrentes("arvore");
   estado.arvore.aberta = true;
   if (gravar) gravarArvoreAberta(true);
   ui.arvore.hidden = false;
@@ -4244,6 +4551,25 @@ function fecharArvore(): void {
   observadorArvore?.disconnect();
   observadorArvore = null;
   limparArea(false);
+}
+
+/**
+ * Recolhe os painéis grandes que disputam a mesma faixa da tela.
+ *
+ * Chat, estrutura, sistema de design e avaliação ocupam quase toda a altura da
+ * janela, e nada impedia que três ficassem abertos ao mesmo tempo: empilhados sobre a
+ * página que a pessoa está tentando anotar, disputando o clique entre si — a ponto de
+ * a avaliação precisar ser reanexada ao fim da raiz, ao reabrir, só para voltar a
+ * receber cliques por cima do chat. Abrir um agora recolhe os outros.
+ *
+ * A fila e os painéis presos à anotação selecionada ficam de fora: são pequenos,
+ * aparecem junto do que a pessoa acabou de escolher e não cobrem a página.
+ */
+function recolherPaineisConcorrentes(manter: "chat" | "arvore" | "design" | "avaliacao"): void {
+  if (manter !== "chat" && chatUI.painel && !chatUI.painel.hidden) fecharChat();
+  if (manter !== "arvore" && estado.arvore.aberta) fecharArvore();
+  if (manter !== "design" && design.aberto) fecharExplorador();
+  if (manter !== "avaliacao" && avaliacao.aberto) fecharAvaliacao();
 }
 
 function agendarFocoArvore(el: Element): void {

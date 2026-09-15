@@ -12,6 +12,7 @@ import { expandirComandoChat } from "./comandos.ts";
 import { serializar } from "./persistencia.ts";
 import type { EstadoExecucaoAvaliacao, PedidoAvaliacao, Parecer } from "./avaliacao.ts";
 import { idConversaAvaliacao, parecerDaResposta, textoDoParecer } from "./avaliacao-conversa.ts";
+import type { AtividadeAvaliacao } from "./avaliacao-conversa.ts";
 
 export interface MensagemChat { id: string; autor: "usuario" | "agente" | "sistema"; texto: string; em: string }
 export interface ConversaChat {
@@ -23,7 +24,7 @@ export interface ConversaChat {
   metricas?: MetricasChat;
   contextoInvalidadoEm?: string;
   metricasDesde?: string;
-  avaliacao?: { id: string; url: string; acompanhando: boolean; emAndamento: boolean };
+  avaliacao?: { id: string; url: string; acompanhando: boolean; emAndamento: boolean; desde?: string; atividade?: AtividadeAvaliacao | null };
 }
 export type ResumoChat = Omit<ConversaChat, "mensagens">;
 export interface PedidoChat { agente: string; modelo?: string | null; esforco?: string | null; sessaoExterna?: string | null }
@@ -274,7 +275,7 @@ export class ChatAgentes {
     return c;
   }
   /** Espelha a execução existente. Abrir/consultar esta conversa nunca inicia outro agente. */
-  async sincronizarAvaliacao(pedido: PedidoAvaliacao, estado: EstadoExecucaoAvaliacao, agente: IdAgente, saida: { sessao: string | null; mensagens: string[]; bruto?: string }, parecer: Parecer | null): Promise<ConversaChat> {
+  async sincronizarAvaliacao(pedido: PedidoAvaliacao, estado: EstadoExecucaoAvaliacao, agente: IdAgente, saida: { sessao: string | null; mensagens: string[]; bruto?: string; atividade?: AtividadeAvaliacao | null }, parecer: Parecer | null): Promise<ConversaChat> {
     validarAgenteEsperado(agente);
     await this.preparar();
     const id = idConversaAvaliacao(pedido.id);
@@ -289,7 +290,9 @@ export class ChatAgentes {
       conversa ??= { id, agente, modelo: estado.execucao?.modelo ?? estado.modelo ?? null, esforco: estado.esforco ?? null,
         titulo: "Avaliação · " + (pedido.pagina.caminho || "/").slice(0, 75), criadaEm: pedido.em, atualizadaEm: pedido.em, ocupada: false, mensagens: [] };
       const anterior = JSON.stringify(conversa);
-      conversa.avaliacao = { id: pedido.id, url: pedido.pagina.url, acompanhando: true, emAndamento };
+      // `desde` deixa o chat mostrar há quanto tempo o agente trabalha: uma avaliação
+      // longa passa minutos sem emitir texto, e sem esse sinal o painel parece morto.
+      conversa.avaliacao = { id: pedido.id, url: pedido.pagina.url, acompanhando: true, emAndamento, desde: estado.execucao?.iniciadoEm ?? pedido.em };
       conversa.modelo = estado.execucao?.modelo ?? conversa.modelo;
       const textos = [...saida.mensagens];
       if (saida.sessao && ID_SESSAO_NATIVA.test(saida.sessao)) {
@@ -321,7 +324,11 @@ export class ChatAgentes {
       }
       await this.atualizarMetricasNativas(conversa);
       if (JSON.stringify(conversa) !== anterior) { conversa.atualizadaEm = estado.atualizadoEm; await this.salvar(conversa); }
-      return this.indicarSomenteLeitura(conversa);
+      const visivel = await this.indicarSomenteLeitura(conversa);
+      // Fora do arquivo de propósito: o passo atual só vale enquanto a execução corre,
+      // e gravá-lo a cada ferramenta encheria o disco de escritas sem valor nenhum.
+      if (visivel.avaliacao && emAndamento) visivel.avaliacao.atividade = saida.atividade ?? null;
+      return visivel;
     });
   }
   async configurar(id: string, pedido: { modelo?: string | null; esforco?: string | null }, agenteEsperado?: string): Promise<ConversaChat> {

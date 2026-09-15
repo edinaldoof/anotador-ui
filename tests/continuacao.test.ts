@@ -62,10 +62,12 @@ test("autoridade aceita IPv6 e rejeita usuário, caminho, query ou host malforma
 
 test("API faz a troca apenas em TLS, entrega sessão segura e nunca encaminha token ao app", { skip: !temTls, timeout: 20_000 }, async () => {
   const alvo = await criarAlvoFalso();
-  const proxy = await criarProxy(alvo, { https: true });
+  // Escuta na rede para valer: parte deste teste é justamente o que chega de fora,
+  // que precisa de um endereço além do laço local.
+  const proxy = await criarProxy(alvo, { https: true, host: "0.0.0.0" });
   const seguro = proxy.origem.replace("http:", "https:");
   try {
-    const ca = await readFile(join(proxy.saida, "tls", "certificado.pem"));
+    const ca = await readFile(join(proxy.saida, "tls", "autoridade.pem"));
     const tls = (caminho: string, corpo?: unknown, headers: Record<string, string> = {}) => new Promise<{ status: number; corpo: string; headers: Record<string, string | string[] | undefined> }>((resolve, reject) => {
       const req = request(seguro + caminho, { ca, method: corpo === undefined ? "GET" : "POST", headers: { "content-type": "application/json", ...headers } }, (res) => {
         const partes: Buffer[] = [];
@@ -87,8 +89,16 @@ test("API faz a troca apenas em TLS, entrega sessão segura e nunca encaminha to
     assert.equal(criar.headers["referrer-policy"], "no-referrer");
     assert.ok(!criar.corpo.includes(pedido.armazenamento));
     assert.ok(!criar.corpo.includes(proxy.servidor.chave));
-    assert.equal((await pedir(proxy.origem + BASE + "/voz/retomar")).status, 426);
-    assert.equal((await pedir(proxy.origem + BASE + "/voz/retomar", { metodo: "POST", corpo: JSON.stringify({ token }), headers: { "x-forwarded-proto": "https" } })).status, 426);
+    // Texto claro pelo laço local é aceito: é assim que o pedido chega quando a porta
+    // está encaminhada por SSH, e para o navegador aquela origem é `localhost`, um
+    // contexto seguro tão bom quanto TLS — sem certificado a aceitar.
+    assert.equal((await pedir(proxy.origem + BASE + "/voz/retomar")).status, 200);
+    // Pelo endereço da rede, em texto claro, continua recusando. Dizer-se HTTPS num
+    // cabeçalho não muda o protocolo real, e é o endereço do socket que decide.
+    if (ip) {
+      assert.equal((await pedir(`http://${ip}:${proxy.porta}${BASE}/voz/retomar`)).status, 426);
+      assert.equal((await pedir(`http://${ip}:${proxy.porta}${BASE}/voz/retomar`, { metodo: "POST", corpo: JSON.stringify({ token }), headers: { "x-forwarded-proto": "https" } })).status, 426);
+    }
     const html = await tls(BASE + "/voz/retomar");
     assert.equal(html.status, 200);
     assert.equal(html.headers["cache-control"], "no-store");
@@ -104,7 +114,9 @@ test("API faz a troca apenas em TLS, entrega sessão segura e nunca encaminha to
     assert.equal(resposta.status, 200);
     assert.deepEqual(JSON.parse(resposta.corpo), { ok: true, ...pedido });
     const cookie = String(resposta.headers["set-cookie"]);
-    assert.match(cookie, /HttpOnly/); assert.match(cookie, /SameSite=Strict/); assert.match(cookie, /Secure/);
+    // Sem Secure de propósito: quem volta do ditado para o app, que o proxy serve em
+    // HTTP, precisa continuar autorizado a enviar o lote que acabou de ditar.
+    assert.match(cookie, /HttpOnly/); assert.match(cookie, /SameSite=Strict/); assert.doesNotMatch(cookie, /; Secure(?:;|$)/);
     const reuso = await tls(BASE + "/voz/retomar", { token });
     assert.equal(reuso.status, 410); assert.equal(reuso.headers["set-cookie"], undefined);
     assert.ok(!reuso.corpo.includes(token));

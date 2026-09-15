@@ -221,6 +221,45 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-fila .item.lote { cursor: pointer; }
 .an-fila .item.lote:hover { background: var(--an-superficie); }
 .an-fila .item.lote .perg { color: var(--an-aviso-claro); font-size: 12px; }
+.an-fila .item.lote .an-lote-remover {
+  flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: var(--an-texto-2); font: inherit; font-size: 12px; line-height: 1;
+  cursor: pointer; opacity: 0; transition: opacity .12s ease, background .12s ease, color .12s ease;
+}
+.an-fila .item.lote:hover .an-lote-remover, .an-fila .item.lote .an-lote-remover:focus-visible { opacity: 1; }
+.an-fila .item.lote .an-lote-remover:hover { background: var(--an-superficie-alta); color: var(--an-sobre-cor); }
+/* Sem mouse não há hover: no toque o botão fica sempre à vista, senão não existe. */
+@media (hover: none) { .an-fila .item.lote .an-lote-remover { opacity: 1; } }
+
+/* Caminho até um contexto seguro, quando o microfone é pedido pelo endereço da rede. */
+.an-tunel {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; pointer-events: auto;
+  display: flex; flex-direction: column; gap: 12px; padding: 20px;
+  background: var(--an-fundo); color: var(--an-sobre-cor);
+  border: 1px solid var(--an-borda); border-radius: 18px; box-shadow: var(--an-sombra-alta);
+}
+.an-tunel .an-tunel-cab { display: flex; gap: 12px; align-items: flex-start; }
+.an-tunel .an-tunel-cab strong { flex: 1; font-size: 15px; line-height: 1.3; }
+.an-tunel p { margin: 0; color: var(--an-texto-2); font-size: 13px; line-height: 1.5; }
+.an-tunel .an-tunel-linha { display: flex; flex-wrap: wrap; gap: 8px; }
+.an-tunel .an-tunel-comando {
+  flex: 1 1 260px; min-width: 0; padding: 10px 12px;
+  background: var(--an-superficie); color: var(--an-sobre-cor);
+  border: 1px solid var(--an-borda); border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px;
+}
+.an-tunel .an-tunel-depois { color: var(--an-ok-claro); }
+.an-tunel .an-tunel-nota { font-size: 12px; }
+.an-tunel .an-tunel-abrir, .an-tunel .an-tunel-https { width: 100%; }
+.an-tunel .an-tunel-certificado { display: block; text-align: center; text-decoration: none; }
+.an-tunel .an-tunel-ssh { border-top: 1px solid var(--an-superficie-alta); padding-top: 12px; }
+.an-tunel .an-tunel-ssh > summary { cursor: pointer; color: var(--an-texto-2); font-size: 12.5px; list-style: none; }
+.an-tunel .an-tunel-ssh > summary::-webkit-details-marker { display: none; }
+.an-tunel .an-tunel-ssh > summary::before { content: "▸ "; }
+.an-tunel .an-tunel-ssh[open] > summary::before { content: "▾ "; }
+.an-tunel .an-tunel-ssh > summary:hover { color: var(--an-sobre-cor); }
+.an-tunel .an-tunel-ssh > *:not(summary) { margin-top: 12px; }
 
 .an-conversa {
   position: fixed; left: 14px; bottom: 14px; width: 420px; max-height: min(74vh, 680px); pointer-events: auto;
@@ -631,6 +670,10 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-chat-mensagem.sistema { color: var(--an-texto-2); }
 .an-chat-mensagem strong { display: block; margin-bottom: 5px; font-size: 11px; color: var(--an-texto-2); }
 .an-chat-texto { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font-size: 13px; line-height: 1.6; }
+.an-chat-trabalhando { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 12px; color: var(--an-texto-2); }
+.an-chat-trabalhando-passo:not(:empty) { flex: 1 1 100%; padding-left: 16px; color: var(--an-texto-3, var(--an-texto-2)); opacity: .85; overflow-wrap: anywhere; }
+.an-chat-pulso { flex: none; width: 8px; height: 8px; border-radius: 999px; background: var(--an-ok-claro); animation: an-pulsar 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .an-chat-pulso { animation: none; } }
 .an-chat-vazio { text-align: center; color: var(--an-texto-2); margin: 20px auto; max-width: 320px; line-height: 1.6; }
 .an-chat-vazio > span { display: grid; place-items: center; width: 40px; height: 40px; margin: 0 auto 12px; border-radius: 12px; background: var(--an-superficie-alta); }
 .an-chat-vazio svg { width: 23px; height: 23px; }

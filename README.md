@@ -337,7 +337,34 @@ anotador progresso <id> --nota … | nota <id> --texto … | perguntar <id> --te
 ## Segurança e limites
 
 - Ferramenta de desenvolvimento: escuta em `0.0.0.0` para você anotar de outro aparelho da rede, e **só aceita como alvo** endereços da própria máquina ou da rede local.
-- **Microfone e câmera exigem conexão segura.** O navegador trata `localhost` como seguro; HTTP pelo endereço da rede não. Com `anotador servir --https`, clicar no microfone continua na mesma aba por HTTPS, preservando anotações, prints e o rascunho, agente, modelo e sessão do chat. A retomada verifica o acesso do navegador antes de retornar ao app. Se necessário, o navegador pede para aceitar o certificado e permitir o microfone. A transferência autenticada expira em cinco minutos e só pode ser usada uma vez; recarregar a página não liga o microfone sozinho.
+- **Microfone e câmera exigem conexão segura.** O navegador trata `localhost` como seguro; HTTP pelo endereço da rede não.
+
+  Quando você anota de outra máquina, o anotador oferece dois caminhos ao pedir o microfone.
+
+  O principal é **instalar o certificado dele uma vez em cada aparelho**. O anotador mantém uma autoridade própria na pasta da fila e assina com ela os certificados desta máquina; **Baixar certificado** entrega o certificado raiz, e o painel mostra o passo do seu sistema — Windows, macOS, Android, iOS ou outro. Instalado, o aviso do navegador não volta, nem aqui nem no celular, e a autoridade sobrevive a trocas de rede: o que é refeito quando o IP muda é só o certificado do servidor.
+
+  A autoridade vive em `tls/` na **pasta-base** (`~/.claude/anotacoes`, ou `ANOTADOR_HOME`), e não na pasta de cada projeto: você instala uma vez e ela vale para todos os apps que anotar nesta máquina. Com `--saida`, a instância fica isolada e leva o próprio certificado junto.
+
+  Ela é uma chave capaz de assinar certificado para qualquer nome, então nasce só nesta máquina, com permissão para o dono, e **nunca é servida**: a rota `/__anotador/autoridade.crt` entrega o certificado, jamais a chave. Apagar `tls/` invalida tudo que ela assinou — e obriga a instalar a nova em cada aparelho.
+
+  O segundo caminho não instala nada: **encaminhar a porta por SSH**. A página passa a ser servida de `localhost`, que todo navegador confia sem certificado, e o tráfego ainda vai cifrado. Serve a quem alcança esta máquina por SSH, e não ao celular. O painel mostra o comando pronto:
+
+  ```bash
+  ssh -N -L 3999:localhost:3999 voce@192.168.0.10
+  ```
+
+  Com ele rodando, abra `http://localhost:3999` e o microfone funciona direto. Para não repetir o comando, guarde-o uma vez em `~/.ssh/config` na sua máquina:
+
+  ```
+  Host anotador
+    HostName 192.168.0.10
+    User voce
+    LocalForward 3999 localhost:3999
+  ```
+
+  A partir daí, `ssh -N anotador` levanta o túnel. Quem abre o projeto pelo **Remote-SSH do VS Code** não precisa de nada disso: o editor já encaminha a porta para `localhost` sozinho. O celular, que não tem SSH, continua pelo endereço HTTPS.
+
+  Com `anotador servir --https`, clicar no microfone continua na mesma aba por HTTPS, preservando anotações, prints e o rascunho, agente, modelo e sessão do chat. A retomada verifica o acesso do navegador antes de retornar ao app. Se necessário, o navegador pede para aceitar o certificado e permitir o microfone. A transferência autenticada expira em cinco minutos e só pode ser usada uma vez; recarregar a página não liga o microfone sozinho.
 
   Com a transcrição local instalada, o botão grava somente o microfone por até dois minutos. Escolha o idioma ao lado do botão: português, inglês, espanhol, francês, alemão ou italiano. A escolha fica guardada e acompanha a retomada por HTTPS. O servidor usa Whisper Small multilíngue em CPU, com idioma explícito e sem traduzir a fala. O modelo permanece carregado por alguns minutos para reduzir a espera entre gravações.
 

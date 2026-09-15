@@ -9,7 +9,7 @@ import { request as pedidoHttps } from "node:https";
 import * as modulo from "node:module";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { homedir, networkInterfaces } from "node:os";
+import { homedir, hostname, networkInterfaces, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Writable, type Duplex } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -17,10 +17,11 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { Ponte, detectarAgentes, atualizarModelosAntigravity, mensagemDeAbertura, mensagemParaLote, modelosDe, sessoesClaude, sessoesCodex, type IdAgente } from "./lib/agentes.ts";
-import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, chaveConfere, criarConvite, conviteConfere, definirSessaoNavegador, mesmaOrigem, motivoDaRecusa } from "./lib/acesso.ts";
+import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, chaveConfere, criarConvite, conviteConfere, daPropriaMaquina, definirSessaoNavegador, mesmaOrigem, motivoDaRecusa } from "./lib/acesso.ts";
 import { descobrirComandos, idPeloNome } from "./lib/comandos.ts";
 import { ChatAgentes, ErroChat } from "./lib/chat.ts";
 import { saidaPublicaAvaliacao } from "./lib/avaliacao-conversa.ts";
+import { achadosDaTela, resumoDaTela, type MedidaTela } from "./lib/tela.ts";
 import { serializar } from "./lib/persistencia.ts";
 import { lerLimitesConta } from "./lib/limites.ts";
 import { sessoesExternasChat, ID_SESSAO_NATIVA } from "./lib/chat-sessoes.ts";
@@ -342,6 +343,12 @@ interface ContextoApi {
   desconectar: () => void;
   ponte: Ponte;
   registro: RegistroConexoes | null;
+  /**
+   * Certificado da autoridade que assina o par TLS desta máquina, quando há TLS.
+   * É o que a rota de download entrega para instalar nos aparelhos — só o
+   * certificado; a chave da autoridade fica na pasta da fila e não sai dela.
+   */
+  autoridadeTls: () => string | null;
   /** última sondagem do alvo, para a página de conexão não martelar o app */
   sondagem: { em: number; alvo: string | null; valor: Sondagem | null };
 }
@@ -437,6 +444,29 @@ function ipsDaRede(): string[] {
   return saida;
 }
 
+/**
+ * Como alcançar o anotador por `localhost` de outra máquina, encaminhando a porta
+ * por SSH.
+ *
+ * O microfone e a câmera só existem em contexto seguro, e um IP da rede não conta —
+ * `http://192.168.0.10:3999` chega ao navegador sem essas APIs. A saída óbvia é
+ * HTTPS, mas o certificado é o próprio anotador quem assina, então a primeira visita
+ * esbarra na tela de "conexão não é particular". Pedir a alguém que atravesse um
+ * aviso de segurança para usar uma ferramenta de desenvolvimento é um mau começo, e
+ * ensina o hábito errado.
+ *
+ * Encaminhar a porta dispensa a conversa toda: a página passa a ser servida em
+ * `http://localhost:<porta>`, que todo navegador trata como confiável, e o tráfego
+ * ainda vai cifrado pelo SSH. Serve para quem alcança a máquina por SSH — o caso de
+ * quem roda o anotador numa VM e anota do computador de trabalho. Para o celular,
+ * que não tem SSH, o caminho continua sendo o endereço HTTPS.
+ */
+function comandoDeTunel(porta: number): string | null {
+  const ip = ipsDaRede()[0];
+  if (!ip) return null;
+  return `ssh -N -L ${porta}:localhost:${porta} ${userInfo().username}@${ip}`;
+}
+
 async function sondagemDoAlvo(ctx: ContextoApi): Promise<Sondagem | null> {
   const alvo = ctx.opcoes.alvo;
   if (!alvo) return null;
@@ -456,8 +486,8 @@ function rotuloDoModelo(ponte: PonteConfig | null | undefined): string | null {
   return ponte.esforco ? `${titulo} · ${ponte.esforco}` : titulo;
 }
 
-async function extrasDoDossie(fonte: string | null, caminho: string, porta: number, captura: string | null): Promise<Parameters<typeof gerarDossie>[1]> {
-  const base = { porta, captura, sistema: await resumoDoSistema(fonte) };
+async function extrasDoDossie(fonte: string | null, caminho: string, porta: number, captura: string | null, medidas: MedidaTela[] = []): Promise<Parameters<typeof gerarDossie>[1]> {
+  const base = { porta, captura, sistema: await resumoDoSistema(fonte), tela: resumoDaTela(medidas, achadosDaTela(medidas)) || null };
   if (!fonte) return base;
   try {
     const arquivos = await lerProjeto(fonte);
@@ -525,6 +555,7 @@ async function saude(ctx: ContextoApi): Promise<Record<string, unknown>> {
     quemOuve: difusor.ouvintes(),
     capturas: opcoes.capturas,
     https: opcoes.https === true,
+    tunel: comandoDeTunel(ctx.porta()),
     norma: motor ? { versao: motor.versao, origem: motor.origem, ligadas: Object.keys(REGRAS_A_LIGAR).length } : null,
     ponte: opcoes.ponte ?? null,
     app,
@@ -631,7 +662,7 @@ async function processarAvaliacao(ctx: ContextoApi, pedido: Parameters<typeof ge
     const r = await capturarAvaliacao(destino, pedido.pagina.viewport, { urlsInstantaneo: urls, chrome: opcoes.chrome });
     captura = r.caminho;
     if (r.erro) registrar(opcoes, `captura da avaliação ${pedido.id}: ${r.erro}`);
-    if (captura) await avaliacoes.gravar(pedido, gerarDossie(pedido, { ...await extrasDoDossie(opcoes.fonte, pedido.pagina.caminho, ctx.porta(), captura), respostaDireta: !!opcoes.ponte }));
+    if (captura) await avaliacoes.gravar(pedido, gerarDossie(pedido, { ...await extrasDoDossie(opcoes.fonte, pedido.pagina.caminho, ctx.porta(), captura, r.medidas), respostaDireta: !!opcoes.ponte }));
   }
   // Cada avaliação com ponte tem uma execução própria, identificada no chat.
   const entregues = opcoes.ponte ? 0 : difusor.transmitir({
@@ -864,19 +895,30 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       responderJson(res, 403, { ok: false, erro: motivoDaRecusa(req, ctx.chave) });
       return true;
     }
-    if (!opcoes.https) {
-      responderJson(res, 503, { ok: false, erro: "O endereço seguro do Anotador ainda não está disponível para liberar o microfone." });
-      return true;
-    }
     try {
       hostContinuacao(req.headers.host);
       const cifrado = (req.socket as { encrypted?: boolean }).encrypted === true;
       const endereco = new URL(`${cifrado ? "https" : "http"}://${req.headers.host}`);
       const porta = endereco.port || (cifrado ? "443" : "80");
+      const corpo = await lerJson(req, 4 * 1024 * 1024 + 65_536);
+      // Duas travessias chegam a um contexto seguro, e a diferença está só no endereço
+      // de chegada: `localhost`, que o navegador confia sem certificado nenhum quando a
+      // porta está encaminhada, ou o endereço HTTPS desta mesma porta. O estado
+      // preservado — anotações, prints, rascunho, agente, modelo e sessão do chat — é o
+      // mesmo nos dois, porque é o mesmo mecanismo: a origem muda, e com ela o
+      // armazenamento do navegador, então o que não atravessar aqui se perde.
+      if (corpo["destino"] === "localhost") {
+        const host = hostContinuacao(`localhost:${porta}`);
+        responderJson(res, 200, { ok: true, url: `http://${host}${BASE}/voz/retomar#${ctx.continuacoes.criar(corpo, host)}` });
+        return true;
+      }
+      if (!opcoes.https) {
+        responderJson(res, 503, { ok: false, erro: "O endereço seguro do Anotador ainda não está disponível para liberar o microfone." });
+        return true;
+      }
       endereco.protocol = "https:";
       endereco.port = porta;
       const host = hostContinuacao(endereco.host);
-      const corpo = await lerJson(req, 4 * 1024 * 1024 + 65_536);
       const token = ctx.continuacoes.criar(corpo, host);
       responderJson(res, 200, { ok: true, url: `https://${host}${BASE}/voz/retomar#${token}` });
     } catch (erro) {
@@ -888,7 +930,12 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     res.setHeader("cache-control", "no-store");
     res.setHeader("referrer-policy", "no-referrer");
     res.setHeader("x-content-type-options", "nosniff");
-    if ((req.socket as { encrypted?: boolean }).encrypted !== true) {
+    // Texto claro só é aceito quando a conexão chega pelo laço local, que é como um
+    // pedido entra depois de a porta ser encaminhada por SSH: o sshd entrega o pedido
+    // aqui de 127.0.0.1, e para o navegador aquilo é `localhost`, contexto seguro. A
+    // decisão olha o endereço do socket, e não o cabeçalho Host, que quem chama
+    // escreve como quiser — dizer-se localhost não pode bastar para receber uma sessão.
+    if ((req.socket as { encrypted?: boolean }).encrypted !== true && !daPropriaMaquina(req.socket.remoteAddress)) {
       responderJson(res, 426, { ok: false, erro: "Abra o endereço HTTPS para continuar com suas anotações e liberar o microfone." });
       return true;
     }
@@ -904,7 +951,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     try {
       const corpo = await lerJson(req, 4096);
       const estado = ctx.continuacoes.consumir(corpo["token"], hostContinuacao(req.headers.host));
-      definirSessaoNavegador(req, res, ctx.chave);
+      definirSessaoNavegador(res, ctx.chave);
       responderJson(res, 200, { ok: true, ...estado });
     } catch (erro) {
       responderJson(res, erro instanceof ErroContinuacao ? erro.status : 400, { ok: false, erro: erro instanceof Error ? erro.message : "Não foi possível retomar o ditado." });
@@ -918,7 +965,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       return true;
     }
     // GET confirma o cookie recebido sem emitir credenciais nem renovar a sessão.
-    if (metodo === "POST") definirSessaoNavegador(req, res, ctx.chave);
+    if (metodo === "POST") definirSessaoNavegador(res, ctx.chave);
     responderJson(res, 200, { ok: true });
     return true;
   }
@@ -940,15 +987,16 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       responderTexto(res, 403, '<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conectar navegador</title><body style="font:16px system-ui;max-width:540px;margin:10vh auto;padding:24px"><h1>Este link de acesso expirou</h1><p>Peça um novo link a quem compartilhou o Anotador.</p><a href="' + BASE + '/">Voltar à conexão</a></body></html>', "text/html; charset=utf-8");
       return true;
     }
-    definirSessaoNavegador(req, res, ctx.chave);
+    definirSessaoNavegador(res, ctx.chave);
     res.writeHead(303, { location: destinoDeAcesso(url.searchParams.get("voltar")), "cache-control": "no-store" });
     res.end();
     return true;
   }
   if (caminho === "/" && metodo === "GET") {
-    // O cookie Secure emitido por HTTPS não é enviado na versão HTTP do menu.
-    // Navegar para a mesma origem segura reutiliza a sessão; a API/CLI continua
-    // disponível em HTTP na própria máquina.
+    // O menu fica no endereço seguro quando ele existe: é de lá que o microfone é
+    // liberado. A sessão emitida aqui vale nos dois protocolos (ver
+    // `definirSessaoNavegador`), então subir para HTTPS não deixa o overlay, que roda
+    // sobre o app alvo em HTTP, sem acesso.
     if (opcoes.https && !(req.socket as { encrypted?: boolean }).encrypted) {
       const destino = new URL(BASE + "/" + url.search, origemPublicaDe(req, opcoes));
       destino.protocol = "https:";
@@ -962,7 +1010,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
         responderTexto(res, 403, "Link de acesso inválido. Peça um novo link a quem compartilhou o Anotador.");
         return true;
       }
-      definirSessaoNavegador(req, res, ctx.chave);
+      definirSessaoNavegador(res, ctx.chave);
       url.searchParams.delete("chave");
       res.writeHead(303, { location: BASE + "/" + url.search, "cache-control": "no-store" });
       res.end();
@@ -978,6 +1026,20 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
   }
   if (caminho === "/saude" && metodo === "GET") {
     responderJson(res, 200, await saude(ctx));
+    return true;
+  }
+  if (caminho === "/autoridade.crt" && metodo === "GET") {
+    // Entrega só o certificado da autoridade, nunca a chave que assina com ela. Um
+    // certificado é público por natureza: é exatamente o que cada aparelho precisa
+    // guardar para reconhecer as assinaturas desta máquina.
+    const certificado = ctx.autoridadeTls();
+    if (!certificado) {
+      responderJson(res, 404, { ok: false, erro: "Este anotador não está servindo HTTPS, então não há autoridade para instalar." });
+      return true;
+    }
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("content-disposition", 'attachment; filename="anotador-ui.crt"');
+    responderTexto(res, 200, certificado, "application/x-x509-ca-cert");
     return true;
   }
   if (caminho === "/microfone" && metodo === "GET") {
@@ -1471,6 +1533,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       base: BASE,
       capturas: opcoes.capturas,
       https: opcoes.https === true,
+      tunel: comandoDeTunel(ctx.porta()),
       nome: opcoes.nome,
       agente: opcoes.agente,
       marca: marcaPeloNome(opcoes.ponte?.agente ?? opcoes.agente),
@@ -1720,7 +1783,7 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
   // A chave nasce com a fila e vive ao lado dela; trocar de projeto pela página não a
   // renova, porque quem já estava autorizado continua sendo a mesma pessoa.
   const chave = await chaveDaSessao(caminhoDaChave(fila.dir));
-  const ctx: ContextoApi = { fila, capturasAvulsas: new Map(), continuacoes: new Continuacoes(), chave, avaliacoes, difusor, opcoes, porta: () => portaReal, alvo: () => alvoUrl, conectar, desconectar, ponte, registro, sondagem: { em: 0, alvo: null, valor: null } };
+  const ctx: ContextoApi = { fila, capturasAvulsas: new Map(), continuacoes: new Continuacoes(), chave, avaliacoes, difusor, opcoes, porta: () => portaReal, alvo: () => alvoUrl, conectar, desconectar, ponte, registro, autoridadeTls: () => tls?.ca ?? null, sondagem: { em: 0, alvo: null, valor: null } };
 
   if (opcoes.alvo) {
     const inicial = opcoes.alvo;
@@ -1729,7 +1792,15 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
   }
 
   // O par TLS cobre localhost e os endereços desta máquina; trocar de rede o refaz.
-  const tls = opcoes.https ? await parTls(join(fila.dir, "tls"), ["localhost", "127.0.0.1", "::1", ...ipsDaRede()]) : null;
+  //
+  // A autoridade que o assina fica na pasta-base, e não na pasta deste projeto: ela é
+  // instalada à mão em cada aparelho, e uma por projeto obrigaria a repetir a
+  // instalação a cada app anotado, enchendo a lista de autoridades confiáveis de
+  // entradas quase iguais. O certificado cobre os mesmos endereços em qualquer
+  // projeto, então compartilhá-lo não perde nada. Quem passa `--saida` está isolando
+  // aquela instância de propósito, e aí o certificado a acompanha.
+  const pastaTls = join(opcoes.saida ?? pastaBase(), "tls");
+  const tls = opcoes.https ? await parTls(pastaTls, ["localhost", "127.0.0.1", "::1", ...ipsDaRede()], hostname()) : null;
   if (opcoes.https && !tls) throw new Error("não consegui preparar o certificado");
   const tratar = (req: IncomingMessage, res: ServerResponse) => {
     const url = urlDoPedido(req);

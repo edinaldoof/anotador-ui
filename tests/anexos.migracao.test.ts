@@ -102,7 +102,7 @@ test("API permite migrar print apenas no envio TLS da mesma autoridade", { skip:
     });
     assert.equal(semTls.status, 400, "o header encaminhado não substitui um socket TLS");
     assert.deepEqual(await proxy.servidor.fila.listar(), []);
-    const ca = await readFile(join(proxy.saida, "tls", "certificado.pem"));
+    const ca = await readFile(join(proxy.saida, "tls", "autoridade.pem"));
     const resposta = await new Promise<{ status: number; corpo: string }>((resolve, reject) => {
       const req = request(proxy.origem.replace("http:", "https:") + "/__anotador/lotes", { method: "POST", ca, headers: { "content-type": "application/json" } }, (res) => {
         const partes: Buffer[] = [];
