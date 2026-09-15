@@ -4487,6 +4487,7 @@ function montarArvore(raizUi: HTMLDivElement): void {
 
 function abrirArvore(gravar = true): void {
   if (!raiz || !ui.arvore) return;
+  recolherPaineisConcorrentes("arvore");
   estado.arvore.aberta = true;
   if (gravar) gravarArvoreAberta(true);
   ui.arvore.hidden = false;
@@ -4508,6 +4509,25 @@ function fecharArvore(): void {
   observadorArvore?.disconnect();
   observadorArvore = null;
   limparArea(false);
+}
+
+/**
+ * Recolhe os painéis grandes que disputam a mesma faixa da tela.
+ *
+ * Chat, estrutura, sistema de design e avaliação ocupam quase toda a altura da
+ * janela, e nada impedia que três ficassem abertos ao mesmo tempo: empilhados sobre a
+ * página que a pessoa está tentando anotar, disputando o clique entre si — a ponto de
+ * a avaliação precisar ser reanexada ao fim da raiz, ao reabrir, só para voltar a
+ * receber cliques por cima do chat. Abrir um agora recolhe os outros.
+ *
+ * A fila e os painéis presos à anotação selecionada ficam de fora: são pequenos,
+ * aparecem junto do que a pessoa acabou de escolher e não cobrem a página.
+ */
+function recolherPaineisConcorrentes(manter: "chat" | "arvore" | "design" | "avaliacao"): void {
+  if (manter !== "chat" && chatUI.painel && !chatUI.painel.hidden) fecharChat();
+  if (manter !== "arvore" && estado.arvore.aberta) fecharArvore();
+  if (manter !== "design" && design.aberto) fecharExplorador();
+  if (manter !== "avaliacao" && avaliacao.aberto) fecharAvaliacao();
 }
 
 function agendarFocoArvore(el: Element): void {

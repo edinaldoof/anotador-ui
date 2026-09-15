@@ -152,6 +152,7 @@ async function trocarAgenteChat(agente: string): Promise<void> {
 }
 async function alternarChat(): Promise<void> {
   if (chatUI.painel && !chatUI.painel.hidden) { fecharChat(); return; }
+  recolherPaineisConcorrentes("chat");
   if (!chatUI.painel) {
     chatUI.painel = h("div", { class: "an-chat", role: "dialog", "aria-label": "Chat com agentes" });
     raiz?.append(chatUI.painel);
@@ -446,6 +447,94 @@ function renderizarChat(): void {
   renderizarMensagensChat();
   acompanharLimitesContaChat();
 }
+/**
+ * Põe a lista de mensagens de acordo com o estado, mexendo só no que mudou.
+ *
+ * O ciclo de leitura volta a cada segundo enquanto o agente responde, e a resposta
+ * cresce a cada volta. Comparar a conversa inteira de uma vez fazia toda ela mudar
+ * sempre que a última mensagem ganhava uma palavra: o fluxo era esvaziado e remontado
+ * do zero, com o Markdown de cada mensagem reprocessado, os blocos de código
+ * recriados e a lista inteira passando pelo layout — uma vez por segundo, para
+ * mostrar uma linha nova no fim. Numa conversa longa é isso que trava.
+ *
+ * Aqui cada mensagem carrega a própria assinatura, então o trabalho fica do tamanho
+ * do que mudou: durante a resposta, só a última é refeita. A assinatura também sai do
+ * DOM do container — guardá-la ali significava manter no documento uma cópia em texto
+ * da conversa toda, reescrita a cada leitura.
+ *
+ * Devolve `true` quando algo mudou, para quem chama decidir sobre a rolagem.
+ */
+const assinaturasMensagens = new WeakMap<HTMLElement, { sessao: string; assinaturas: string[] }>();
+
+function sincronizarMensagensChat(fluxo: HTMLElement, mensagens: Array<{ autor: string; texto: string }>, avisoHistorico: string | null | undefined): boolean {
+  const nomeAgente = chatUI.agentes.find((a) => a.id === chatUI.atual?.agente)?.nome;
+  const sessao = JSON.stringify([chatUI.atual?.id ?? "", chatUI.atual?.agente ?? ""]);
+  const assinaturas = mensagens.map((m) => JSON.stringify([m.autor, m.texto]));
+  const guardado = assinaturasMensagens.get(fluxo);
+  // Conversa diferente no mesmo fluxo: o que está na tela é de outra sessão e não
+  // pode ser reaproveitado, mesmo que as assinaturas coincidissem por acaso.
+  const anteriores = guardado && guardado.sessao === sessao ? guardado.assinaturas : undefined;
+  const avisoAtual = fluxo.querySelector(":scope > .an-chat-aviso-historico");
+  const vazioAtual = fluxo.querySelector(":scope > .an-chat-vazio");
+  let mudou = false;
+
+  // O aviso e o estado vazio entram e saem antes das mensagens, para os índices
+  // abaixo contarem só o que é mensagem.
+  if (avisoHistorico && !avisoAtual) {
+    fluxo.prepend(h("div", { class: "an-chat-aviso-historico", role: "note" }, h("strong", null, textoInterface("Histórico no agente")), h("p", null, avisoHistorico)));
+    mudou = true;
+  } else if (!avisoHistorico && avisoAtual) {
+    avisoAtual.remove();
+    mudou = true;
+  } else if (avisoHistorico && avisoAtual && avisoAtual.querySelector("p")?.textContent !== avisoHistorico) {
+    const p = avisoAtual.querySelector("p");
+    if (p) p.textContent = avisoHistorico;
+    mudou = true;
+  }
+
+  const montar = (mensagem: { autor: string; texto: string }): HTMLElement =>
+    h("div", { class: "an-chat-mensagem " + mensagem.autor },
+      h("strong", null, mensagem.autor === "usuario" ? textoInterface("Você") : mensagem.autor === "sistema" ? textoInterface("Anotador") : nomeAgente ?? textoInterface("Agente")),
+      formatarMensagemChat(mensagem.texto));
+
+  const nos = [...fluxo.querySelectorAll<HTMLElement>(":scope > .an-chat-mensagem")];
+  // Sem histórico de assinaturas — primeira montagem, ou troca de sessão — não há o
+  // que reaproveitar com segurança: o conteúdo na tela pode ser de outra conversa.
+  if (!anteriores || anteriores.length !== nos.length) {
+    for (const no of nos) no.remove();
+    for (const mensagem of mensagens) fluxo.append(montar(mensagem));
+    mudou = mudou || nos.length > 0 || mensagens.length > 0;
+  } else {
+    for (let i = 0; i < mensagens.length; i++) {
+      const mensagem = mensagens[i] as { autor: string; texto: string };
+      if (i < nos.length) {
+        if (anteriores[i] !== assinaturas[i]) {
+          (nos[i] as HTMLElement).replaceWith(montar(mensagem));
+          mudou = true;
+        }
+      } else {
+        fluxo.append(montar(mensagem));
+        mudou = true;
+      }
+    }
+    for (let i = mensagens.length; i < nos.length; i++) {
+      (nos[i] as HTMLElement).remove();
+      mudou = true;
+    }
+  }
+  assinaturasMensagens.set(fluxo, { sessao, assinaturas });
+
+  const querVazio = !mensagens.length && !avisoHistorico;
+  if (querVazio && !vazioAtual) {
+    fluxo.append(h("div", { class: "an-chat-vazio" }, h("span", { html: ICONE_CHAT }), h("strong", null, textoInterface("O projeto também pode começar com uma conversa.")), h("p", null, textoInterface("Peça uma explicação, discuta uma mudança ou continue uma sessão existente."))));
+    mudou = true;
+  } else if (!querVazio && vazioAtual) {
+    vazioAtual.remove();
+    mudou = true;
+  }
+  return mudou;
+}
+
 function renderizarMensagensChat(): void {
   const fluxo = chatUI.painel?.querySelector<HTMLElement>(".an-chat-mensagens");
   const status = chatUI.painel?.querySelector<HTMLElement>(".an-chat-status");
@@ -474,15 +563,7 @@ function renderizarMensagensChat(): void {
   }
   const mensagens = chatUI.atual?.mensagens ?? [];
   const avisoHistorico = chatUI.atual?.avisoHistorico;
-  const assinatura = JSON.stringify([mensagens, avisoHistorico]);
-  if (fluxo.dataset.assinatura !== assinatura) {
-    fluxo.replaceChildren();
-    if (avisoHistorico) fluxo.append(h("div", { class: "an-chat-aviso-historico", role: "note" }, h("strong", null, textoInterface("Histórico no agente")), h("p", null, avisoHistorico)));
-    for (const mensagem of mensagens) fluxo.append(h("div", { class: "an-chat-mensagem " + mensagem.autor }, h("strong", null, mensagem.autor === "usuario" ? textoInterface("Você") : mensagem.autor === "sistema" ? textoInterface("Anotador") : chatUI.agentes.find((a) => a.id === chatUI.atual?.agente)?.nome ?? textoInterface("Agente")), formatarMensagemChat(mensagem.texto)));
-    if (!mensagens.length && !avisoHistorico) fluxo.append(h("div", { class: "an-chat-vazio" }, h("span", { html: ICONE_CHAT }), h("strong", null, textoInterface("O projeto também pode começar com uma conversa.")), h("p", null, textoInterface("Peça uma explicação, discuta uma mudança ou continue uma sessão existente."))));
-    fluxo.dataset.assinatura = assinatura;
-    if (noFim) fluxo.scrollTop = fluxo.scrollHeight;
-  }
+  if (sincronizarMensagensChat(fluxo, mensagens, avisoHistorico) && noFim) fluxo.scrollTop = fluxo.scrollHeight;
   renderizarMetricasChat();
   if (chatUI.carregando || chatUI.configurando || (!chatUI.atual?.erro && chatUI.atual?.ocupada)) definirTextoInterface(status, chatUI.carregando ? "Carregando…" : chatUI.configurando ? "Atualizando modelo e raciocínio…" : "Respondendo…");
   else status.textContent = traduzirInterface(chatUI.atual?.erro || chatUI.atual?.motivoSomenteLeitura || "");
