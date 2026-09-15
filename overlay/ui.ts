@@ -704,6 +704,8 @@ idiomasInterface?.registrar({
     "Para o microfone, o navegador precisa de localhost": "For the microphone, the browser needs localhost",
     "Pelo endereço da rede o navegador bloqueia o microfone. Rode este comando no seu computador — ele encaminha a porta por SSH e não pede certificado nenhum:": "Over the network address the browser blocks the microphone. Run this command on your computer — it forwards the port over SSH and asks for no certificate at all:",
     "Com ele rodando, abra {endereco} — o microfone funciona direto.": "With it running, open {endereco} — the microphone just works.",
+    "Já encaminhei · abrir por localhost": "Already forwarded · open over localhost",
+    "Indo por localhost com suas anotações. Se a porta não estiver encaminhada, volte e rode o comando.": "Heading to localhost with your annotations. If the port is not forwarded, come back and run the command.",
     "Vale enquanto o comando estiver aberto. Guardado uma vez no ~/.ssh/config da sua máquina, ele vira só `ssh -N anotador`.": "It lasts while the command is open. Saved once in your machine’s ~/.ssh/config, it becomes just `ssh -N anotador`.",
     "Não tenho SSH · continuar pelo endereço seguro": "No SSH here · continue over the secure address",
     "Por esse caminho o navegador pede para aceitar o certificado do Anotador na primeira vez.": "On that path the browser asks you to accept the Anotador certificate the first time.",
@@ -771,6 +773,8 @@ idiomasInterface?.registrar({
     "Para o microfone, o navegador precisa de localhost": "Para el micrófono, el navegador necesita localhost",
     "Pelo endereço da rede o navegador bloqueia o microfone. Rode este comando no seu computador — ele encaminha a porta por SSH e não pede certificado nenhum:": "Por la dirección de red el navegador bloquea el micrófono. Ejecute este comando en su computadora — reenvía el puerto por SSH y no pide ningún certificado:",
     "Com ele rodando, abra {endereco} — o microfone funciona direto.": "Con él en ejecución, abra {endereco} — el micrófono funciona directo.",
+    "Já encaminhei · abrir por localhost": "Ya lo reenvié · abrir por localhost",
+    "Indo por localhost com suas anotações. Se a porta não estiver encaminhada, volte e rode o comando.": "Yendo por localhost con sus anotaciones. Si el puerto no está reenviado, vuelva y ejecute el comando.",
     "Vale enquanto o comando estiver aberto. Guardado uma vez no ~/.ssh/config da sua máquina, ele vira só `ssh -N anotador`.": "Vale mientras el comando esté abierto. Guardado una vez en el ~/.ssh/config de su máquina, se convierte en solo `ssh -N anotador`.",
     "Não tenho SSH · continuar pelo endereço seguro": "No tengo SSH · continuar por la dirección segura",
     "Por esse caminho o navegador pede para aceitar o certificado do Anotador na primeira vez.": "Por ese camino el navegador pide aceptar el certificado del Anotador la primera vez.",
@@ -2944,12 +2948,14 @@ function pedirContextoSeguro(campo: HTMLInputElement | HTMLTextAreaElement, bota
     else avisar("O microfone precisa de uma conexão segura. O responsável pelo Anotador precisa habilitar o acesso HTTPS.", 7000);
     return;
   }
-  abrirCaminhoSeguro(CFG.tunel, () => void continuarDitadoSeguro(campo, botao));
+  abrirCaminhoSeguro(CFG.tunel,
+    () => void continuarDitadoSeguro(campo, botao),
+    () => void continuarDitadoSeguro(campo, botao, true));
 }
 
 let painelTunel: HTMLElement | null = null;
 
-function abrirCaminhoSeguro(comando: string, continuarPorHttps: () => void): void {
+function abrirCaminhoSeguro(comando: string, continuarPorHttps: () => void, continuarPorLocalhost: () => void): void {
   painelTunel?.remove();
   const fechar = (): void => {
     painelTunel?.remove();
@@ -2977,6 +2983,16 @@ function abrirCaminhoSeguro(comando: string, continuarPorHttps: () => void): voi
     h("p", null, textoInterface("Pelo endereço da rede o navegador bloqueia o microfone. Rode este comando no seu computador — ele encaminha a porta por SSH e não pede certificado nenhum:")),
     h("div", { class: "an-tunel-linha" }, campoComando, copiar),
     h("p", { class: "an-tunel-depois" }, textoInterface("Com ele rodando, abra {endereco} — o microfone funciona direto.", { endereco })),
+    // Quem já encaminha a porta — por um túnel aberto antes, ou pelo editor que faz
+    // isso sozinho ao abrir o projeto por SSH — não precisa de comando nenhum: só
+    // não sabe que já pode. Este botão é o teste, e a resposta vem na hora. Vai pela
+    // travessia, e não por um link, para as anotações irem junto: localhost é outra
+    // origem, com outro armazenamento.
+    h("button", {
+      type: "button",
+      class: "an-btn an-tunel-abrir",
+      onclick: () => { fechar(); continuarPorLocalhost(); },
+    }, textoInterface("Já encaminhei · abrir por localhost")),
     h("p", { class: "an-tunel-nota" }, textoInterface("Vale enquanto o comando estiver aberto. Guardado uma vez no ~/.ssh/config da sua máquina, ele vira só `ssh -N anotador`.")),
     CFG.https
       ? h("button", {
@@ -2990,7 +3006,15 @@ function abrirCaminhoSeguro(comando: string, continuarPorHttps: () => void): voi
   campoComando.select();
 }
 
-async function continuarDitadoSeguro(campo: HTMLInputElement | HTMLTextAreaElement, botao: HTMLButtonElement): Promise<void> {
+/**
+ * Atravessa para um contexto seguro sem perder o que está na tela.
+ *
+ * `localhost` e o endereço HTTPS são origens diferentes da atual, e cada origem tem o
+ * seu próprio armazenamento no navegador: ir para lá por um link comum deixaria as
+ * anotações, os prints e o rascunho para trás. O servidor guarda esse estado por cinco
+ * minutos atrás de um token de uso único, e a página de chegada o recolhe.
+ */
+async function continuarDitadoSeguro(campo: HTMLInputElement | HTMLTextAreaElement, botao: HTMLButtonElement, porLocalhost = false): Promise<void> {
   if (capturasEmAndamento.size || estado.envioEmAndamento) {
     avisar("Aguarde o print ou o envio terminar antes de ligar o microfone.");
     return;
@@ -3019,19 +3043,25 @@ async function continuarDitadoSeguro(campo: HTMLInputElement | HTMLTextAreaEleme
     // de protocolo não pode descartar a última letra digitada ou um novo print.
     for (let tentativa = 0; tentativa < 4; tentativa++) {
       const armazenamento = JSON.stringify(dadosParaGuardar(true));
-      const r = await pedirApi("/voz/continuar", { voltar, armazenamento, campo: destinoCampo }, controlador.signal);
+      const r = await pedirApi("/voz/continuar", porLocalhost
+        ? { voltar, armazenamento, campo: destinoCampo, destino: "localhost" }
+        : { voltar, armazenamento, campo: destinoCampo }, controlador.signal);
       if (controlador.signal.aborted || !campo.isConnected) return;
       if (!r.ok || typeof r.dados.url !== "string") {
         throw new Error(typeof r.dados.erro === "string" ? r.dados.erro : "Não consegui conectar o microfone. Tente novamente.");
       }
       if (armazenamento !== JSON.stringify(dadosParaGuardar(true))) continue;
       const destino = new URL(r.dados.url, location.href);
-      if (destino.protocol !== "https:" || destino.hostname !== location.hostname
-        || (destino.port || "443") !== (location.port || "80") || destino.pathname !== CFG.base + "/voz/retomar") {
+      const esperado = porLocalhost
+        ? destino.protocol === "http:" && destino.hostname === "localhost"
+        : destino.protocol === "https:" && destino.hostname === location.hostname;
+      if (!esperado || (destino.port || (porLocalhost ? "80" : "443")) !== (location.port || "80") || destino.pathname !== CFG.base + "/voz/retomar") {
         throw new Error("O endereço seguro do microfone não corresponde a esta página.");
       }
       salvar(true);
-      avisar("Conectando nesta aba. Se o navegador pedir, confirme o certificado desta máquina.", 10000);
+      avisar(porLocalhost
+        ? traduzirInterface("Indo por localhost com suas anotações. Se a porta não estiver encaminhada, volte e rode o comando.")
+        : traduzirInterface("Conectando nesta aba. Se o navegador pedir, confirme o certificado desta máquina."), 10000);
       location.assign(destino.href);
       return;
     }

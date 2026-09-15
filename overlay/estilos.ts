@@ -251,6 +251,7 @@ button { cursor: pointer; border: 0; background: transparent; }
 }
 .an-tunel .an-tunel-depois { color: var(--an-ok-claro); }
 .an-tunel .an-tunel-nota { font-size: 12px; }
+.an-tunel .an-tunel-abrir { width: 100%; }
 
 .an-conversa {
   position: fixed; left: 14px; bottom: 14px; width: 420px; max-height: min(74vh, 680px); pointer-events: auto;

@@ -62,7 +62,9 @@ test("autoridade aceita IPv6 e rejeita usuário, caminho, query ou host malforma
 
 test("API faz a troca apenas em TLS, entrega sessão segura e nunca encaminha token ao app", { skip: !temTls, timeout: 20_000 }, async () => {
   const alvo = await criarAlvoFalso();
-  const proxy = await criarProxy(alvo, { https: true });
+  // Escuta na rede para valer: parte deste teste é justamente o que chega de fora,
+  // que precisa de um endereço além do laço local.
+  const proxy = await criarProxy(alvo, { https: true, host: "0.0.0.0" });
   const seguro = proxy.origem.replace("http:", "https:");
   try {
     const ca = await readFile(join(proxy.saida, "tls", "certificado.pem"));
@@ -87,8 +89,16 @@ test("API faz a troca apenas em TLS, entrega sessão segura e nunca encaminha to
     assert.equal(criar.headers["referrer-policy"], "no-referrer");
     assert.ok(!criar.corpo.includes(pedido.armazenamento));
     assert.ok(!criar.corpo.includes(proxy.servidor.chave));
-    assert.equal((await pedir(proxy.origem + BASE + "/voz/retomar")).status, 426);
-    assert.equal((await pedir(proxy.origem + BASE + "/voz/retomar", { metodo: "POST", corpo: JSON.stringify({ token }), headers: { "x-forwarded-proto": "https" } })).status, 426);
+    // Texto claro pelo laço local é aceito: é assim que o pedido chega quando a porta
+    // está encaminhada por SSH, e para o navegador aquela origem é `localhost`, um
+    // contexto seguro tão bom quanto TLS — sem certificado a aceitar.
+    assert.equal((await pedir(proxy.origem + BASE + "/voz/retomar")).status, 200);
+    // Pelo endereço da rede, em texto claro, continua recusando. Dizer-se HTTPS num
+    // cabeçalho não muda o protocolo real, e é o endereço do socket que decide.
+    if (ip) {
+      assert.equal((await pedir(`http://${ip}:${proxy.porta}${BASE}/voz/retomar`)).status, 426);
+      assert.equal((await pedir(`http://${ip}:${proxy.porta}${BASE}/voz/retomar`, { metodo: "POST", corpo: JSON.stringify({ token }), headers: { "x-forwarded-proto": "https" } })).status, 426);
+    }
     const html = await tls(BASE + "/voz/retomar");
     assert.equal(html.status, 200);
     assert.equal(html.headers["cache-control"], "no-store");
