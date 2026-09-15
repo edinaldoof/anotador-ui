@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { Ponte, detectarAgentes, atualizarModelosAntigravity, mensagemDeAbertura, mensagemParaLote, modelosDe, sessoesClaude, sessoesCodex, type IdAgente } from "./lib/agentes.ts";
-import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, chaveConfere, criarConvite, conviteConfere, definirSessaoNavegador, mesmaOrigem, motivoDaRecusa } from "./lib/acesso.ts";
+import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, chaveConfere, criarConvite, conviteConfere, daPropriaMaquina, definirSessaoNavegador, mesmaOrigem, motivoDaRecusa } from "./lib/acesso.ts";
 import { descobrirComandos, idPeloNome } from "./lib/comandos.ts";
 import { ChatAgentes, ErroChat } from "./lib/chat.ts";
 import { saidaPublicaAvaliacao } from "./lib/avaliacao-conversa.ts";
@@ -888,19 +888,30 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       responderJson(res, 403, { ok: false, erro: motivoDaRecusa(req, ctx.chave) });
       return true;
     }
-    if (!opcoes.https) {
-      responderJson(res, 503, { ok: false, erro: "O endereço seguro do Anotador ainda não está disponível para liberar o microfone." });
-      return true;
-    }
     try {
       hostContinuacao(req.headers.host);
       const cifrado = (req.socket as { encrypted?: boolean }).encrypted === true;
       const endereco = new URL(`${cifrado ? "https" : "http"}://${req.headers.host}`);
       const porta = endereco.port || (cifrado ? "443" : "80");
+      const corpo = await lerJson(req, 4 * 1024 * 1024 + 65_536);
+      // Duas travessias chegam a um contexto seguro, e a diferença está só no endereço
+      // de chegada: `localhost`, que o navegador confia sem certificado nenhum quando a
+      // porta está encaminhada, ou o endereço HTTPS desta mesma porta. O estado
+      // preservado — anotações, prints, rascunho, agente, modelo e sessão do chat — é o
+      // mesmo nos dois, porque é o mesmo mecanismo: a origem muda, e com ela o
+      // armazenamento do navegador, então o que não atravessar aqui se perde.
+      if (corpo["destino"] === "localhost") {
+        const host = hostContinuacao(`localhost:${porta}`);
+        responderJson(res, 200, { ok: true, url: `http://${host}${BASE}/voz/retomar#${ctx.continuacoes.criar(corpo, host)}` });
+        return true;
+      }
+      if (!opcoes.https) {
+        responderJson(res, 503, { ok: false, erro: "O endereço seguro do Anotador ainda não está disponível para liberar o microfone." });
+        return true;
+      }
       endereco.protocol = "https:";
       endereco.port = porta;
       const host = hostContinuacao(endereco.host);
-      const corpo = await lerJson(req, 4 * 1024 * 1024 + 65_536);
       const token = ctx.continuacoes.criar(corpo, host);
       responderJson(res, 200, { ok: true, url: `https://${host}${BASE}/voz/retomar#${token}` });
     } catch (erro) {
@@ -912,7 +923,12 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
     res.setHeader("cache-control", "no-store");
     res.setHeader("referrer-policy", "no-referrer");
     res.setHeader("x-content-type-options", "nosniff");
-    if ((req.socket as { encrypted?: boolean }).encrypted !== true) {
+    // Texto claro só é aceito quando a conexão chega pelo laço local, que é como um
+    // pedido entra depois de a porta ser encaminhada por SSH: o sshd entrega o pedido
+    // aqui de 127.0.0.1, e para o navegador aquilo é `localhost`, contexto seguro. A
+    // decisão olha o endereço do socket, e não o cabeçalho Host, que quem chama
+    // escreve como quiser — dizer-se localhost não pode bastar para receber uma sessão.
+    if ((req.socket as { encrypted?: boolean }).encrypted !== true && !daPropriaMaquina(req.socket.remoteAddress)) {
       responderJson(res, 426, { ok: false, erro: "Abra o endereço HTTPS para continuar com suas anotações e liberar o microfone." });
       return true;
     }
