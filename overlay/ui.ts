@@ -701,8 +701,18 @@ idiomasInterface?.registrar({
     "Trocar agente e iniciar nova conversa": "Change agent and start a new conversation",
     "Nova conversa de avaliação": "New evaluation conversation",
     "Nova avaliação": "New evaluation",
-    "Para o microfone, o navegador precisa de localhost": "For the microphone, the browser needs localhost",
-    "Pelo endereço da rede o navegador bloqueia o microfone. Rode este comando no seu computador — ele encaminha a porta por SSH e não pede certificado nenhum:": "Over the network address the browser blocks the microphone. Run this command on your computer — it forwards the port over SSH and asks for no certificate at all:",
+    "O microfone precisa de uma conexão segura": "The microphone needs a secure connection",
+    "Pelo endereço da rede o navegador bloqueia o microfone. Instale o certificado deste Anotador uma vez e o aviso não volta — neste computador nem no celular.": "Over the network address the browser blocks the microphone. Install this Anotador’s certificate once and the warning stops coming back — on this computer and on your phone.",
+    "Baixar certificado": "Download certificate",
+    "Continuar pelo endereço seguro": "Continue over the secure address",
+    "Sem instalar, dá para seguir assim mesmo: o navegador pede para aceitar o certificado uma vez, em cada navegador.": "Without installing it you can still go ahead: the browser asks you to accept the certificate once, in each browser.",
+    "Prefiro não instalar nada · tenho SSH": "I’d rather install nothing · I have SSH",
+    "Encaminhe a porta e o endereço passa a ser localhost, que o navegador confia sem certificado nenhum:": "Forward the port and the address becomes localhost, which the browser trusts with no certificate at all:",
+    "Abra o arquivo baixado › Instalar certificado › Usuário atual › Colocar todos os certificados no repositório a seguir › Autoridades de Certificação Raiz Confiáveis. Depois feche e reabra o navegador.": "Open the downloaded file › Install Certificate › Current User › Place all certificates in the following store › Trusted Root Certification Authorities. Then close and reopen the browser.",
+    "Abra o arquivo baixado no Acesso às Chaves, encontre “Anotador UI”, abra-o e, em Confiar, escolha Confiar sempre.": "Open the downloaded file in Keychain Access, find “Anotador UI”, open it and, under Trust, choose Always Trust.",
+    "Abra Ajustes › Segurança › Criptografia e credenciais › Instalar certificado › Certificado CA e escolha o arquivo baixado.": "Open Settings › Security › Encryption & credentials › Install a certificate › CA certificate and pick the downloaded file.",
+    "Abra o arquivo baixado, confirme em Ajustes › Perfil Baixado › Instalar. Depois vá em Ajustes › Geral › Sobre › Ajustes de Confiança em Certificados e ligue o Anotador.": "Open the downloaded file, confirm under Settings › Profile Downloaded › Install. Then go to Settings › General › About › Certificate Trust Settings and turn Anotador on.",
+    "Adicione o arquivo baixado às autoridades confiáveis do seu sistema e reabra o navegador.": "Add the downloaded file to your system’s trusted authorities and reopen the browser.",
     "Com ele rodando, abra {endereco} — o microfone funciona direto.": "With it running, open {endereco} — the microphone just works.",
     "Já encaminhei · abrir por localhost": "Already forwarded · open over localhost",
     "Indo por localhost com suas anotações. Se a porta não estiver encaminhada, volte e rode o comando.": "Heading to localhost with your annotations. If the port is not forwarded, come back and run the command.",
@@ -770,8 +780,18 @@ idiomasInterface?.registrar({
     "Trocar agente e iniciar nova conversa": "Cambiar agente e iniciar una nueva conversación",
     "Nova conversa de avaliação": "Nueva conversación de evaluación",
     "Nova avaliação": "Nueva evaluación",
-    "Para o microfone, o navegador precisa de localhost": "Para el micrófono, el navegador necesita localhost",
-    "Pelo endereço da rede o navegador bloqueia o microfone. Rode este comando no seu computador — ele encaminha a porta por SSH e não pede certificado nenhum:": "Por la dirección de red el navegador bloquea el micrófono. Ejecute este comando en su computadora — reenvía el puerto por SSH y no pide ningún certificado:",
+    "O microfone precisa de uma conexão segura": "El micrófono necesita una conexión segura",
+    "Pelo endereço da rede o navegador bloqueia o microfone. Instale o certificado deste Anotador uma vez e o aviso não volta — neste computador nem no celular.": "Por la dirección de red el navegador bloquea el micrófono. Instale el certificado de este Anotador una vez y el aviso no vuelve — ni en esta computadora ni en el celular.",
+    "Baixar certificado": "Descargar certificado",
+    "Continuar pelo endereço seguro": "Continuar por la dirección segura",
+    "Sem instalar, dá para seguir assim mesmo: o navegador pede para aceitar o certificado uma vez, em cada navegador.": "Sin instalarlo se puede seguir igual: el navegador pide aceptar el certificado una vez, en cada navegador.",
+    "Prefiro não instalar nada · tenho SSH": "Prefiero no instalar nada · tengo SSH",
+    "Encaminhe a porta e o endereço passa a ser localhost, que o navegador confia sem certificado nenhum:": "Reenvíe el puerto y la dirección pasa a ser localhost, en la que el navegador confía sin ningún certificado:",
+    "Abra o arquivo baixado › Instalar certificado › Usuário atual › Colocar todos os certificados no repositório a seguir › Autoridades de Certificação Raiz Confiáveis. Depois feche e reabra o navegador.": "Abra el archivo descargado › Instalar certificado › Usuario actual › Colocar todos los certificados en el siguiente almacén › Entidades de certificación raíz de confianza. Luego cierre y vuelva a abrir el navegador.",
+    "Abra o arquivo baixado no Acesso às Chaves, encontre “Anotador UI”, abra-o e, em Confiar, escolha Confiar sempre.": "Abra el archivo descargado en Acceso a Llaveros, busque “Anotador UI”, ábralo y, en Confiar, elija Confiar siempre.",
+    "Abra Ajustes › Segurança › Criptografia e credenciais › Instalar certificado › Certificado CA e escolha o arquivo baixado.": "Abra Ajustes › Seguridad › Cifrado y credenciales › Instalar certificado › Certificado CA y elija el archivo descargado.",
+    "Abra o arquivo baixado, confirme em Ajustes › Perfil Baixado › Instalar. Depois vá em Ajustes › Geral › Sobre › Ajustes de Confiança em Certificados e ligue o Anotador.": "Abra el archivo descargado, confirme en Ajustes › Perfil descargado › Instalar. Luego vaya a Ajustes › General › Información › Ajustes de confianza de certificados y active el Anotador.",
+    "Adicione o arquivo baixado às autoridades confiáveis do seu sistema e reabra o navegador.": "Agregue el archivo descargado a las entidades de confianza de su sistema y vuelva a abrir el navegador.",
     "Com ele rodando, abra {endereco} — o microfone funciona direto.": "Con él en ejecución, abra {endereco} — el micrófono funciona directo.",
     "Já encaminhei · abrir por localhost": "Ya lo reenvié · abrir por localhost",
     "Indo por localhost com suas anotações. Se a porta não estiver encaminhada, volte e rode o comando.": "Yendo por localhost con sus anotaciones. Si el puerto no está reenviado, vuelva y ejecute el comando.",
@@ -2934,76 +2954,113 @@ function iniciarReconhecimentoNavegador(campo: HTMLInputElement | HTMLTextAreaEl
 /**
  * O que fazer quando o microfone é pedido fora de um contexto seguro.
  *
- * Pelo endereço da rede o navegador nem oferece o microfone, e as duas saídas têm
- * custos diferentes. O encaminhamento de porta por SSH entrega `localhost`, que todo
- * navegador confia, sem certificado e sem aviso nenhum — é o caminho oferecido
- * primeiro. O endereço HTTPS continua ali para quem não tem SSH à mão (o celular, por
- * exemplo), com a ressalva de que o navegador vai pedir para aceitar o certificado.
+ * Pelo endereço da rede o navegador nem oferece o microfone, e há três saídas, com
+ * custos bem diferentes. Instalar o certificado do anotador é uma vez por aparelho e
+ * vale para sempre, inclusive no celular, onde não há como encaminhar porta — é o
+ * caminho principal. Encaminhar a porta por SSH entrega `localhost` sem instalar nada,
+ * para quem prefere não mexer nas autoridades do sistema. E seguir agora pelo endereço
+ * seguro resolve na hora, ao custo de atravessar o aviso do navegador desta vez.
  *
- * Sem nenhuma das duas, resta dizer o que falta e para quem pedir.
+ * Sem HTTPS nenhum, resta dizer o que falta e para quem pedir.
  */
 function pedirContextoSeguro(campo: HTMLInputElement | HTMLTextAreaElement, botao: HTMLButtonElement): void {
-  if (!CFG.tunel) {
-    if (CFG.https) void continuarDitadoSeguro(campo, botao);
-    else avisar("O microfone precisa de uma conexão segura. O responsável pelo Anotador precisa habilitar o acesso HTTPS.", 7000);
+  if (!CFG.https && !CFG.tunel) {
+    avisar("O microfone precisa de uma conexão segura. O responsável pelo Anotador precisa habilitar o acesso HTTPS.", 7000);
     return;
   }
-  abrirCaminhoSeguro(CFG.tunel,
+  abrirCaminhoSeguro(CFG.tunel ?? null,
     () => void continuarDitadoSeguro(campo, botao),
     () => void continuarDitadoSeguro(campo, botao, true));
 }
 
+/**
+ * Onde cada sistema guarda as autoridades em que confia. Mostrar só o passo do
+ * aparelho em uso: uma lista com os cinco sistemas transforma um passo simples numa
+ * página de manual, e a pessoa ainda precisa achar o dela.
+ */
+function comoInstalarCertificado(): TextoInterface {
+  const agente = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(agente)) {
+    return textoInterface("Abra o arquivo baixado, confirme em Ajustes › Perfil Baixado › Instalar. Depois vá em Ajustes › Geral › Sobre › Ajustes de Confiança em Certificados e ligue o Anotador.");
+  }
+  if (/Android/.test(agente)) {
+    return textoInterface("Abra Ajustes › Segurança › Criptografia e credenciais › Instalar certificado › Certificado CA e escolha o arquivo baixado.");
+  }
+  if (/Macintosh|Mac OS X/.test(agente)) {
+    return textoInterface("Abra o arquivo baixado no Acesso às Chaves, encontre “Anotador UI”, abra-o e, em Confiar, escolha Confiar sempre.");
+  }
+  if (/Windows/.test(agente)) {
+    return textoInterface("Abra o arquivo baixado › Instalar certificado › Usuário atual › Colocar todos os certificados no repositório a seguir › Autoridades de Certificação Raiz Confiáveis. Depois feche e reabra o navegador.");
+  }
+  return textoInterface("Adicione o arquivo baixado às autoridades confiáveis do seu sistema e reabra o navegador.");
+}
+
 let painelTunel: HTMLElement | null = null;
 
-function abrirCaminhoSeguro(comando: string, continuarPorHttps: () => void, continuarPorLocalhost: () => void): void {
+function abrirCaminhoSeguro(comando: string | null, continuarPorHttps: () => void, continuarPorLocalhost: () => void): void {
   painelTunel?.remove();
   const fechar = (): void => {
     painelTunel?.remove();
     painelTunel = null;
   };
   const endereco = "http://localhost:" + (location.port || "80") + location.pathname;
-  const campoComando = h("input", { type: "text", readonly: "", value: comando, class: "an-tunel-comando", "aria-label": textoInterface("Comando para encaminhar a porta") }) as HTMLInputElement;
-  const copiar = h("button", {
-    type: "button",
-    class: "an-btn primario",
-    onclick: () => {
-      campoComando.select();
-      // `navigator.clipboard` não existe fora de contexto seguro — que é exatamente
-      // onde este painel aparece. O caminho antigo ainda funciona, e se nem ele
-      // funcionar o texto fica selecionado para o Ctrl+C.
-      let copiou = false;
-      try { copiou = document.execCommand("copy"); } catch { copiou = false; }
-      avisar(traduzirInterface(copiou ? "Comando copiado. Rode-o no seu computador." : "Selecionei o comando: copie com Ctrl+C."), 5000);
-    },
-  }, textoInterface("Copiar comando"));
+  const campoComando = comando
+    ? h("input", { type: "text", readonly: "", value: comando, class: "an-tunel-comando", "aria-label": textoInterface("Comando para encaminhar a porta") }) as HTMLInputElement
+    : null;
+  const copiar = campoComando
+    ? h("button", {
+        type: "button",
+        class: "an-btn",
+        onclick: () => {
+          campoComando.select();
+          // `navigator.clipboard` não existe fora de contexto seguro — que é exatamente
+          // onde este painel aparece. O caminho antigo ainda funciona, e se nem ele
+          // funcionar o texto fica selecionado para o Ctrl+C.
+          let copiou = false;
+          try { copiou = document.execCommand("copy"); } catch { copiou = false; }
+          avisar(traduzirInterface(copiou ? "Comando copiado. Rode-o no seu computador." : "Selecionei o comando: copie com Ctrl+C."), 5000);
+        },
+      }, textoInterface("Copiar comando"))
+    : null;
   painelTunel = h("div", { class: "an-tunel", role: "dialog", "aria-modal": "false", "aria-label": textoInterface("Liberar o microfone") },
     h("div", { class: "an-tunel-cab" },
-      h("strong", null, textoInterface("Para o microfone, o navegador precisa de localhost")),
+      h("strong", null, textoInterface("O microfone precisa de uma conexão segura")),
       h("button", { type: "button", class: "an-ico", "aria-label": textoInterface("Fechar"), onclick: fechar }, "✕")),
-    h("p", null, textoInterface("Pelo endereço da rede o navegador bloqueia o microfone. Rode este comando no seu computador — ele encaminha a porta por SSH e não pede certificado nenhum:")),
-    h("div", { class: "an-tunel-linha" }, campoComando, copiar),
-    h("p", { class: "an-tunel-depois" }, textoInterface("Com ele rodando, abra {endereco} — o microfone funciona direto.", { endereco })),
-    // Quem já encaminha a porta — por um túnel aberto antes, ou pelo editor que faz
-    // isso sozinho ao abrir o projeto por SSH — não precisa de comando nenhum: só
-    // não sabe que já pode. Este botão é o teste, e a resposta vem na hora. Vai pela
-    // travessia, e não por um link, para as anotações irem junto: localhost é outra
-    // origem, com outro armazenamento.
-    h("button", {
-      type: "button",
-      class: "an-btn an-tunel-abrir",
-      onclick: () => { fechar(); continuarPorLocalhost(); },
-    }, textoInterface("Já encaminhei · abrir por localhost")),
-    h("p", { class: "an-tunel-nota" }, textoInterface("Vale enquanto o comando estiver aberto. Guardado uma vez no ~/.ssh/config da sua máquina, ele vira só `ssh -N anotador`.")),
+    h("p", null, textoInterface("Pelo endereço da rede o navegador bloqueia o microfone. Instale o certificado deste Anotador uma vez e o aviso não volta — neste computador nem no celular.")),
+    CFG.https
+      ? h("a", { class: "an-btn primario an-tunel-certificado", href: CFG.base + "/autoridade.crt", download: "anotador-ui.crt" }, textoInterface("Baixar certificado"))
+      : null,
+    CFG.https ? h("p", { class: "an-tunel-nota" }, comoInstalarCertificado()) : null,
     CFG.https
       ? h("button", {
           type: "button",
           class: "an-btn an-tunel-https",
           onclick: () => { fechar(); continuarPorHttps(); },
-        }, textoInterface("Não tenho SSH · continuar pelo endereço seguro"))
+        }, textoInterface("Continuar pelo endereço seguro"))
       : null,
-    CFG.https ? h("p", { class: "an-tunel-nota" }, textoInterface("Por esse caminho o navegador pede para aceitar o certificado do Anotador na primeira vez.")) : null);
+    CFG.https ? h("p", { class: "an-tunel-nota" }, textoInterface("Sem instalar, dá para seguir assim mesmo: o navegador pede para aceitar o certificado uma vez, em cada navegador.")) : null,
+    // O encaminhamento de porta fica recolhido: resolve sem instalar nada, mas só
+    // serve a quem alcança esta máquina por SSH, e não ao celular. Quem precisa dele
+    // sabe o que está procurando; quem não precisa não deveria tropeçar nele.
+    campoComando && copiar
+      ? h("details", { class: "an-tunel-ssh" },
+          h("summary", null, textoInterface("Prefiro não instalar nada · tenho SSH")),
+          h("p", null, textoInterface("Encaminhe a porta e o endereço passa a ser localhost, que o navegador confia sem certificado nenhum:")),
+          h("div", { class: "an-tunel-linha" }, campoComando, copiar),
+          h("p", { class: "an-tunel-depois" }, textoInterface("Com ele rodando, abra {endereco} — o microfone funciona direto.", { endereco })),
+          // Quem já encaminha a porta — por um túnel aberto antes, ou pelo editor que
+          // faz isso sozinho ao abrir o projeto por SSH — não precisa de comando
+          // nenhum: só não sabe que já pode. Este botão é o teste, e a resposta vem na
+          // hora. Vai pela travessia, e não por um link, para as anotações irem junto:
+          // localhost é outra origem, com outro armazenamento.
+          h("button", {
+            type: "button",
+            class: "an-btn an-tunel-abrir",
+            onclick: () => { fechar(); continuarPorLocalhost(); },
+          }, textoInterface("Já encaminhei · abrir por localhost")),
+          h("p", { class: "an-tunel-nota" }, textoInterface("Vale enquanto o comando estiver aberto. Guardado uma vez no ~/.ssh/config da sua máquina, ele vira só `ssh -N anotador`.")))
+      : null);
   raiz?.append(painelTunel);
-  campoComando.select();
 }
 
 /**

@@ -9,7 +9,7 @@ import { request as pedidoHttps } from "node:https";
 import * as modulo from "node:module";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { homedir, networkInterfaces, userInfo } from "node:os";
+import { homedir, hostname, networkInterfaces, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Writable, type Duplex } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -342,6 +342,12 @@ interface ContextoApi {
   desconectar: () => void;
   ponte: Ponte;
   registro: RegistroConexoes | null;
+  /**
+   * Certificado da autoridade que assina o par TLS desta máquina, quando há TLS.
+   * É o que a rota de download entrega para instalar nos aparelhos — só o
+   * certificado; a chave da autoridade fica na pasta da fila e não sai dela.
+   */
+  autoridadeTls: () => string | null;
   /** última sondagem do alvo, para a página de conexão não martelar o app */
   sondagem: { em: number; alvo: string | null; valor: Sondagem | null };
 }
@@ -1019,6 +1025,20 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
   }
   if (caminho === "/saude" && metodo === "GET") {
     responderJson(res, 200, await saude(ctx));
+    return true;
+  }
+  if (caminho === "/autoridade.crt" && metodo === "GET") {
+    // Entrega só o certificado da autoridade, nunca a chave que assina com ela. Um
+    // certificado é público por natureza: é exatamente o que cada aparelho precisa
+    // guardar para reconhecer as assinaturas desta máquina.
+    const certificado = ctx.autoridadeTls();
+    if (!certificado) {
+      responderJson(res, 404, { ok: false, erro: "Este anotador não está servindo HTTPS, então não há autoridade para instalar." });
+      return true;
+    }
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("content-disposition", 'attachment; filename="anotador-ui.crt"');
+    responderTexto(res, 200, certificado, "application/x-x509-ca-cert");
     return true;
   }
   if (caminho === "/microfone" && metodo === "GET") {
@@ -1762,7 +1782,7 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
   // A chave nasce com a fila e vive ao lado dela; trocar de projeto pela página não a
   // renova, porque quem já estava autorizado continua sendo a mesma pessoa.
   const chave = await chaveDaSessao(caminhoDaChave(fila.dir));
-  const ctx: ContextoApi = { fila, capturasAvulsas: new Map(), continuacoes: new Continuacoes(), chave, avaliacoes, difusor, opcoes, porta: () => portaReal, alvo: () => alvoUrl, conectar, desconectar, ponte, registro, sondagem: { em: 0, alvo: null, valor: null } };
+  const ctx: ContextoApi = { fila, capturasAvulsas: new Map(), continuacoes: new Continuacoes(), chave, avaliacoes, difusor, opcoes, porta: () => portaReal, alvo: () => alvoUrl, conectar, desconectar, ponte, registro, autoridadeTls: () => tls?.ca ?? null, sondagem: { em: 0, alvo: null, valor: null } };
 
   if (opcoes.alvo) {
     const inicial = opcoes.alvo;
@@ -1771,7 +1791,7 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
   }
 
   // O par TLS cobre localhost e os endereços desta máquina; trocar de rede o refaz.
-  const tls = opcoes.https ? await parTls(join(fila.dir, "tls"), ["localhost", "127.0.0.1", "::1", ...ipsDaRede()]) : null;
+  const tls = opcoes.https ? await parTls(join(fila.dir, "tls"), ["localhost", "127.0.0.1", "::1", ...ipsDaRede()], hostname()) : null;
   if (opcoes.https && !tls) throw new Error("não consegui preparar o certificado");
   const tratar = (req: IncomingMessage, res: ServerResponse) => {
     const url = urlDoPedido(req);

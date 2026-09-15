@@ -65,6 +65,38 @@ describe("certificado próprio", { skip: temFerramenta ? false : "openssl não e
     const modo = (await stat(join(dir, "chave.pem"))).mode & 0o077;
     assert.equal(modo, 0, "a chave do servidor não pode ser lida por grupo nem por outros");
   });
+
+  test("a autoridade assina o par, sobrevive à troca de rede e guarda a chave só para o dono", async () => {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const { stat } = await import("node:fs/promises");
+    const executar = promisify(execFile);
+
+    // Pasta própria: a autoridade nasce uma vez e não é refeita, então reaproveitar a
+    // dos outros testes traria o nome que eles escolheram.
+    const { mkdtemp } = await import("node:fs/promises");
+    const proprio = await mkdtemp(join(tmpdir(), "anotador-tls-ca-"));
+    const antes = await parTls(proprio, ["localhost", "127.0.0.1", "192.168.0.10"], "maquina-de-teste");
+    assert.match(antes.ca, /BEGIN CERTIFICATE/);
+    // O que a pessoa instala é a autoridade, e instalar é trabalho manual em cada
+    // aparelho: trocar de rede refaz o certificado do servidor e não pode obrigar
+    // ninguém a repetir a instalação.
+    const depois = await parTls(proprio, ["localhost", "127.0.0.1", "10.0.0.7"], "maquina-de-teste");
+    assert.equal(depois.novo, true, "o certificado do servidor acompanha o endereço");
+    assert.equal(depois.ca, antes.ca, "a autoridade instalada nos aparelhos continua a mesma");
+
+    const { stdout: raiz } = await executar("openssl", ["x509", "-in", join(proprio, "autoridade.pem"), "-noout", "-text"]);
+    assert.match(raiz, /CA:TRUE/, "sem isto o sistema não a aceita como autoridade");
+    assert.match(raiz, /Certificate Sign/);
+    assert.match(raiz, /Anotador UI \(maquina-de-teste\)/, "o nome precisa ser reconhecível na lista de autoridades do sistema");
+
+    // A prova que importa: é a autoridade que valida o certificado servido. Sem ela,
+    // o navegador continuaria avisando.
+    await executar("openssl", ["verify", "-CAfile", join(proprio, "autoridade.pem"), join(proprio, "certificado.pem")]);
+
+    const modo = (await stat(join(proprio, "autoridade-chave.pem"))).mode & 0o077;
+    assert.equal(modo, 0, "quem tiver esta chave assina certificado para qualquer sítio de quem a instalou");
+  });
 });
 
 describe("servidor sob TLS", { skip: temFerramenta ? false : "openssl não encontrado nesta máquina", timeout: 60_000 }, () => {

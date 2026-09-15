@@ -339,7 +339,13 @@ anotador progresso <id> --nota … | nota <id> --texto … | perguntar <id> --te
 - Ferramenta de desenvolvimento: escuta em `0.0.0.0` para você anotar de outro aparelho da rede, e **só aceita como alvo** endereços da própria máquina ou da rede local.
 - **Microfone e câmera exigem conexão segura.** O navegador trata `localhost` como seguro; HTTP pelo endereço da rede não.
 
-  Quando você anota de outra máquina, o caminho mais curto é **encaminhar a porta por SSH**: nenhum certificado entra na história, porque a página passa a ser servida de `localhost`, e o tráfego ainda vai cifrado. Ao pedir o microfone pelo endereço da rede, o próprio anotador mostra o comando pronto:
+  Quando você anota de outra máquina, o anotador oferece dois caminhos ao pedir o microfone.
+
+  O principal é **instalar o certificado dele uma vez em cada aparelho**. O anotador mantém uma autoridade própria na pasta da fila e assina com ela os certificados desta máquina; **Baixar certificado** entrega o certificado raiz, e o painel mostra o passo do seu sistema — Windows, macOS, Android, iOS ou outro. Instalado, o aviso do navegador não volta, nem aqui nem no celular, e a autoridade sobrevive a trocas de rede: o que é refeito quando o IP muda é só o certificado do servidor.
+
+  A autoridade é uma chave capaz de assinar certificado para qualquer nome, então ela nasce só nesta máquina, com permissão para o dono, e **nunca é servida**: a rota `/__anotador/autoridade.crt` entrega o certificado, jamais a chave. Apagar `tls/` na pasta da fila invalida tudo que ela assinou — e obriga a instalar a nova em cada aparelho.
+
+  O segundo caminho não instala nada: **encaminhar a porta por SSH**. A página passa a ser servida de `localhost`, que todo navegador confia sem certificado, e o tráfego ainda vai cifrado. Serve a quem alcança esta máquina por SSH, e não ao celular. O painel mostra o comando pronto:
 
   ```bash
   ssh -N -L 3999:localhost:3999 voce@192.168.0.10
