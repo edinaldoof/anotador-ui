@@ -30,8 +30,29 @@ export function textoDoParecer(p: Parecer): string {
     ...p.perguntas.map(q => q.texto + (q.opcoes.length ? "\n\n" + q.opcoes.map(o => "- " + o).join("\n") : ""))].join("\n\n");
 }
 
-export function saidaPublicaAvaliacao(agente: IdAgente, texto: string): { sessao: string | null; mensagens: string[]; parecer: Parecer | null } {
+export interface AtividadeAvaliacao { ferramenta: string; alvo: string | null; passos: number }
+
+// Só o nome do arquivo, ou o começo do comando: o caminho inteiro não cabe no painel
+// e o diretório de quem roda o servidor não interessa a quem olha a página.
+function alvoDaFerramenta(entrada: unknown): string | null {
+  if (!entrada || typeof entrada !== "object") return null;
+  const campos = entrada as Record<string, unknown>;
+  for (const chave of ["file_path", "path", "notebook_path", "pattern", "command", "url", "query"]) {
+    const valor = campos[chave];
+    if (typeof valor !== "string" || !valor.trim()) continue;
+    const limpo = valor.trim().replace(/\s+/g, " ");
+    const nome = ["file_path", "path", "notebook_path"].includes(chave) ? limpo.split("/").pop() || limpo : limpo;
+    return nome.slice(0, 60);
+  }
+  return null;
+}
+
+export function saidaPublicaAvaliacao(agente: IdAgente, texto: string): { sessao: string | null; mensagens: string[]; parecer: Parecer | null; atividade: AtividadeAvaliacao | null } {
   let sessao: string | null = null, parecer: Parecer | null = null;
+  // O que o agente está fazendo agora. Numa avaliação de oito minutos ele emite duas
+  // frases e quarenta e quatro chamadas de ferramenta: sem isso, a tela fica parada.
+  let atividade: AtividadeAvaliacao | null = null;
+  let passos = 0;
   const mensagens: string[] = [];
   const adicionar = (valor: unknown) => {
     if (typeof valor !== "string" || !valor.trim()) return;
@@ -52,8 +73,13 @@ export function saidaPublicaAvaliacao(agente: IdAgente, texto: string): { sessao
       if (typeof id === "string" && ID_SESSAO_NATIVA.test(id)) sessao = id;
       if (agente === "codex" && o.type === "item.completed" && o.item?.type === "agent_message" && (!o.item.phase || ["commentary", "final_answer", "final"].includes(o.item.phase)) && (!o.item.channel || ["commentary", "final"].includes(o.item.channel))) adicionar(o.item.text);
       else if (agente === "claude" && o.type === "assistant" && Array.isArray(o.message?.content)) {
-        for (const p of o.message.content) if (p.type === "text") adicionar(p.text);
+        for (const p of o.message.content) {
+          if (p.type === "text") adicionar(p.text);
+          else if (p.type === "tool_use" && typeof p.name === "string") { passos++; atividade = { ferramenta: p.name.slice(0, 40), alvo: alvoDaFerramenta(p.input), passos }; }
+        }
       } else if (agente === "opencode" && o.type === "text") adicionar(o.part?.text);
+      // Melhor esforço para agentes que anunciam o passo antes de terminá-lo.
+      else if (o.type === "item.started" && o.item && typeof o.item.type === "string" && o.item.type !== "agent_message") { passos++; atividade = { ferramenta: String(o.item.type).slice(0, 40), alvo: alvoDaFerramenta(o.item), passos }; }
       else if (agente !== "codex" && !o.is_error && !o.error && (o.type === "result" || !o.type && ["gemini", "antigravity"].includes(agente))) adicionar(o.result ?? o.response);
     } catch { /* Banner, ferramentas, eventos parciais e stderr não são mensagens. */ }
   }
@@ -63,5 +89,5 @@ export function saidaPublicaAvaliacao(agente: IdAgente, texto: string): { sessao
     const id = /^session id:\s*([\da-f-]+)\s*$/im.exec(banner)?.[1];
     if (id && ID_SESSAO_NATIVA.test(id)) sessao = id;
   }
-  return { sessao, mensagens: mensagens.slice(-100), parecer };
+  return { sessao, mensagens: mensagens.slice(-100), parecer, atividade };
 }

@@ -670,6 +670,10 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-chat-mensagem.sistema { color: var(--an-texto-2); }
 .an-chat-mensagem strong { display: block; margin-bottom: 5px; font-size: 11px; color: var(--an-texto-2); }
 .an-chat-texto { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font-size: 13px; line-height: 1.6; }
+.an-chat-trabalhando { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 12px; color: var(--an-texto-2); }
+.an-chat-trabalhando-passo:not(:empty) { flex: 1 1 100%; padding-left: 16px; color: var(--an-texto-3, var(--an-texto-2)); opacity: .85; overflow-wrap: anywhere; }
+.an-chat-pulso { flex: none; width: 8px; height: 8px; border-radius: 999px; background: var(--an-ok-claro); animation: an-pulsar 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .an-chat-pulso { animation: none; } }
 .an-chat-vazio { text-align: center; color: var(--an-texto-2); margin: 20px auto; max-width: 320px; line-height: 1.6; }
 .an-chat-vazio > span { display: grid; place-items: center; width: 40px; height: 40px; margin: 0 auto 12px; border-radius: 12px; background: var(--an-superficie-alta); }
 .an-chat-vazio svg { width: 23px; height: 23px; }

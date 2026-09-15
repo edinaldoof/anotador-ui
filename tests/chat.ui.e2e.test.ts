@@ -814,6 +814,38 @@ describe("chat com agentes e modelos", { skip: chrome ? false : "Chromium não e
     assert.equal(await pagina.avaliar<boolean>(`${painel}.hidden`), false, "o chat volta sozinho na tela");
   });
 
+  test("avaliação em curso dá sinal de vida e diz por que o envio está fechado", async () => {
+    await abrir();
+    // Uma avaliação real passa minutos entre uma mensagem e outra. Antes, o painel
+    // ficava idêntico do primeiro ao oitavo minuto e o Enter não fazia nada: quem
+    // escrevia não sabia se a mensagem tinha ido, se o agente tinha morrido, nada.
+    await pagina.avaliar(`(() => {
+      const s = window.chatTeste.sessoes["salva-a"];
+      s.somenteLeitura = true;
+      s.motivoSomenteLeitura = "Avaliação em andamento. Você pode acompanhar as mensagens aqui e conversar ao terminar.";
+      s.avaliacao = {id:"av-1",url:location.href,acompanhando:true,emAndamento:true,desde:new Date(Date.now()-135000).toISOString(),atividade:{ferramenta:"Read",alvo:"project-table.tsx",passos:14}};
+    })()`);
+    await abrirSessao("Revisão do formulário", "Histórico A");
+    await pagina.esperarPor(no(".an-chat-trabalhando"));
+    assert.match(await pagina.avaliar<string>(`${no(".an-chat-trabalhando")}.textContent`), /Claude Code está avaliando a página · 2:\d\d/);
+    assert.equal(await pagina.avaliar<boolean>(`${no(".an-chat-trabalhando")} === ${mensagens}.lastElementChild`), true, "o sinal fica no fim, depois da última mensagem");
+    assert.equal(await pagina.avaliar<string>(`${no(".an-chat-trabalhando-passo")}.textContent`), "lendo project-table.tsx · 14 passos", "o passo atual vem das ferramentas que o agente já chamou");
+    await escrever("Dá para conversar enquanto avalia?");
+    await pagina.pressionar("Enter");
+    assert.deepEqual(await pagina.avaliar("window.chatTeste.envios"), []);
+    assert.equal(await pagina.avaliar<string>(`${no(".an-toast")}.hidden ? "" : ${no(".an-toast")}.textContent`), "Avaliação em andamento. Você pode acompanhar as mensagens aqui e conversar ao terminar.");
+    assert.equal(await pagina.avaliar<string>(`${campo}.value`), "Dá para conversar enquanto avalia?", "o rascunho espera a avaliação terminar");
+    assert.equal(await pagina.avaliar<string>(`${enviar}.title`), "Avaliação em andamento. Você pode acompanhar as mensagens aqui e conversar ao terminar.");
+    await pagina.avaliar(`(() => {
+      const s = window.chatTeste.sessoes["salva-a"];
+      delete s.somenteLeitura; delete s.motivoSomenteLeitura; s.avaliacao.emAndamento = false;
+    })()`);
+    await pagina.esperarPor(`!${no(".an-chat-trabalhando")} && !${enviar}.disabled`);
+    await pagina.pressionar("Enter");
+    await pagina.esperarPor("window.chatTeste.envios.length === 1");
+    assert.equal(await pagina.avaliar<string>("window.chatTeste.envios[0].texto"), "Dá para conversar enquanto avalia?");
+  });
+
   test("falha ao abrir sessão identifica dona, bloqueia envio e recupera conversa e rascunho anteriores", async () => {
     await abrir();
     await abrirSessao("Revisão do formulário", "Histórico A");

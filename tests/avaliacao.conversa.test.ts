@@ -49,6 +49,22 @@ test("Claude e Antigravity retornam revisão pública; mensagens internas e tool
   assert.equal(saidaPublicaAvaliacao("claude", JSON.stringify({ type: "result", is_error: true, result: JSON.stringify(parecer) })).parecer, null);
 });
 
+test("o passo em andamento sai do log de ferramentas, com o nome do arquivo e sem o caminho da máquina", () => {
+  // Numa avaliação de oito minutos o agente emitiu duas frases e quarenta e quatro
+  // chamadas de ferramenta. Sem ler as chamadas, o painel fica oito minutos parado.
+  const saida = saidaPublicaAvaliacao("claude", linhas(
+    { type: "assistant", message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "/home/alguem/segredo/app/painel/page.tsx" } }] } },
+    { type: "assistant", message: { content: [{ type: "text", text: "Conferindo a tabela." }] } },
+    { type: "assistant", parent_tool_use_id: "subagente", message: { content: [{ type: "tool_use", name: "Bash", input: { command: "rm -rf /" } }] } },
+    { type: "assistant", message: { content: [{ type: "tool_use", name: "Grep", input: { pattern: "grid-cols" } }] } },
+  ));
+  assert.deepEqual(saida.atividade, { ferramenta: "Grep", alvo: "grid-cols", passos: 2 });
+  assert.deepEqual(saida.mensagens, ["Conferindo a tabela."]);
+  const leitura = saidaPublicaAvaliacao("claude", linhas({ type: "assistant", message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "/home/alguem/segredo/app/painel/page.tsx" } }] } }));
+  assert.deepEqual(leitura.atividade, { ferramenta: "Read", alvo: "page.tsx", passos: 1 }, "só o nome do arquivo: o caminho de quem roda o servidor não vai para a tela");
+  assert.equal(saidaPublicaAvaliacao("claude", linhas({ type: "result", result: "pronto" })).atividade, null);
+});
+
 test("execuções antigas só leem a sessão no banner e logs persistidos não atravessam a pasta", async () => {
   const id = randomUUID();
   assert.equal(saidaPublicaAvaliacao("codex", "session id: " + id + "\nuser\nconteúdo da página").sessao, id);
