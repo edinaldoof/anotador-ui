@@ -3,6 +3,7 @@
 // nenhuma sessão está ouvindo os eventos.
 
 import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { accessSync, closeSync, constants, openSync, readFileSync, statSync } from "node:fs";
 import { lstat, mkdir, open, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -442,6 +443,24 @@ export interface EscolhaModelo {
   modelo?: string | null;
   esforco?: string | null;
   imagens?: string[];
+  /** ID que o Anotador dita para a sessão nova, em vez de garimpá-lo na saída depois. */
+  sessaoNova?: string | null;
+}
+
+// Só para conversa nova: repetir um ID já usado faz o CLI recusar com "Session ID is
+// already in use". Quem continua uma sessão usa --resume, que é outro caminho.
+let suporteSessaoDitada: Promise<boolean> | null = null;
+export function aceitaSessaoDitada(agente: IdAgente): Promise<boolean> {
+  if (agente !== "claude") return Promise.resolve(false);
+  // O `--session-id` é recente; num CLI antigo a opção desconhecida derruba a execução
+  // inteira. Pergunta uma vez ao próprio binário e guarda a resposta pelo processo.
+  suporteSessaoDitada ??= new Promise<boolean>((resolver) => {
+    const caminho = procurarNoPath("claude");
+    if (!caminho) return resolver(false);
+    execFile(caminho, ["--help"], { encoding: "utf8", timeout: 8000, maxBuffer: 512 * 1024, windowsHide: true },
+      (erro, stdout) => resolver(!erro && /--session-id/.test(stdout)));
+  });
+  return suporteSessaoDitada;
 }
 
 // A API resolve os IDs antes de chegar aqui; caminhos enviados pelo navegador
@@ -469,7 +488,7 @@ export function comandoDaPonte(agente: IdAgente, sessao: string | null, mensagem
         "Bash(anotador *) Bash(node *anotador*) Read Edit Write Grep Glob",
         ...(modelo ? ["--model", modelo] : []),
         ...(esforco ? ["--effort", esforco] : []),
-        ...(sessao ? ["--resume", sessao] : []),
+        ...(sessao ? ["--resume", sessao] : escolha.sessaoNova ? ["--session-id", escolha.sessaoNova] : []),
         mensagem,
       ];
     case "codex": {
@@ -516,7 +535,11 @@ export class Ponte {
   }
 
   async iniciar(pedido: PedidoPonte): Promise<Execucao> {
-    const comando = comandoDaPonte(pedido.agente, pedido.sessao, pedido.mensagem, { modelo: pedido.modelo ?? null, esforco: pedido.esforco ?? null, imagens: pedido.imagens, saidaEstruturada: pedido.saidaEstruturada });
+    // Com o ID ditado, a execução já nasce sabendo qual sessão é a dela: a conversa
+    // aparece ligada ao agente na primeira leitura, sem esperar a primeira resposta
+    // para depois reconhecê-la no meio do log.
+    const sessaoNova = !pedido.sessao && await aceitaSessaoDitada(pedido.agente) ? randomUUID() : null;
+    const comando = comandoDaPonte(pedido.agente, pedido.sessao, pedido.mensagem, { modelo: pedido.modelo ?? null, esforco: pedido.esforco ?? null, imagens: pedido.imagens, saidaEstruturada: pedido.saidaEstruturada, sessaoNova });
     if (!comando) throw new Error(`o agente ${pedido.agente} não tem ponte por linha de comando`);
     const [binario, ...args] = comando;
     if (!binario || !procurarNoPath(binario)) throw new Error(`${binario ?? pedido.agente} não está instalado (não encontrado no PATH)`);
@@ -535,7 +558,7 @@ export class Ponte {
       // descritor a cada lote, mesmo depois de o agente terminar.
       closeSync(fd);
     }
-    const execucao: Execucao = { id, ...(pedido.loteId ? { loteId: pedido.loteId } : {}), agente: pedido.agente, sessao: pedido.sessao, modelo: pedido.modelo ?? null, comando, pid: filho.pid ?? null, iniciadoEm: new Date().toISOString(), terminadoEm: null, codigo: null, log, motivo: pedido.motivo };
+    const execucao: Execucao = { id, ...(pedido.loteId ? { loteId: pedido.loteId } : {}), agente: pedido.agente, sessao: pedido.sessao ?? sessaoNova, modelo: pedido.modelo ?? null, comando, pid: filho.pid ?? null, iniciadoEm: new Date().toISOString(), terminadoEm: null, codigo: null, log, motivo: pedido.motivo };
     this.execucoes.unshift(execucao);
     if (this.execucoes.length > 30) this.execucoes.length = 30;
     const publicar = () => {
