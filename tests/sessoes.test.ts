@@ -26,7 +26,7 @@ function pedido(cifrado = false): IncomingMessage {
 function emitirSessao(cifrado = false): { cookie: string; token: string } {
   const req = pedido(cifrado);
   const res = new ServerResponse(req);
-  definirSessaoNavegador(req, res, CHAVE);
+  definirSessaoNavegador(res, CHAVE);
   const cookie = (res.getHeader("set-cookie") as string[])[0] as string;
   const token = cookie.split(";")[0]?.slice(COOKIE_SESSAO.length + 1) as string;
   return { cookie, token };
@@ -66,17 +66,20 @@ test("sessão HttpOnly dura trinta dias e não contém a chave raiz", (t) => {
   assert.deepEqual(avaliarAcesso({ ip: "192.168.3.20", headers: { cookie: `${COOKIE_SESSAO}=${token}` } }, CHAVE), { ok: false, motivo: "sem-chave" });
 });
 
-test("Secure depende de TLS no socket, preservando outros cookies da resposta", () => {
+test("a sessão vale nos dois protocolos da mesma porta, preservando outros cookies da resposta", () => {
+  // A mesma porta atende TLS e texto claro. Marcar Secure autorizava só metade do
+  // serviço: o menu, que sobe para HTTPS, ficava conectado, e o overlay sobre o app
+  // alvo em HTTP levava 403 ao trocar de agente, avaliar a página ou conversar.
   assert.doesNotMatch(emitirSessao(false).cookie, /; Secure(?:;|$)/);
-  assert.match(emitirSessao(true).cookie, /; Secure(?:;|$)/);
+  assert.doesNotMatch(emitirSessao(true).cookie, /; Secure(?:;|$)/, "sessão emitida em HTTPS também serve o overlay em HTTP");
   const req = pedido();
-  req.headers["x-forwarded-proto"] = "https";
   const res = new ServerResponse(req);
   res.setHeader("set-cookie", "outro=valor; HttpOnly");
-  definirSessaoNavegador(req, res, CHAVE);
+  definirSessaoNavegador(res, CHAVE);
   const cookies = res.getHeader("set-cookie") as string[];
   assert.equal(cookies[0], "outro=valor; HttpOnly");
-  assert.doesNotMatch(cookies[1] as string, /; Secure(?:;|$)/, "cabeçalho recebido não muda o protocolo real");
+  assert.match(cookies[1] as string, /; HttpOnly(?:;|$)/, "continua fora do alcance do JS da página");
+  assert.match(cookies[1] as string, /; SameSite=Strict(?:;|$)/, "continua fora do alcance de outro sítio");
 });
 
 test("cookie válido autoriza navegador remoto sem chave e exige mesma origem", () => {

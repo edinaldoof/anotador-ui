@@ -104,7 +104,9 @@ test("API faz a troca apenas em TLS, entrega sessão segura e nunca encaminha to
     assert.equal(resposta.status, 200);
     assert.deepEqual(JSON.parse(resposta.corpo), { ok: true, ...pedido });
     const cookie = String(resposta.headers["set-cookie"]);
-    assert.match(cookie, /HttpOnly/); assert.match(cookie, /SameSite=Strict/); assert.match(cookie, /Secure/);
+    // Sem Secure de propósito: quem volta do ditado para o app, que o proxy serve em
+    // HTTP, precisa continuar autorizado a enviar o lote que acabou de ditar.
+    assert.match(cookie, /HttpOnly/); assert.match(cookie, /SameSite=Strict/); assert.doesNotMatch(cookie, /; Secure(?:;|$)/);
     const reuso = await tls(BASE + "/voz/retomar", { token });
     assert.equal(reuso.status, 410); assert.equal(reuso.headers["set-cookie"], undefined);
     assert.ok(!reuso.corpo.includes(token));
