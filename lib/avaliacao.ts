@@ -187,7 +187,7 @@ const SINAL = { alta: "⚠", media: "•", baixa: "·" } as const;
 
 export function gerarDossie(
   pedido: PedidoAvaliacao,
-  extras: { porta: number; sistema?: string | null; captura?: string | null; intencao?: IntencaoDeArquivo[]; contexto?: IntencaoDeArquivo | null; respostaDireta?: boolean }
+  extras: { porta: number; sistema?: string | null; tela?: string | null; captura?: string | null; intencao?: IntencaoDeArquivo[]; contexto?: IntencaoDeArquivo | null; respostaDireta?: boolean }
 ): string {
   const p = pedido.pagina;
   const linhas: string[] = [
@@ -222,6 +222,8 @@ export function gerarDossie(
   const componentes = pedido.contexto["componentes"] as string[] | undefined;
   if (componentes?.length) linhas.push("", `Componentes React em cena: ${componentes.join(", ")}`);
   if (extras.sistema) linhas.push("", "## Sistema de design do projeto", "", extras.sistema);
+  // A metade declarada está acima; esta é a pintada, medida em várias larguras.
+  if (extras.tela) linhas.push("", "## Responsividade, grade e alinhamento", "", extras.tela);
 
   if (extras.contexto) {
     linhas.push("", `## Contexto de produto (${extras.contexto.arquivo})`, "", extras.contexto.texto.slice(0, 2500));
@@ -247,6 +249,9 @@ export function gerarDossie(
     "- **Consistência**: componentes com o mesmo papel se parecem? Espaçamento e alinhamento seguem um ritmo?",
     "- **Densidade e respiro**: falta ou sobra ar? O agrupamento reflete o significado?",
     "- **Elegância**: o que destoa do conjunto e por quê.",
+    // Sem medida não há o que apontar, e pedir para olhar uma seção que não existe
+    // é o tipo de instrução que faz o agente inventar o que não viu.
+    ...(extras.tela ? ["- **Larguras**: a seção de responsividade mede o que quebra e o que quase alinha; diga o que fazer com cada achado, ou por que aquele caso é aceitável."] : []),
     "",
     "Regras do parecer: cada item precisa apontar **um elemento concreto** (use o seletor), dizer o **problema** e uma **sugestão aplicável**, na linguagem do projeto (tokens e utilitárias, não valores soltos). Não repita o que já está medido. Se algo estiver bom, não invente defeito — parecer curto e certo vale mais que longo.",
     "",

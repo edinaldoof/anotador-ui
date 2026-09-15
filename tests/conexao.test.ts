@@ -48,6 +48,13 @@ describe("modelos e comando da ponte", () => {
     assert.equal(claude[claude.indexOf("--model") + 1], "opus");
     assert.equal(claude[claude.indexOf("--effort") + 1], "high");
     assert.equal(claude[claude.length - 1], "oi", "a mensagem continua sendo o último argumento");
+    // `--allowedTools <tools...>` é variádico. Sem o `--`, o CLI lê a mensagem como
+    // mais um nome de ferramenta e recusa: "Input must be provided". Com --model no
+    // meio o erro sumia, e era só por isso que a avaliação passava e o lote falhava.
+    assert.equal(claude[claude.length - 2], "--", "a mensagem vem depois do fim das opções");
+    const semModelo = comandoDaPonte("claude", null, "oi") ?? [];
+    assert.ok(semModelo.indexOf("--") > semModelo.indexOf("--allowedTools"), "sem modelo escolhido, nada separa a lista de ferramentas da mensagem além do --");
+    assert.equal(semModelo.at(-1), "oi");
 
     const codex = comandoDaPonte("codex", null, "oi", { modelo: "gpt-6-astra", esforco: "high" }) ?? [];
     assert.deepEqual(codex.slice(0, 4), ["codex", "exec", "--sandbox", "workspace-write"]);
