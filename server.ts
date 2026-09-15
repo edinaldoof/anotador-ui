@@ -1791,7 +1791,15 @@ export async function iniciarServidor(opcoesIniciais: OpcoesServidor): Promise<S
   }
 
   // O par TLS cobre localhost e os endereços desta máquina; trocar de rede o refaz.
-  const tls = opcoes.https ? await parTls(join(fila.dir, "tls"), ["localhost", "127.0.0.1", "::1", ...ipsDaRede()], hostname()) : null;
+  //
+  // A autoridade que o assina fica na pasta-base, e não na pasta deste projeto: ela é
+  // instalada à mão em cada aparelho, e uma por projeto obrigaria a repetir a
+  // instalação a cada app anotado, enchendo a lista de autoridades confiáveis de
+  // entradas quase iguais. O certificado cobre os mesmos endereços em qualquer
+  // projeto, então compartilhá-lo não perde nada. Quem passa `--saida` está isolando
+  // aquela instância de propósito, e aí o certificado a acompanha.
+  const pastaTls = join(opcoes.saida ?? pastaBase(), "tls");
+  const tls = opcoes.https ? await parTls(pastaTls, ["localhost", "127.0.0.1", "::1", ...ipsDaRede()], hostname()) : null;
   if (opcoes.https && !tls) throw new Error("não consegui preparar o certificado");
   const tratar = (req: IncomingMessage, res: ServerResponse) => {
     const url = urlDoPedido(req);

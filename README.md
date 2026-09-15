@@ -343,7 +343,9 @@ anotador progresso <id> --nota … | nota <id> --texto … | perguntar <id> --te
 
   O principal é **instalar o certificado dele uma vez em cada aparelho**. O anotador mantém uma autoridade própria na pasta da fila e assina com ela os certificados desta máquina; **Baixar certificado** entrega o certificado raiz, e o painel mostra o passo do seu sistema — Windows, macOS, Android, iOS ou outro. Instalado, o aviso do navegador não volta, nem aqui nem no celular, e a autoridade sobrevive a trocas de rede: o que é refeito quando o IP muda é só o certificado do servidor.
 
-  A autoridade é uma chave capaz de assinar certificado para qualquer nome, então ela nasce só nesta máquina, com permissão para o dono, e **nunca é servida**: a rota `/__anotador/autoridade.crt` entrega o certificado, jamais a chave. Apagar `tls/` na pasta da fila invalida tudo que ela assinou — e obriga a instalar a nova em cada aparelho.
+  A autoridade vive em `tls/` na **pasta-base** (`~/.claude/anotacoes`, ou `ANOTADOR_HOME`), e não na pasta de cada projeto: você instala uma vez e ela vale para todos os apps que anotar nesta máquina. Com `--saida`, a instância fica isolada e leva o próprio certificado junto.
+
+  Ela é uma chave capaz de assinar certificado para qualquer nome, então nasce só nesta máquina, com permissão para o dono, e **nunca é servida**: a rota `/__anotador/autoridade.crt` entrega o certificado, jamais a chave. Apagar `tls/` invalida tudo que ela assinou — e obriga a instalar a nova em cada aparelho.
 
   O segundo caminho não instala nada: **encaminhar a porta por SSH**. A página passa a ser servida de `localhost`, que todo navegador confia sem certificado, e o tráfego ainda vai cifrado. Serve a quem alcança esta máquina por SSH, e não ao celular. O painel mostra o comando pronto:
 
