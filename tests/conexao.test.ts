@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
-import { comandoDaPonte, modelosDe } from "../lib/agentes.ts";
+import { aceitaSessaoDitada, comandoDaPonte, modelosDe } from "../lib/agentes.ts";
 import { RegistroConexoes } from "../lib/conexoes.ts";
 import { FAMILIAS, estadoDasFontes, pastaDasFontes } from "../lib/fontes.ts";
 import { marcaDe } from "../lib/marcas.ts";
@@ -62,6 +62,25 @@ describe("modelos e comando da ponte", () => {
     assert.deepEqual(comandoDaPonte("antigravity", null, "oi")?.slice(0, 3), ["agy", "--mode", "accept-edits"], "Antigravity usa o CLI agy, não o executável gráfico");
     const semEscolha = comandoDaPonte("claude", null, "oi") ?? [];
     assert.ok(!semEscolha.includes("--model") && !semEscolha.includes("--effort"), "sem escolha, nada é imposto");
+  });
+
+  test("o Anotador dita o ID da sessão nova e nunca o repete numa retomada", async () => {
+    // Antes o ID era garimpado na saída, em três formatos diferentes de três CLIs.
+    // Ditado, a execução já nasce sabendo qual sessão é a dela.
+    const nova = comandoDaPonte("claude", null, "oi", { sessaoNova: "11111111-2222-3333-4444-555555555555" }) ?? [];
+    assert.equal(nova[nova.indexOf("--session-id") + 1], "11111111-2222-3333-4444-555555555555");
+    assert.ok(!nova.includes("--resume"), "sessão nova não retoma nada");
+    // Repetir um ID já usado faz o CLI recusar com "Session ID is already in use":
+    // quem continua uma conversa vai por --resume, e só por ele.
+    const retomada = comandoDaPonte("claude", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "oi", { sessaoNova: "11111111-2222-3333-4444-555555555555" }) ?? [];
+    assert.equal(retomada[retomada.indexOf("--resume") + 1], "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    assert.ok(!retomada.includes("--session-id"), "o ID ditado não acompanha uma retomada");
+    assert.ok(!(comandoDaPonte("claude", null, "oi") ?? []).includes("--session-id"), "sem ID ditado, a chamada segue como antes");
+    // Os outros CLIs não têm a opção: ditar ali derrubaria a execução inteira.
+    for (const agente of ["codex", "gemini", "antigravity", "opencode"] as const) {
+      assert.ok(!(comandoDaPonte(agente, null, "oi", { sessaoNova: "11111111-2222-3333-4444-555555555555" }) ?? []).includes("--session-id"), agente);
+      assert.equal(await aceitaSessaoDitada(agente), false, agente);
+    }
   });
 
   test("o catálogo de modelos traz níveis de raciocínio e marca do provedor", () => {
