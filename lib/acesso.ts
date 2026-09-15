@@ -79,11 +79,28 @@ export function sessaoConfere(token: unknown, chave: string): boolean {
   return tokenConfere(token, chave, "sessao");
 }
 
-/** Só chamar depois de validar uma credencial, convite ou pedido da própria máquina. */
-export function definirSessaoNavegador(req: IncomingMessage, res: ServerResponse, chave: string): void {
+/**
+ * Só chamar depois de validar uma credencial, convite ou pedido da própria máquina.
+ *
+ * A sessão sai sem `Secure` porque a mesma porta atende os dois protocolos: o
+ * multiplexador entrega o handshake TLS a um servidor e o texto claro a outro, de
+ * propósito, para o navegador ter HTTPS e o agente local ter `ws://` sem trocar de
+ * porta. `Secure` dividia esse serviço único em duas metades incompatíveis. Quem abria
+ * o link de acesso pela página de conexão — que sobe para HTTPS — ficava autorizado só
+ * lá, enquanto o overlay, que roda sobre o app alvo servido em HTTP, levava 403 em tudo
+ * que muda estado: trocar de agente, avaliar a página, conversar, enviar lote. E não
+ * havia conserto pela interface, porque pedir outro link caía na mesma página HTTPS e
+ * emitia outra sessão pela metade.
+ *
+ * O que `Secure` guardaria aqui já viaja em claro de qualquer modo assim que a pessoa
+ * usa o endereço HTTP: as anotações, os prints, o overlay e as respostas do agente.
+ * Quem consegue ler esse tráfego na rede local não precisa do cookie para nada, e a
+ * sessão continua `HttpOnly` (fora do alcance do JS da página) e `SameSite=Strict`
+ * (fora do alcance de outro sítio).
+ */
+export function definirSessaoNavegador(res: ServerResponse, chave: string): void {
   const token = assinarToken("sessao", chave, VIDA_SESSAO_SEGUNDOS);
-  const cifrado = (req.socket as { encrypted?: boolean }).encrypted === true;
-  const cookie = `${COOKIE_SESSAO}=${token}; Path=/__anotador; HttpOnly; SameSite=Strict; Max-Age=${VIDA_SESSAO_SEGUNDOS}${cifrado ? "; Secure" : ""}`;
+  const cookie = `${COOKIE_SESSAO}=${token}; Path=/__anotador; HttpOnly; SameSite=Strict; Max-Age=${VIDA_SESSAO_SEGUNDOS}`;
   const atuais = res.getHeader("set-cookie");
   res.setHeader("set-cookie", [...(Array.isArray(atuais) ? atuais : atuais ? [String(atuais)] : []), cookie]);
 }
