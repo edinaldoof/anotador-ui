@@ -42,3 +42,17 @@ test("servidor sem TLS não anuncia janela HTTPS disponível", async () => {
     assert.match((await pedir(proxy.origem + "/__anotador/overlay.js")).corpo, /"https":false/);
   } finally { await proxy.fechar(); await alvo.fechar(); }
 });
+
+test("o anotador oferece o caminho por localhost, que libera o microfone sem certificado", async () => {
+  const alvo = await criarAlvoFalso();
+  const proxy = await criarProxy(alvo, { https: false });
+  try {
+    const saude = JSON.parse((await pedir(proxy.origem + "/__anotador/saude")).corpo) as { tunel: string | null };
+    // Numa máquina sem endereço de rede não há de onde encaminhar: o campo vem nulo e
+    // a interface cai no aviso antigo em vez de ensinar um comando que não serve.
+    if (saude.tunel === null) return;
+    assert.match(saude.tunel, new RegExp(`^ssh -N -L ${proxy.porta}:localhost:${proxy.porta} [^@\\s]+@\\d+\\.\\d+\\.\\d+\\.\\d+$`));
+    const overlay = await pedir(proxy.origem + "/__anotador/overlay.js");
+    assert.ok(overlay.corpo.includes(saude.tunel), "o overlay precisa do comando para oferecê-lo quando o microfone é pedido fora de contexto seguro");
+  } finally { await proxy.fechar(); await alvo.fechar(); }
+});

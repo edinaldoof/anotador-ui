@@ -221,6 +221,36 @@ button { cursor: pointer; border: 0; background: transparent; }
 .an-fila .item.lote { cursor: pointer; }
 .an-fila .item.lote:hover { background: var(--an-superficie); }
 .an-fila .item.lote .perg { color: var(--an-aviso-claro); font-size: 12px; }
+.an-fila .item.lote .an-lote-remover {
+  flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: var(--an-texto-2); font: inherit; font-size: 12px; line-height: 1;
+  cursor: pointer; opacity: 0; transition: opacity .12s ease, background .12s ease, color .12s ease;
+}
+.an-fila .item.lote:hover .an-lote-remover, .an-fila .item.lote .an-lote-remover:focus-visible { opacity: 1; }
+.an-fila .item.lote .an-lote-remover:hover { background: var(--an-superficie-alta); color: var(--an-sobre-cor); }
+/* Sem mouse não há hover: no toque o botão fica sempre à vista, senão não existe. */
+@media (hover: none) { .an-fila .item.lote .an-lote-remover { opacity: 1; } }
+
+/* Caminho até um contexto seguro, quando o microfone é pedido pelo endereço da rede. */
+.an-tunel {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; pointer-events: auto;
+  display: flex; flex-direction: column; gap: 12px; padding: 20px;
+  background: var(--an-fundo); color: var(--an-sobre-cor);
+  border: 1px solid var(--an-borda); border-radius: 18px; box-shadow: var(--an-sombra-alta);
+}
+.an-tunel .an-tunel-cab { display: flex; gap: 12px; align-items: flex-start; }
+.an-tunel .an-tunel-cab strong { flex: 1; font-size: 15px; line-height: 1.3; }
+.an-tunel p { margin: 0; color: var(--an-texto-2); font-size: 13px; line-height: 1.5; }
+.an-tunel .an-tunel-linha { display: flex; flex-wrap: wrap; gap: 8px; }
+.an-tunel .an-tunel-comando {
+  flex: 1 1 260px; min-width: 0; padding: 10px 12px;
+  background: var(--an-superficie); color: var(--an-sobre-cor);
+  border: 1px solid var(--an-borda); border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px;
+}
+.an-tunel .an-tunel-depois { color: var(--an-ok-claro); }
+.an-tunel .an-tunel-nota { font-size: 12px; }
 
 .an-conversa {
   position: fixed; left: 14px; bottom: 14px; width: 420px; max-height: min(74vh, 680px); pointer-events: auto;

@@ -337,7 +337,26 @@ anotador progresso <id> --nota … | nota <id> --texto … | perguntar <id> --te
 ## Segurança e limites
 
 - Ferramenta de desenvolvimento: escuta em `0.0.0.0` para você anotar de outro aparelho da rede, e **só aceita como alvo** endereços da própria máquina ou da rede local.
-- **Microfone e câmera exigem conexão segura.** O navegador trata `localhost` como seguro; HTTP pelo endereço da rede não. Com `anotador servir --https`, clicar no microfone continua na mesma aba por HTTPS, preservando anotações, prints e o rascunho, agente, modelo e sessão do chat. A retomada verifica o acesso do navegador antes de retornar ao app. Se necessário, o navegador pede para aceitar o certificado e permitir o microfone. A transferência autenticada expira em cinco minutos e só pode ser usada uma vez; recarregar a página não liga o microfone sozinho.
+- **Microfone e câmera exigem conexão segura.** O navegador trata `localhost` como seguro; HTTP pelo endereço da rede não.
+
+  Quando você anota de outra máquina, o caminho mais curto é **encaminhar a porta por SSH**: nenhum certificado entra na história, porque a página passa a ser servida de `localhost`, e o tráfego ainda vai cifrado. Ao pedir o microfone pelo endereço da rede, o próprio anotador mostra o comando pronto:
+
+  ```bash
+  ssh -N -L 3999:localhost:3999 voce@192.168.0.10
+  ```
+
+  Com ele rodando, abra `http://localhost:3999` e o microfone funciona direto. Para não repetir o comando, guarde-o uma vez em `~/.ssh/config` na sua máquina:
+
+  ```
+  Host anotador
+    HostName 192.168.0.10
+    User voce
+    LocalForward 3999 localhost:3999
+  ```
+
+  A partir daí, `ssh -N anotador` levanta o túnel. Quem abre o projeto pelo **Remote-SSH do VS Code** não precisa de nada disso: o editor já encaminha a porta para `localhost` sozinho. O celular, que não tem SSH, continua pelo endereço HTTPS.
+
+  Com `anotador servir --https`, clicar no microfone continua na mesma aba por HTTPS, preservando anotações, prints e o rascunho, agente, modelo e sessão do chat. A retomada verifica o acesso do navegador antes de retornar ao app. Se necessário, o navegador pede para aceitar o certificado e permitir o microfone. A transferência autenticada expira em cinco minutos e só pode ser usada uma vez; recarregar a página não liga o microfone sozinho.
 
   Com a transcrição local instalada, o botão grava somente o microfone por até dois minutos. Escolha o idioma ao lado do botão: português, inglês, espanhol, francês, alemão ou italiano. A escolha fica guardada e acompanha a retomada por HTTPS. O servidor usa Whisper Small multilíngue em CPU, com idioma explícito e sem traduzir a fala. O modelo permanece carregado por alguns minutos para reduzir a espera entre gravações.
 

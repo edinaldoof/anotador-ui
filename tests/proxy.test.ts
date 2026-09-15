@@ -60,9 +60,12 @@ test("o overlay é servido como JavaScript sem tipos e com a configuração embu
   assert.match(r.headers["content-type"] ?? "", /javascript/);
   const configuracao = r.corpo.match(/window\.__ANOTADOR_CFG = (\{[^\n]+\});/);
   assert.ok(configuracao, "configuração serializada em JSON");
-  const { marca, ...cfg } = JSON.parse(configuracao[1]!);
+  // `tunel` sai de fora da comparação porque depende da máquina: o usuário do sistema
+  // e o endereço de rede, que numa máquina sem rede nem existe.
+  const { marca, tunel, ...cfg } = JSON.parse(configuracao[1]!);
   assert.deepEqual(cfg, { base: BASE, capturas: false, https: false, nome: "teste", agente: "Claude", modelo: null, norma: null });
   assert.match(marca, /^<svg\b/);
+  assert.ok(tunel === null || /^ssh -N -L \d+:localhost:\d+ [^@\s]+@\S+$/.test(tunel), "comando de encaminhamento, ou nada quando não há endereço de rede");
   // O nonce não cabe na configuração, que é cacheada e serve a qualquer página: ele vem
   // da própria tag deste script, que quem injetou já carimbou com o nonce do documento.
   assert.match(r.corpo, /window\.__ANOTADOR_NONCE = \(document\.currentScript && document\.currentScript\.nonce\)/);
