@@ -235,7 +235,7 @@ function renderizarExplorador(): void {
   const alca = h("span", { class: "an-alca", html: ICONES.alca, title: "Arrastar" });
   const sistema = design.sistema;
   const resumo = sistema
-    ? `${sistema.tokens.length} tokens · passo de ${sistema.espaco.base ?? "?"}px · ${contarFora()} fora do sistema`
+    ? [`${sistema.tokens.length} tokens`, sistema.espaco.base ? `passo de ${sistema.espaco.base}px` : "", `${contarFora()} fora do sistema`].filter(Boolean).join(" · ")
     : design.erro
       ? design.erro
       : "lendo o projeto…";
