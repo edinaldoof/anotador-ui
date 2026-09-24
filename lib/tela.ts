@@ -36,7 +36,7 @@ export interface AchadoTela {
 // antes de chegar ao navegador. A única interpolação é a de propósito, CAMINHO_JS.
 
 /** Seletor curto e legível do elemento, relativo ao body. Compartilhado pelos scripts. */
-const CAMINHO_JS = `
+export const CAMINHO_JS = `
   const caminho = (el) => {
     const partes = [];
     for (let n = el; n && n.nodeType === 1 && partes.length < 3; n = n.parentElement) {
@@ -107,6 +107,17 @@ export const SCRIPT_MEDIDA = `(() => {
   const vw = innerWidth;
 ${CAMINHO_JS}
   const blocos = [], vazamentos = [], miudos = [], alvos = [], todosAlvos = [];
+  // Tabela larga dentro de um contêiner com rolagem própria é o padrão responsivo certo,
+  // não vazamento: o retângulo dela passa da tela, mas o contêiner corta e a página não
+  // rola de lado. Só vaza quem nenhum ancestral dentro da tela recorta.
+  const recortado = (el) => {
+    for (let n = el.parentElement; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+      if (getComputedStyle(n).overflowX === "visible") continue;
+      const q = n.getBoundingClientRect();
+      if (q.right <= vw + 1 && q.left >= -1) return true;
+    }
+    return false;
+  };
   const SELETOR_ALVO = "a[href], button, input:not([type=hidden]), select, textarea, summary, [role=button], [role=link], [role=tab], [role=checkbox], [role=radio], [role=switch], [role=menuitem]";
   let menorTexto = Infinity, vistos = 0;
   for (const el of document.querySelectorAll("body *")) {
@@ -120,7 +131,7 @@ ${CAMINHO_JS}
     // Vazamento: só quem começa a passar da borda. Se o pai já vaza, os filhos vão
     // arrastados junto e repetir cada um deles só encheria o relatório de eco.
     const excesso = Math.round(Math.max(r.right - vw, -r.left));
-    if (excesso > 1 && cs.position !== "fixed") {
+    if (excesso > 1 && cs.position !== "fixed" && !recortado(el)) {
       const pai = el.parentElement, rp = pai ? pai.getBoundingClientRect() : null;
       if (!rp || (rp.right - vw <= 1 && rp.left >= -1)) vazamentos.push({ alvo: caminho(el), excesso });
     }
@@ -133,7 +144,9 @@ ${CAMINHO_JS}
       }
     }
     if (el.matches(SELETOR_ALVO) && !el.disabled && el.getAttribute("aria-disabled") !== "true") todosAlvos.push({ el, r });
-    if (r.width >= 64 && r.height >= 16) blocos.push({ alvo: caminho(el), esquerda: Math.round(r.left), direita: Math.round(r.right) });
+    // Grade é o que se vê: borda fora da tela — de quem vaza ou de quem rola num contêiner —
+    // não forma coluna nem "quase alinha" com nada.
+    if (r.width >= 64 && r.height >= 16 && r.left >= -1 && r.right <= vw + 1) blocos.push({ alvo: caminho(el), esquerda: Math.round(r.left), direita: Math.round(r.right) });
   }
 ${ALVOS_WCAG_JS}
   const alvosAvaliados = avaliarAlvos(todosAlvos, SELETOR_ALVO);

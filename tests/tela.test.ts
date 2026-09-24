@@ -78,6 +78,7 @@ test("a medida roda na página e encontra o que só existe depois de renderizar"
       <div class="coluna">um</div><div class="coluna">dois</div><div class="coluna">três</div>
       <div class="torto">quase na coluna</div>
       <div class="larga">tabela que não cabe</div>
+      <div style="overflow-x: auto; margin-left: 24px; width: 300px"><table style="width: 900px"><tr><td>tabela larga com rolagem própria</td></tr></table></div>
       <p class="miudo">aviso em nove pixels</p>
       <div><button class="fechar">x</button><button class="irmao">y</button></div>
       <div><button class="isolado">z</button></div>`);
@@ -88,7 +89,7 @@ test("a medida roda na página e encontra o que só existe depois de renderizar"
 
     assert.equal(m.largura, 390);
     assert.ok(m.rolagemHorizontal > 500, `a página rola de lado: ${m.rolagemHorizontal}px`);
-    assert.deepEqual(m.vazamentos.map((v) => v.alvo), ["div.larga"], "só o bloco que vaza, não a cadeia de pais arrastados junto");
+    assert.deepEqual(m.vazamentos.map((v) => v.alvo), ["div.larga"], "só o bloco que vaza — nem a cadeia de pais, nem a tabela que rola dentro do próprio contêiner");
     assert.equal(m.textoMiudo.menor, 9);
     assert.deepEqual(m.textoMiudo.exemplos, ["p.miudo (9px)"]);
     // Dois colados reprovam um ao outro; o isolado tem espaço em volta e é isento.

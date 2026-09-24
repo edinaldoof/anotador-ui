@@ -1528,8 +1528,13 @@ function montarBarra(raizUi: HTMLDivElement): void {
       fecharUrlDaBarra?.();
       if (!ui.fila.hidden) posicionarFila();
       posicionarAgentes();
+      atualizarTopoPaineis();
     },
   });
+  // Quebra de linha muda a altura da barra sem nenhum resize de janela — o texto de estado
+  // cresce, o idioma troca. O ResizeObserver avisa depois do layout e antes da pintura.
+  new ResizeObserver(() => atualizarTopoPaineis()).observe(ui.barra);
+  atualizarTopoPaineis();
 }
 
 // ---------------------------------------------------------------------------
@@ -1838,9 +1843,23 @@ function aplicarPosicao(el: HTMLElement, pos: Posicao): void {
   el.style.transform = "none";
 }
 
-function restaurarPosicao(el: HTMLElement, chave: string): void {
+function restaurarPosicao(el: HTMLElement, chave: string): boolean {
   const pos = lerPosicao(chave);
   if (pos) aplicarPosicao(el, limitar(el, pos));
+  return !!pos;
+}
+
+// Onde os painéis grandes começam quando a pessoa não escolheu outra posição: logo abaixo
+// da barra de verdade — que no celular quebra em três linhas. O `top: 62px` fixo supunha
+// uma linha só e, a 390px, cobria "Selecionar/Navegar" e "Enviar". Só a altura da barra
+// vem do JavaScript, numa variável; topo e altura máxima o CSS calcula, com o `vh` do
+// momento. Gravar a altura máxima em pixels deixava o painel maior que a janela até o
+// próximo resize — foi o que um teste pegou.
+function atualizarTopoPaineis(): void {
+  if (!raiz || !ui.barra) return;
+  const barra = ui.barra.getBoundingClientRect();
+  const noTopo = ui.barra.checkVisibility() && barra.bottom > 0 && barra.top < Math.min(170, innerHeight / 3);
+  raiz.style.setProperty("--an-topo-paineis", (noTopo ? Math.max(12, Math.round(barra.bottom + 8)) : 16) + "px");
 }
 
 function tornarArrastavel(el: HTMLElement, alcas: HTMLElement[], chave: string, opcoes: OpcoesArrasto = {}): void {
@@ -1921,6 +1940,7 @@ function tornarArrastavel(el: HTMLElement, alcas: HTMLElement[], chave: string, 
 }
 
 function ajustarFlutuantes(): void {
+  atualizarTopoPaineis();
   const flutuantes: Array<[HTMLElement | null, string]> = [
     [ui.barra, "barra"],
     [ui.painel, "painel"],
@@ -3290,8 +3310,17 @@ function registrar(a: AnotacaoLocal, el: ElementoEstilizavel, propriedade: strin
   else a.alteracoes.push(registro);
 }
 
+let sequenciaRotulos = 0;
 function linha(rotulo: string, campo: HTMLElement, sub?: string, larga = false): HTMLDivElement {
-  return h("div", { class: "an-linha" + (larga ? " larga" : "") }, h("label", null, textoInterface(rotulo), sub ? h("span", { class: "sub" }, textoInterface(sub)) : null), campo);
+  const id = "an-rotulo-" + ++sequenciaRotulos;
+  const label = h("label", { id }, textoInterface(rotulo), sub ? h("span", { class: "sub" }, textoInterface(sub)) : null);
+  // O rótulo visível ficava ao lado do campo sem vínculo nenhum: para o leitor de tela o
+  // campo não tinha nome — a mesma falha que a auditoria acusa nas páginas dos outros.
+  // aria-labelledby acompanha a troca de idioma; campo que já se nomeia (os quatro lados,
+  // com título por lado) fica como está.
+  const controles = campo.matches("input, select, textarea") ? [campo] : [...campo.querySelectorAll("input, select, textarea")];
+  for (const c of controles) if (!c.hasAttribute("aria-label") && !c.hasAttribute("aria-labelledby") && !c.hasAttribute("title")) c.setAttribute("aria-labelledby", id);
+  return h("div", { class: "an-linha" + (larga ? " larga" : "") }, label, campo);
 }
 
 function secao(...filhos: Filho[]): HTMLDivElement {

@@ -106,7 +106,13 @@ describe("paleta de cores integrada e rolagem do chat", { skip: chrome ? false :
 
   for (const [largura, altura] of [[1200, 800], [390, 640], [320, 360]] as const) {
     test(`paleta cabe em ${largura}×${altura} e mantém controles acessíveis`, async () => {
-      await pagina.definirViewport(largura, altura, 1); await abrir();
+      await pagina.definirViewport(largura, altura, 1);
+      // O painel começa abaixo da barra de verdade, e quando a janela estreita a barra
+      // quebra em mais linhas: o ResizeObserver reposiciona o painel no quadro seguinte.
+      // Dois quadros garantem o layout assentado antes de mirar o clique — sem isso o
+      // teste mira na posição de antes e clica onde o botão já não está.
+      await pagina.avaliar("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      await abrir();
       const dentro = `(() => { const r=${paleta}.getBoundingClientRect(); return r.left>=7 && r.top>=7 && r.right<=innerWidth-7 && r.bottom<=innerHeight-7 && ${paleta}.scrollWidth<=${paleta}.clientWidth; })()`;
       assert.equal(await pagina.avaliar<boolean>(dentro), true);
       await escreverHex("#ABCDEF"); assert.equal(await corPagina(), "rgb(171, 205, 239)");
