@@ -167,22 +167,45 @@ async function medirAcessibilidade(pagina: Pagina, largura: number, altura: numb
 }
 
 /** Abre a URL num Chromium temporário e mede o que a página faz em cada largura. */
-export async function medirUrl(url: string, opcoes: { chrome?: string | null; larguras?: readonly number[]; timeoutMs?: number } = {}): Promise<{ medidas: MedidaTela[]; acessibilidade: AcessibilidadeTela | null }> {
+export interface MedidaDeUrl {
+  medidas: MedidaTela[];
+  acessibilidade: AcessibilidadeTela | null;
+  /** Onde o navegador terminou. Pode não ser a URL pedida. */
+  urlMedida: string;
+  redirecionada: boolean;
+  /** A página final tem campo de senha: quase sempre, a tela de login de uma rota protegida. */
+  pareceLogin: boolean;
+}
+
+/** Mesma página para quem lê: ignora barra final e âncora. */
+function mesmaPagina(a: string, b: string): boolean {
+  try {
+    const x = new URL(a), y = new URL(b);
+    return x.origin === y.origin && x.pathname.replace(/\/+$/, "") === y.pathname.replace(/\/+$/, "") && x.search === y.search;
+  } catch { return a === b; }
+}
+
+export async function medirUrl(url: string, opcoes: { chrome?: string | null; larguras?: readonly number[]; timeoutMs?: number } = {}): Promise<MedidaDeUrl> {
   let alvo: URL;
   try { alvo = new URL(url); } catch { throw new Error("Informe uma URL HTTP ou HTTPS válida."); }
   if (!/^https?:$/.test(alvo.protocol)) throw new Error("A medida aceita somente URLs HTTP ou HTTPS.");
   if (alvo.username || alvo.password) throw new Error("A URL não pode conter usuário ou senha.");
   const larguras = (opcoes.larguras?.length ? opcoes.larguras : LARGURAS_PADRAO).filter((l) => Number.isInteger(l) && l >= 240 && l <= 3840).slice(0, 6);
   if (!larguras.length) throw new Error("As larguras devem ser inteiros entre 240 e 3840 px.");
-  const tentar = async (): Promise<{ medidas: MedidaTela[]; acessibilidade: AcessibilidadeTela | null }> => {
+  const tentar = async (): Promise<MedidaDeUrl> => {
     const navegador = await Navegador.abrir({ caminho: opcoes.chrome ?? null });
     try {
       const pagina = await navegador.novaPagina();
       await pagina.definirViewport(larguras[0] ?? 1280, 800, 1);
       await pagina.navegar(alvo.href, 20_000);
       await pagina.esperar(700);
+      // O navegador daqui não tem a sessão de ninguém: rota protegida manda para o login,
+      // e medir o login achando que é o painel é o erro que ninguém percebe. Registra
+      // onde a navegação terminou antes de medir qualquer coisa.
+      const urlMedida = await pagina.avaliar<string>("location.href");
+      const pareceLogin = await pagina.avaliar<boolean>(`!!document.querySelector('input[type="password"]')`);
       const medidas = await medirLarguras(pagina, larguras, 800);
-      return { medidas, acessibilidade: await medirAcessibilidade(pagina, Math.max(...larguras), 800) };
+      return { medidas, acessibilidade: await medirAcessibilidade(pagina, Math.max(...larguras), 800), urlMedida, redirecionada: !mesmaPagina(urlMedida, alvo.href), pareceLogin };
     } finally {
       await navegador.fechar();
     }

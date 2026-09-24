@@ -394,7 +394,9 @@ describe("overlay no Chromium", { skip: chrome ? false : "Chromium não encontra
     assert.match(contraste?.evidencia ?? "", /^[12]\.\d+:1 onde a norma pede 4\.5:1/, "a evidência traz a razão medida");
     assert.ok(contraste?.seletor, "todo achado aponta um seletor para o agente localizar no código");
     assert.ok(
-      regras.get("alvo de toque pequeno")?.some((a) => a.evidencia === "16×16px, abaixo de 24×24"),
+      // Reprovado pelo motivo da norma: pequeno E colado no botão ao lado. Sozinho, com
+      // espaço em volta, o 2.5.8 o aceitaria.
+      regras.get("alvo de toque pequeno")?.some((a) => /^16×16px, abaixo de 24×24, e o círculo de 24px em volta encosta em /.test(a.evidencia)),
       `o botão de 16px precisa aparecer entre os alvos pequenos: ${JSON.stringify(regras.get("alvo de toque pequeno"))}`
     );
     assert.ok(r.medidos > 10, `mediu ${r.medidos} elementos`);

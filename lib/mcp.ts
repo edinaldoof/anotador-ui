@@ -176,9 +176,15 @@ export function criarServidorMcp(opcoes: OpcoesMcp): { tratar(mensagem: unknown)
         const url = args["url"], larguras = args["larguras"];
         if (typeof url !== "string") return resultado("informe a URL http(s) da tela", true);
         if (larguras !== undefined && (!Array.isArray(larguras) || !larguras.every((l) => Number.isInteger(l)))) return resultado("larguras deve ser uma lista de inteiros", true);
-        const { medidas, acessibilidade } = await medirUrl(url, { chrome: opcoes.chrome ?? null, ...(larguras ? { larguras: larguras as number[] } : {}) });
-        if (!medidas.length) return resultado("a página abriu, mas nenhuma largura pôde ser medida", true);
-        return resultado({ url, medidas, acessibilidade, achados: achadosDaTela(medidas, acessibilidade) });
+        const r = await medirUrl(url, { chrome: opcoes.chrome ?? null, ...(larguras ? { larguras: larguras as number[] } : {}) });
+        if (!r.medidas.length) return resultado("a página abriu, mas nenhuma largura pôde ser medida", true);
+        // O aviso vem primeiro no objeto: é a primeira coisa que o agente lê. Redirecionado
+        // para uma tela com senha, o resultado não responde o que foi pedido — é erro, não
+        // medida: o agente precisa parar, não resumir a tela de login como se fosse o painel.
+        const aviso = r.redirecionada
+          ? `A página pedida (${url}) redirecionou para ${r.urlMedida}${r.pareceLogin ? ", que tem campo de senha — quase certamente o login de uma rota protegida" : ""}. O que segue é a medida de ${r.urlMedida}, não da página pedida. Este navegador não tem a sessão de ninguém; para medir uma página que exige login, use a avaliação no overlay do Anotador, que mede o DOM de quem já está logado.`
+          : null;
+        return resultado({ ...(aviso ? { aviso } : {}), urlPedida: url, urlMedida: r.urlMedida, medidas: r.medidas, acessibilidade: r.acessibilidade, achados: achadosDaTela(r.medidas, r.acessibilidade) }, r.redirecionada && r.pareceLogin);
       }
       case "conferir_arquivos_de_agente": {
         const { arquivos, sistema: s } = await sistema();

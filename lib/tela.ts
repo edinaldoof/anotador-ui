@@ -16,7 +16,8 @@ export interface MedidaTela {
   rolagemHorizontal: number;
   vazamentos: Array<{ alvo: string; excesso: number }>;
   textoMiudo: { total: number; menor: number; exemplos: string[] };
-  alvosPequenos: { total: number; exemplos: string[] };
+  /** Abaixo de 24×24 e sem exceção do WCAG 2.5.8; `isentos` conta os que a norma dispensa. */
+  alvosPequenos: { total: number; exemplos: string[]; isentos?: number };
   /** Bordas esquerdas que três ou mais blocos compartilham: as colunas de fato da página. */
   colunas: number[];
   quaseAlinhados: Array<{ alvo: string; borda: string; valor: number; coluna: number }>;
@@ -52,10 +53,61 @@ const CAMINHO_JS = `
     return partes.join(" > ").slice(0, 120);
   };`;
 
+/**
+ * WCAG 2.2, critério 2.5.8 (AA): alvo apontável de pelo menos 24×24 px, com as duas
+ * exceções que dá para verificar olhando a página. Sem elas a regra acusa o que a norma
+ * aceita — foi o que aconteceu com "Criar conta" e "Esqueci minha senha" no Pré-Projetos.
+ *
+ * - Em linha: o alvo está numa frase. Só conta alvo `display: inline` (link no meio do
+ *   texto), e só conta o texto do bloco que não pertence a outro alvo — senão um botão ao
+ *   lado de um título, ou numa barra de botões com rótulo, passaria por "frase".
+ * - Espaçamento: um círculo de 24 px centrado no alvo não toca outro alvo nem o círculo
+ *   de outro alvo pequeno.
+ *
+ * As demais exceções — equivalente na mesma página, controle do navegador, essencial —
+ * dependem de intenção e não são verificadas: o achado continua sendo "a conferir".
+ */
+export const ALVOS_WCAG_JS = `
+  const avaliarAlvos = (todos, seletor) => {
+    const blocoDe = (el) => { let n = el.parentElement; while (n && n !== document.body && /^(inline|inline-block|contents)$/.test(getComputedStyle(n).display)) n = n.parentElement; return n; };
+    const emFrase = (el) => {
+      if (getComputedStyle(el).display !== "inline") return false;
+      const bloco = blocoDe(el);
+      if (!bloco) return false;
+      let resto = "";
+      const passeio = document.createTreeWalker(bloco, NodeFilter.SHOW_TEXT);
+      for (let t = passeio.nextNode(); t; t = passeio.nextNode()) {
+        const pai = t.parentElement;
+        if (pai && pai.closest(seletor)) continue;
+        resto += t.nodeValue;
+        if (resto.replace(/\\s+/g, "").length >= 3) break;
+      }
+      return /[\\p{L}\\p{N}]{2,}/u.test(resto);
+    };
+    const pequeno = (r) => r.width < 24 || r.height < 24;
+    const falhas = []; let isentos = 0;
+    for (const p of todos) {
+      if (!pequeno(p.r)) continue;
+      if (emFrase(p.el)) { isentos++; continue; }
+      const cx = p.r.left + p.r.width / 2, cy = p.r.top + p.r.height / 2;
+      let vizinho = null;
+      for (const o of todos) {
+        if (o.el === p.el || o.el.contains(p.el) || p.el.contains(o.el)) continue;
+        const q = o.r;
+        const dx = Math.max(q.left - cx, 0, cx - q.right), dy = Math.max(q.top - cy, 0, cy - q.bottom);
+        const ox = q.left + q.width / 2, oy = q.top + q.height / 2;
+        if (Math.hypot(dx, dy) < 12 || (pequeno(q) && Math.hypot(ox - cx, oy - cy) < 24)) { vizinho = o.el; break; }
+      }
+      if (vizinho) falhas.push({ el: p.el, r: p.r, vizinho }); else isentos++;
+    }
+    return { falhas, isentos };
+  };`;
+
 export const SCRIPT_MEDIDA = `(() => {
   const vw = innerWidth;
 ${CAMINHO_JS}
-  const blocos = [], vazamentos = [], miudos = [], alvos = [];
+  const blocos = [], vazamentos = [], miudos = [], alvos = [], todosAlvos = [];
+  const SELETOR_ALVO = "a[href], button, input:not([type=hidden]), select, textarea, summary, [role=button], [role=link], [role=tab], [role=checkbox], [role=radio], [role=switch], [role=menuitem]";
   let menorTexto = Infinity, vistos = 0;
   for (const el of document.querySelectorAll("body *")) {
     if (vistos > 3000) break;
@@ -80,11 +132,12 @@ ${CAMINHO_JS}
         if (px < 12) miudos.push(caminho(el) + " (" + Math.round(px * 10) / 10 + "px)");
       }
     }
-    if (el.matches("a[href], button, input, select, textarea, summary, [role=button], [role=link], [role=tab], [role=checkbox]") && (r.width < 24 || r.height < 24)) {
-      alvos.push(caminho(el) + " (" + Math.round(r.width) + "x" + Math.round(r.height) + ")");
-    }
+    if (el.matches(SELETOR_ALVO) && !el.disabled && el.getAttribute("aria-disabled") !== "true") todosAlvos.push({ el, r });
     if (r.width >= 64 && r.height >= 16) blocos.push({ alvo: caminho(el), esquerda: Math.round(r.left), direita: Math.round(r.right) });
   }
+${ALVOS_WCAG_JS}
+  const alvosAvaliados = avaliarAlvos(todosAlvos, SELETOR_ALVO);
+  for (const f of alvosAvaliados.falhas) alvos.push(caminho(f.el) + " (" + Math.round(f.r.width) + "x" + Math.round(f.r.height) + ", o círculo de 24px encosta em " + caminho(f.vizinho) + ")");
   const analisarBorda = (campo, nome) => {
     const conta = new Map();
     for (const b of blocos) conta.set(b[campo], (conta.get(b[campo]) || 0) + 1);
@@ -109,7 +162,7 @@ ${CAMINHO_JS}
     rolagemHorizontal: Math.max(0, Math.round(document.documentElement.scrollWidth - vw)),
     vazamentos: vazamentos.sort((a, b) => b.excesso - a.excesso).slice(0, 5),
     textoMiudo: { total: miudos.length, menor: Number.isFinite(menorTexto) ? Math.round(menorTexto * 10) / 10 : 0, exemplos: miudos.slice(0, 3) },
-    alvosPequenos: { total: alvos.length, exemplos: alvos.slice(0, 3) },
+    alvosPequenos: { total: alvos.length, exemplos: alvos.slice(0, 3), isentos: alvosAvaliados.isentos },
     colunas: esquerda.fortes.slice(0, 12),
     quaseAlinhados,
   };
@@ -199,6 +252,7 @@ const TEXTO_MINIMO = 12;
 
 export function achadosDaTela(medidas: MedidaTela[], acessibilidade: AcessibilidadeTela | null = null): AchadoTela[] {
   const achados: AchadoTela[] = [];
+  const alvosJaVistos = new Set<string>();
   if (acessibilidade) {
     const a = acessibilidade;
     for (const t of a.temas) {
@@ -212,7 +266,7 @@ export function achadosDaTela(medidas: MedidaTela[], acessibilidade: Acessibilid
         evidencia: `${a.movimento.total} animação(ões) seguem em loop com prefers-reduced-motion: reduce — decoração deveria parar; um indicador de carregamento pode ser essencial e continuar` });
     }
   }
-  for (const m of medidas) {
+  for (const m of [...medidas].sort((a, b) => a.largura - b.largura)) {
     if (m.rolagemHorizontal > 1) {
       achados.push({ regra: "rolagem horizontal", gravidade: "alta", largura: m.largura, alvo: "documento",
         evidencia: `a página passa ${m.rolagemHorizontal}px da viewport de ${m.largura}px e rola de lado` });
@@ -225,10 +279,13 @@ export function achadosDaTela(medidas: MedidaTela[], acessibilidade: Acessibilid
       achados.push({ regra: "texto miúdo", gravidade: m.textoMiudo.menor < 10 ? "media" : "baixa", largura: m.largura,
         alvo: m.textoMiudo.exemplos[0] ?? "texto", evidencia: `${m.textoMiudo.total} trecho(s) abaixo de ${TEXTO_MINIMO}px, o menor com ${m.textoMiudo.menor}px${m.textoMiudo.exemplos.length > 1 ? " — também " + m.textoMiudo.exemplos.slice(1).join(", ") : ""}` });
     }
-    // Alvo pequeno só pesa onde se toca com o dedo; no desktop o ponteiro dá conta.
-    if (m.alvosPequenos.total && m.largura <= 480) {
+    // O 2.5.8 vale para qualquer ponteiro, mouse incluído — não só para o dedo. O mesmo
+    // elemento reprovado em três larguras vira um achado, na primeira em que aparece.
+    const novos = m.alvosPequenos.exemplos.filter((e) => !alvosJaVistos.has(e.split(" (")[0] ?? e));
+    for (const e of novos) alvosJaVistos.add(e.split(" (")[0] ?? e);
+    if (m.alvosPequenos.total && novos.length) {
       achados.push({ regra: "alvo de toque pequeno", gravidade: "media", largura: m.largura,
-        alvo: m.alvosPequenos.exemplos[0] ?? "controle", evidencia: `${m.alvosPequenos.total} controle(s) abaixo de ${ALVO_MINIMO}x${ALVO_MINIMO}px, o mínimo apontável do WCAG 2.2${m.alvosPequenos.exemplos.length > 1 ? " — também " + m.alvosPequenos.exemplos.slice(1).join(", ") : ""}` });
+        alvo: novos[0] ?? "controle", evidencia: `${m.alvosPequenos.total} controle(s) abaixo de ${ALVO_MINIMO}x${ALVO_MINIMO}px sem a folga de espaçamento que o WCAG 2.2 (2.5.8) aceita${m.alvosPequenos.isentos ? `; ${m.alvosPequenos.isentos} isento(s) por estar(em) numa frase ou com espaço em volta` : ""}${novos.length > 1 ? " — também " + novos.slice(1).join(", ") : ""}` });
     }
     for (const q of m.quaseAlinhados) {
       const distancia = Math.abs(q.coluna - q.valor);

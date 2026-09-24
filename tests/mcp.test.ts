@@ -109,8 +109,11 @@ describe("servidor MCP por stdio", () => {
   let urlAlvo = "";
   before(async () => {
     pasta = await criarProjeto();
-    alvo = createServer((_req, res) => {
+    alvo = createServer((req, res) => {
+      // Como um app de verdade: rota protegida sem sessão vai para o login.
+      if (req.url === "/protegida") { res.writeHead(302, { location: "/entrar" }); res.end(); return; }
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      if (req.url === "/entrar") { res.end('<!doctype html><main><form><label>Senha <input type="password"></label></form></main>'); return; }
       res.end('<!doctype html><style>*{margin:0}body{font:16px sans-serif}.larga{width:900px;height:40px}</style><div class="larga">não cabe no celular</div>');
     });
     await new Promise<void>((r) => alvo!.listen(0, "127.0.0.1", r));
@@ -195,6 +198,16 @@ describe("servidor MCP por stdio", () => {
     assert.ok(!achados.some((a: { regra: string; largura: number }) => a.regra === "rolagem horizontal" && a.largura === 1280), "no desktop os 900px cabem");
     const recusada = await mcp.pedir(3, "tools/call", { name: "medir_pagina", arguments: { url: "file:///etc/passwd" } });
     assert.equal(recusada.result.isError, true, "só http e https");
+    assert.equal(r.result.structuredContent.aviso, undefined, "sem redirecionamento, sem aviso");
+
+    // Pedir o painel e medir o login, calado, era o erro mais perigoso da ferramenta.
+    const protegida = await mcp.pedir(4, "tools/call", { name: "medir_pagina", arguments: { url: urlAlvo + "protegida", larguras: [390] } });
+    assert.equal(protegida.result.isError, true, "o que foi medido não é o que foi pedido: o agente precisa parar");
+    const { aviso, urlMedida } = protegida.result.structuredContent;
+    assert.equal(urlMedida, urlAlvo + "entrar");
+    assert.match(aviso, /redirecionou para .*\/entrar, que tem campo de senha/);
+    assert.match(aviso, /use a avaliação no overlay/);
+    assert.ok(protegida.result.content[0].text.startsWith('{\n  "aviso"'), "o aviso é a primeira coisa que o agente lê");
     assert.equal(await mcp.fechar(), 0);
   });
 });

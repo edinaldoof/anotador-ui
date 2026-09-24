@@ -36,6 +36,52 @@ function razaoDeContraste(frente: [number, number, number], fundo: [number, numb
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
+// WCAG 2.2, critério 2.5.8 — a mesma leitura de lib/tela.ts (ALVOS_WCAG_JS), para o
+// overlay e a medida do servidor darem o mesmo veredito sobre o mesmo botão.
+// Em linha: alvo `display: inline` numa frase, contando só o texto que não pertence a
+// outro alvo — um botão ao lado de um título não está "numa frase". Espaçamento: o
+// círculo de 24px centrado no alvo não toca outro alvo nem o círculo de outro pequeno.
+const SELETOR_ALVO = 'a[href], button, input:not([type=hidden]), select, textarea, summary, [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="radio"], [role="switch"], [role="menuitem"]';
+function alvosReprovados(): Array<{ el: Element; r: DOMRect; vizinho: Element }> {
+  const todos: Array<{ el: Element; r: DOMRect }> = [];
+  for (const el of document.querySelectorAll(SELETOR_ALVO)) {
+    if (ignorar(el) || (el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") continue;
+    const r = el.getBoundingClientRect();
+    if (r.width >= 1 && r.height >= 1) todos.push({ el, r });
+  }
+  const pequeno = (r: DOMRect) => r.width < 24 || r.height < 24;
+  const blocoDe = (el: Element): Element | null => {
+    let n = el.parentElement;
+    while (n && n !== document.body && /^(inline|inline-block|contents)$/.test(getComputedStyle(n).display)) n = n.parentElement;
+    return n;
+  };
+  const emFrase = (el: Element): boolean => {
+    if (getComputedStyle(el).display !== "inline") return false;
+    const bloco = blocoDe(el);
+    if (!bloco) return false;
+    let resto = "";
+    const passeio = document.createTreeWalker(bloco, NodeFilter.SHOW_TEXT);
+    for (let t = passeio.nextNode(); t; t = passeio.nextNode()) {
+      if (t.parentElement?.closest(SELETOR_ALVO)) continue;
+      resto += t.nodeValue ?? "";
+      if (resto.replace(/\s+/g, "").length >= 3) break;
+    }
+    return /[\p{L}\p{N}]{2,}/u.test(resto);
+  };
+  const reprovados: Array<{ el: Element; r: DOMRect; vizinho: Element }> = [];
+  for (const p of todos) {
+    if (!pequeno(p.r) || emFrase(p.el)) continue;
+    const cx = p.r.left + p.r.width / 2, cy = p.r.top + p.r.height / 2;
+    const perto = todos.find((o) => {
+      if (o.el === p.el || o.el.contains(p.el) || p.el.contains(o.el)) return false;
+      const dx = Math.max(o.r.left - cx, 0, cx - o.r.right), dy = Math.max(o.r.top - cy, 0, cy - o.r.bottom);
+      return Math.hypot(dx, dy) < 12 || (pequeno(o.r) && Math.hypot(o.r.left + o.r.width / 2 - cx, o.r.top + o.r.height / 2 - cy) < 24);
+    });
+    if (perto) reprovados.push({ el: p.el, r: p.r, vizinho: perto.el });
+  }
+  return reprovados;
+}
+
 function descreverCurto(el: Element): string {
   let d = el.tagName.toLowerCase();
   if (el.id && !ehDinamico(el.id)) d += "#" + el.id;
@@ -110,21 +156,15 @@ function auditarPagina(): ResultadoAuditoria {
     }
   }
 
-  // 2. alvo de toque (WCAG 2.2 §2.5.8); link no meio de um parágrafo é exceção da própria norma
-  for (const el of document.querySelectorAll('a[href], button, input:not([type=hidden]), select, textarea, [role="button"], [role="link"]')) {
-    if (ignorar(el)) continue;
-    const r = el.getBoundingClientRect();
-    if (r.width < 1 || r.height < 1 || (r.width >= 24 && r.height >= 24)) continue;
-    const pai = el.parentElement;
-    const embutido = el.tagName === "A" && pai && (pai.textContent ?? "").trim().length > (el.textContent ?? "").trim().length + 3;
-    if (embutido) continue;
+  // 2. alvo de toque (WCAG 2.2 §2.5.8), com as duas exceções que se verificam na página
+  for (const { el, r, vizinho } of alvosReprovados()) {
     add(
       {
         regra: "alvo de toque pequeno",
         categoria: "acessibilidade",
         gravidade: "media",
         alvo: descreverCurto(el),
-        evidencia: `${Math.round(r.width)}×${Math.round(r.height)}px, abaixo de 24×24`,
+        evidencia: `${Math.round(r.width)}×${Math.round(r.height)}px, abaixo de 24×24, e o círculo de 24px em volta encosta em ${descreverCurto(vizinho)}`,
       },
       el
     );
