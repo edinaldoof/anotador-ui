@@ -108,6 +108,97 @@ test("a medida roda na página e encontra o que só existe depois de renderizar"
   }
 });
 
+test("leitura e tipografia: linha comprida, tamanho a meio pixel, peso entre degraus e texto colado na borda", () => {
+  const desktop: MedidaTela = {
+    ...vazia(1280),
+    linhasLongas: { total: 2, maior: 112, exemplos: ["main > p.descricao (~112ch, 138 caracteres por linha)", "div.ajuda (~86ch, 106 caracteres por linha)"] },
+    tipografia: { tamanhos: [12, 12.5, 14, 16, 16.5, 24], pesos: [400, 600, 650, 700] },
+    margemLateral: { minima: 48, alvo: "header > h1" },
+  };
+  const celular: MedidaTela = {
+    ...vazia(390),
+    linhasLongas: { total: 0, maior: 0, exemplos: [] },
+    tipografia: { tamanhos: [12, 12.5], pesos: [400], onde: { "12": "p", "12.5": "span.meta" } },
+    margemLateral: { minima: 12, alvo: "header > span.marca" },
+  };
+  const achados = achadosDaTela([desktop, celular]);
+  assert.deepEqual(achados.map((a) => [a.gravidade, a.largura, a.regra]), [
+    ["media", 1280, "linha longa demais"],
+    ["baixa", 390, "margem lateral estreita"], ["baixa", 390, "tamanhos quase iguais"],
+    ["baixa", 1280, "escada de pesos"], ["baixa", 1280, "tamanhos quase iguais"],
+  ]);
+  const por = (regra: string, largura: number) => achados.find((a) => a.regra === regra && a.largura === largura)!.evidencia;
+  assert.match(por("linha longa demais", 1280), /2 parágrafo\(s\) acima de 75ch por linha, o mais longo com ~112ch — o playbook lê bem entre 45 e 75ch/);
+  // O par 12/12,5 já foi dito no celular; no desktop só entra o que é novo.
+  assert.match(por("tamanhos quase iguais", 390), /^12 e 12\.5px \(span\.meta\) na mesma tela/, "o tamanho intruso vem com o elemento onde mora");
+  assert.equal(achados.find((a) => a.regra === "tamanhos quase iguais" && a.largura === 390)?.alvo, "span.meta");
+  assert.match(por("tamanhos quase iguais", 1280), /^16 e 16\.5px na mesma tela, de 6 tamanhos ao todo/);
+  assert.match(por("escada de pesos", 1280), /4 peso\(s\) na tela \(400, 600, 650, 700\), 650 entre dois degraus/);
+  assert.match(por("margem lateral estreita", 390), /texto a 12px da borda da tela em 390px — o playbook usa 16px/);
+  // 12px no desktop não é achado: a margem do celular não vale para a tela larga, só o piso de 8px.
+  assert.deepEqual(achadosDaTela([{ ...desktop, margemLateral: { minima: 12, alvo: "x" } }]).filter((a) => a.regra === "margem lateral estreita"), []);
+  assert.equal(achadosDaTela([{ ...desktop, margemLateral: { minima: 4, alvo: "x" } }]).find((a) => a.regra === "margem lateral estreita")?.gravidade, "media");
+
+  const texto = resumoDaTela([celular, desktop], achados);
+  assert.match(texto, /\*\*390px\*\* — .* · margem lateral: 12px/);
+  assert.match(texto, /\*\*tipografia\*\* \(1280px\) — 6 tamanho\(s\) de texto: 12, 12\.5, 14, 16, 16\.5, 24px · pesos 400, 600, 650, 700/);
+  // Medida antiga, sem os campos novos, continua funcionando e não inventa linha.
+  assert.doesNotMatch(resumoDaTela([vazia(390)], []), /margem lateral|tipografia/);
+});
+
+test("leitura, tipografia e margem medidas na página renderizada", { skip: !encontrarChromium(), timeout: 30_000 }, async () => {
+  const pasta = await mkdtemp(join(tmpdir(), "anotador-leitura-"));
+  const navegador = await Navegador.abrir({});
+  const frase = "O relatório final do projeto precisa trazer a execução física e financeira, com as metas atingidas, as justificativas de cada desvio e os anexos comprobatórios. ";
+  try {
+    // Um parágrafo largo demais, o mesmo texto contido em 65ch, um com código em linha
+    // (mais alto que as letras, e na mesma linha), um bloco de código comprido — que tem a
+    // linha que o autor quis — e um texto de leitor de tela colado na borda, que não conta.
+    await writeFile(join(pasta, "pagina.html"), `<!doctype html><meta charset="utf-8">
+      <style>* { box-sizing: border-box; margin: 0; } body { font: 16px/1.5 sans-serif; padding: 0 32px; }
+        .largo { width: 1100px; } .contido { max-width: 65ch; } .limite { max-width: 80ch; } code { font-size: 12.5px; padding: 3px 4px; background: #eee; }
+        .sr { position: absolute; left: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+        .marca { position: absolute; top: 4px; left: 6px; font-weight: 650; }</style>
+      <span class="marca">Portal</span><span class="sr">Ir para o conteúdo principal</span>
+      <p class="largo" id="largo">${frase.repeat(3)}</p>
+      <p class="contido" id="contido">${frase.repeat(3)}</p>
+      <p class="limite" id="limite">${frase.repeat(3)}</p>
+      <p class="contido" id="codigo">Use <code>max-width: 65ch</code> no parágrafo e <code>text-wrap: pretty</code> no título; ${frase.repeat(2)}</p>
+      <pre>${"const linhaDeCodigoMuitoComprida = calcular(".repeat(4)}</pre>`);
+    const pagina = await navegador.novaPagina();
+    await pagina.definirViewport(1280, 800);
+    await pagina.navegar("file://" + join(pasta, "pagina.html"));
+    const m = await pagina.avaliar<MedidaTela>(SCRIPT_MEDIDA);
+    // A correção que a régua recomenda (65ch) passa na própria régua; 80ch, não.
+    assert.deepEqual(m.linhasLongas?.exemplos.map((e) => e.split(" (")[0]), ["p#largo", "p#limite"], "o largo e o de 80ch: o de 65ch, o com código e o pre ficam de fora");
+    assert.ok((m.linhasLongas?.maior ?? 0) > 110, `~120ch a 1100px: ${m.linhasLongas?.maior}`);
+    assert.match(m.linhasLongas?.exemplos[1] ?? "", /^p#limite \(~(79|80)ch, \d+ caracteres por linha\)$/);
+    assert.deepEqual(m.tipografia?.tamanhos, [12.5, 16], "o código em linha e o texto — o pre herda os 16px do body");
+    assert.deepEqual(m.tipografia?.pesos, [400, 650]);
+    assert.equal(m.margemLateral?.minima, 6, "a marca a 6px; o texto de leitor de tela em left: 0 não é texto na tela");
+    assert.equal(m.margemLateral?.alvo, "span.marca");
+
+    // No celular, o de 65ch e o de 80ch quebram cedo; só o de 1100px fixos segue comprido.
+    await pagina.definirViewport(390, 800);
+    const celular = await pagina.avaliar<MedidaTela>(SCRIPT_MEDIDA);
+    assert.equal(celular.linhasLongas?.total, 1, "o p#largo tem 1100px fixos e continua comprido — ele vaza, e a régua diz as duas coisas");
+    const achados = achadosDaTela([m, celular]);
+    // O p#largo aparece no celular e não se repete no desktop; o de 80ch só estoura no
+    // desktop. A marca a 6px é média nas duas larguras; o peso 650, dito uma vez.
+    const novas = achados.filter((a) => ["linha longa demais", "margem lateral estreita", "escada de pesos"].includes(a.regra));
+    assert.deepEqual(novas.map((a) => [a.gravidade, a.largura, a.regra]), [
+      ["media", 390, "linha longa demais"], ["media", 390, "margem lateral estreita"],
+      ["media", 1280, "linha longa demais"], ["media", 1280, "margem lateral estreita"],
+      ["baixa", 390, "escada de pesos"],
+    ]);
+    assert.match(achados.find((a) => a.regra === "linha longa demais" && a.largura === 390)?.alvo ?? "", /^p#largo /);
+    assert.match(achados.find((a) => a.regra === "linha longa demais" && a.largura === 1280)?.alvo ?? "", /^p#limite /);
+  } finally {
+    await navegador.fechar();
+    await rm(pasta, { recursive: true, force: true });
+  }
+});
+
 test("contraste nos dois temas, região principal e movimento: aponta o que falha e cala sobre o tema que não existe", async () => {
   const achados = achadosDaTela([vazia(1280)], {
     largura: 1280,

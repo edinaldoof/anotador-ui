@@ -78,7 +78,7 @@ export const FERRAMENTAS = [
   {
     name: "medir_pagina",
     title: "Medir a página renderizada",
-    description: "Abre a URL num Chromium temporário em 390, 768 e 1280px e mede o que só existe depois de renderizar: rolagem horizontal, elemento vazando da tela, texto abaixo de 12px, alvo de toque abaixo do mínimo do WCAG 2.2, borda a 1–4px de uma coluna que o resto da página respeita — e, forçando as preferências do sistema, contraste nos temas claro e escuro, falta de região principal e animação que ignora movimento reduzido. Use depois de mexer em layout. Leva de 5 a 30 segundos.",
+    description: "Abre a URL num Chromium temporário em 390, 768 e 1280px e mede o que só existe depois de renderizar: rolagem horizontal, elemento vazando da tela, texto abaixo de 12px, alvo de toque abaixo do mínimo do WCAG 2.2, borda a 1–4px de uma coluna que o resto da página respeita, parágrafo acima de 75ch por linha, tamanhos de texto a menos de 1px um do outro, pesos fora da escada de quatro, texto a menos de 16px da borda no celular — e, forçando as preferências do sistema, contraste nos temas claro e escuro, falta de região principal e animação que ignora movimento reduzido. Use depois de mexer em layout. Leva de 5 a 30 segundos.",
     inputSchema: { type: "object", properties: { url: { type: "string", description: "URL http(s) da tela, ex.: http://localhost:3000/painel." }, larguras: { type: "array", items: { type: "integer", minimum: 240, maximum: 3840 }, maxItems: 6, description: "Larguras em px. Padrão: 390, 768, 1280." } }, required: ["url"], additionalProperties: false },
     annotations: { ...SOMENTE_LEITURA, openWorldHint: true },
   },

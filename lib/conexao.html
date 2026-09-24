@@ -94,7 +94,7 @@ a:hover { text-decoration: underline; }
 .pilula {
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px 6px 10px; border-radius: 999px;
   background: var(--superficie); border: 1px solid var(--borda); color: var(--texto-2);
-  font-size: 12.5px; font-weight: 600; white-space: nowrap; box-shadow: var(--sombra);
+  font-size: 13px; font-weight: 600; white-space: nowrap; box-shadow: var(--sombra);
 }
 .pilula::before { content: ""; width: 7px; height: 7px; border-radius: 999px; background: currentColor; flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent); }
 .pilula.ok { background: var(--ok-fundo); border-color: transparent; color: var(--ok); }
@@ -110,7 +110,7 @@ a:hover { text-decoration: underline; }
 .passo.feito { background: var(--ok-fundo); color: var(--ok); }
 .passo svg { width: 13px; height: 13px; }
 .cabeca h2 { font-size: 15px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
-.cabeca p { color: var(--texto-3); font-size: 12.5px; margin: 3px 0 0; max-width: 68ch; }
+.cabeca p { color: var(--texto-3); font-size: 13px; margin: 3px 0 0; max-width: 68ch; }
 .corpo { padding: 14px 20px 18px; }
 
 /* ---------- formulário ---------- */
@@ -138,11 +138,11 @@ button.fantasma { background: transparent; border-color: transparent; color: var
 button.fantasma:hover { background: var(--superficie-2); color: var(--texto); }
 button.mini { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
 button:disabled { opacity: .5; cursor: default; transform: none; }
-.aviso-linha { margin-top: 9px; font-size: 12.5px; color: var(--texto-3); min-height: 19px; display: flex; align-items: center; gap: 7px; }
+.aviso-linha { margin-top: 9px; font-size: 13px; color: var(--texto-3); min-height: 19px; display: flex; align-items: center; gap: 7px; }
 .aviso-linha.ok { color: var(--ok); }
 .aviso-linha.erro { color: var(--erro); }
 details.ajustes { margin-top: 12px; border-top: 1px solid var(--borda); padding-top: 10px; }
-details.ajustes summary { cursor: pointer; color: var(--texto-3); font-size: 12.5px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 6px; }
+details.ajustes summary { cursor: pointer; color: var(--texto-3); font-size: 13px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 6px; }
 details.ajustes summary::-webkit-details-marker { display: none; }
 details.ajustes summary::before { content: "▸"; transition: transform .15s; display: inline-block; }
 details.ajustes[open] summary::before { transform: rotate(90deg); }
@@ -229,7 +229,7 @@ details.ajustes[open] summary::before { transform: rotate(90deg); }
 .niveis button { border: 0; background: transparent; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--texto-2); }
 .niveis button:hover { color: var(--texto); }
 .niveis button.ativo { background: var(--superficie); color: var(--texto); box-shadow: var(--sombra); }
-.como { color: var(--texto-2); font-size: 12.5px; background: var(--superficie-2); border-radius: 10px; padding: 11px 13px; margin: 12px 0; line-height: 1.5; }
+.como { color: var(--texto-2); font-size: 13px; background: var(--superficie-2); border-radius: 10px; padding: 11px 13px; margin: 12px 0; max-width: 70ch; line-height: 1.5; }
 .como code { background: var(--superficie-3); padding: 1px 5px; border-radius: 5px; }
 
 .sessoes { display: flex; flex-direction: column; gap: 6px; }
@@ -245,18 +245,18 @@ details.ajustes[open] summary::before { transform: rotate(90deg); }
 .selo.viva { background: var(--ok-fundo); color: var(--ok); }
 .selo.ouvindo { background: var(--acento-suave); color: var(--acento); }
 .sessao .selo.ouvindo { box-shadow: 0 0 0 1px color-mix(in srgb, var(--acento) 35%, transparent) inset; }
-.vazio { color: var(--texto-3); font-size: 12.5px; padding: 12px 13px; background: var(--superficie-2); border-radius: 10px; text-align: center; }
+.vazio { color: var(--texto-3); font-size: 13px; padding: 12px 13px; background: var(--superficie-2); border-radius: 10px; text-align: center; }
 .mais-sessoes { align-self: flex-start; }
 
 .faixa { display: flex; align-items: center; gap: 11px; flex-wrap: wrap; padding: 12px 14px; background: var(--superficie-2); border-radius: 11px; margin-top: 14px; }
-.faixa .rot { font-size: 12.5px; color: var(--texto-2); font-weight: 600; }
+.faixa .rot { font-size: 13px; color: var(--texto-2); font-weight: 600; }
 .faixa .dica { font-size: 12px; color: var(--texto-3); flex-basis: 100%; }
 
-.ouvinte { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--acento-suave); border-radius: 10px; font-size: 12.5px; }
+.ouvinte { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--acento-suave); border-radius: 10px; font-size: 13px; }
 .ouvinte .q { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--texto-2); }
 .ouvinte .hora { color: var(--texto-3); font-size: 12px; }
 
-.exec { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--borda); font-size: 12.5px; }
+.exec { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--borda); font-size: 13px; }
 .exec .q { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--texto-2); }
 
 pre.bloco { background: var(--superficie-2); border: 1px solid var(--borda); border-radius: 11px; padding: 13px 15px; overflow: auto; margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--texto-2); }

@@ -2,9 +2,10 @@
 //
 // `lib/design.ts` lê o sistema no CSS — quais tokens existem e o que cada um vale.
 // Aqui é o contrário: abre a página em três larguras e mede o que ela de fato faz.
-// Rolagem horizontal, elemento vazando, texto miúdo, alvo de toque pequeno e borda
-// que quase encosta numa coluna são coisas que não estão escritas em lugar nenhum —
-// só aparecem quando a página é renderizada e medida.
+// Rolagem horizontal, elemento vazando, texto miúdo, alvo de toque pequeno, borda
+// que quase encosta numa coluna, linha comprida demais para ler, tamanhos de texto a
+// meio pixel um do outro e texto colado na borda da tela são coisas que não estão
+// escritas em lugar nenhum — só aparecem quando a página é renderizada e medida.
 
 /** Larguras da medição: celular estreito, tablet e desktop comum. */
 export const LARGURAS_PADRAO = [390, 768, 1280] as const;
@@ -21,6 +22,12 @@ export interface MedidaTela {
   /** Bordas esquerdas que três ou mais blocos compartilham: as colunas de fato da página. */
   colunas: number[];
   quaseAlinhados: Array<{ alvo: string; borda: string; valor: number; coluna: number }>;
+  /** Texto corrido acima de 75ch por linha, o teto da faixa que o playbook lê bem (45–75ch); `maior` em ch. */
+  linhasLongas?: { total: number; maior: number; exemplos: string[] };
+  /** Tamanhos (px) e pesos do texto visível, em ordem; `onde` dá um elemento de cada tamanho. */
+  tipografia?: { tamanhos: number[]; pesos: number[]; onde?: Record<string, string> };
+  /** Menor distância entre um texto visível e a borda da tela; nulo quando não há texto que se meça. */
+  margemLateral?: { minima: number; alvo: string } | null;
 }
 
 export interface AchadoTela {
@@ -103,10 +110,68 @@ export const ALVOS_WCAG_JS = `
     return { falhas, isentos };
   };`;
 
+/**
+ * Medida da linha de um bloco de texto corrido, em ch e em caracteres. Só conta o texto
+ * que corre no próprio bloco — o de um bloco filho é outro parágrafo. As caixas de texto
+ * são agrupadas pela altura: um código em linha, mais alto que as letras, continua na
+ * mesma linha; e a última linha, quase sempre curta, conta pela fração que ocupa, para a
+ * média não esconder a linha cheia. Bloco com menos de 120 caracteres ou de duas linhas
+ * não é texto corrido e volta nulo.
+ *
+ * A régua é em ch — a largura do "0" da fonte —, a unidade das faixas do playbook e a que
+ * se escreve no CSS. Em caracteres ela erraria contra a própria correção: `max-width: 65ch`
+ * dá uns 81 caracteres por linha, porque o "0" é mais largo que a letra média.
+ */
+export const LEITURA_JS = `
+  const blocoDoTexto = (t) => { let n = t.parentElement; while (n && /^(inline|inline-block|inline-flex|contents)$/.test(getComputedStyle(n).display)) n = n.parentElement; return n; };
+  const leitura = (el) => {
+    const pedacos = []; let texto = "";
+    const passeio = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let t = passeio.nextNode(); t; t = passeio.nextNode()) {
+      if (blocoDoTexto(t) !== el) continue;
+      texto += t.nodeValue;
+      const rg = document.createRange(); rg.selectNodeContents(t);
+      for (const q of rg.getClientRects()) if (q.width > 0.5 && q.height > 0.5) pedacos.push(q);
+    }
+    texto = texto.replace(/\\s+/g, " ").trim();
+    if (texto.length < 120 || !pedacos.length) return null;
+    pedacos.sort((a, b) => a.top - b.top || a.left - b.left);
+    const linhas = [];
+    for (const q of pedacos) {
+      const u = linhas[linhas.length - 1];
+      if (!u || (q.top + q.bottom) / 2 > u.fundo) linhas.push({ fundo: q.bottom, largura: q.width });
+      else { u.fundo = Math.max(u.fundo, q.bottom); u.largura += q.width; }
+    }
+    if (linhas.length < 2) return null;
+    const cheia = Math.max(...linhas.map((l) => l.largura));
+    const efetivas = linhas.length - 1 + Math.min(1, linhas[linhas.length - 1].largura / cheia);
+    const cs = getComputedStyle(el);
+    reguaCh.font = cs.fontStyle + " " + cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
+    const zero = reguaCh.measureText("0").width || parseFloat(cs.fontSize) / 2;
+    return { linhas: linhas.length, porLinha: Math.round(texto.length / efetivas), ch: Math.round(cheia / zero) };
+  };
+  const reguaCh = document.createElement("canvas").getContext("2d");
+  // Texto de leitor de tela (1px, recortado) não é texto na tela: nem tamanho, nem margem.
+  const textoNaTela = (el, cs, r) => r.width > 2 && r.height > 2 && cs.clip === "auto" && (cs.clipPath === "none" || !cs.clipPath);`;
+
 export const SCRIPT_MEDIDA = `(() => {
   const vw = innerWidth;
 ${CAMINHO_JS}
-  const blocos = [], vazamentos = [], miudos = [], alvos = [], todosAlvos = [];
+${LEITURA_JS}
+  const blocos = [], vazamentos = [], miudos = [], alvos = [], todosAlvos = [], longas = [];
+  const tamanhos = new Set(), pesos = new Set(), ondeTamanho = {}, margem = { minima: Infinity, alvo: "" };
+  // Faixa horizontal em que o elemento aparece: a interseção dos ancestrais que recortam.
+  // Texto rolado para trás da borda de uma tabela não está a 5px da tela — está escondido.
+  const faixas = new Map();
+  const faixaDe = (n) => {
+    if (!n || n === document.body || n === document.documentElement) return [-Infinity, Infinity];
+    if (faixas.has(n)) return faixas.get(n);
+    const [e, d] = faixaDe(n.parentElement);
+    let f = [e, d];
+    if (getComputedStyle(n).overflowX !== "visible") { const q = n.getBoundingClientRect(); f = [Math.max(e, q.left), Math.min(d, q.right)]; }
+    faixas.set(n, f);
+    return f;
+  };
   // Tabela larga dentro de um contêiner com rolagem própria é o padrão responsivo certo,
   // não vazamento: o retângulo dela passa da tela, mas o contêiner corta e a página não
   // rola de lado. Só vaza quem nenhum ancestral dentro da tela recorta.
@@ -141,6 +206,28 @@ ${CAMINHO_JS}
       if (px > 0) {
         if (px < menorTexto) menorTexto = px;
         if (px < 12) miudos.push(caminho(el) + " (" + Math.round(px * 10) / 10 + "px)");
+      }
+      // Tamanho, peso e margem só de palavra: um "×" de fechar não é degrau da escala.
+      const palavras = [...el.childNodes].filter((n) => n.nodeType === 3 && /[\\p{L}\\p{N}]{2,}/u.test(n.nodeValue));
+      if (palavras.length && textoNaTela(el, cs, r)) {
+        if (px > 0) { const tam = Math.round(px * 100) / 100; tamanhos.add(tam); if (!ondeTamanho[tam]) ondeTamanho[tam] = caminho(el); }
+        pesos.add(Number(cs.fontWeight) || 400);
+        // O próprio elemento recorta o texto dele: reticências cortam o que passa da caixa.
+        const [e, d] = faixaDe(el);
+        for (const t of palavras) {
+          const rg = document.createRange(); rg.selectNodeContents(t);
+          for (const q of rg.getClientRects()) {
+            const esq = Math.max(q.left, e), dir = Math.min(q.right, d);
+            if (dir - esq < 1 || esq < -0.5 || dir > vw + 0.5) continue;
+            const dist = Math.min(esq, vw - dir);
+            if (dist < margem.minima) { margem.minima = dist; margem.alvo = caminho(el); }
+          }
+        }
+        // Linha comprida: só bloco de texto corrido. Código tem a linha que o autor quis.
+        if (!/^(inline|contents)/.test(cs.display) && cs.whiteSpace !== "pre" && !el.closest("pre, code") && el.textContent.length >= 120) {
+          const l = leitura(el);
+          if (l && l.ch > 75) longas.push({ alvo: caminho(el), ch: l.ch, porLinha: l.porLinha });
+        }
       }
     }
     if (el.matches(SELETOR_ALVO) && !el.disabled && el.getAttribute("aria-disabled") !== "true") todosAlvos.push({ el, r });
@@ -178,6 +265,9 @@ ${ALVOS_WCAG_JS}
     alvosPequenos: { total: alvos.length, exemplos: alvos.slice(0, 3), isentos: alvosAvaliados.isentos },
     colunas: esquerda.fortes.slice(0, 12),
     quaseAlinhados,
+    linhasLongas: { total: longas.length, maior: longas.reduce((m, l) => Math.max(m, l.ch), 0), exemplos: longas.sort((a, b) => b.ch - a.ch).slice(0, 3).map((l) => l.alvo + " (~" + l.ch + "ch, " + l.porLinha + " caracteres por linha)") },
+    tipografia: { tamanhos: [...tamanhos].sort((a, b) => a - b), pesos: [...pesos].sort((a, b) => a - b), onde: ondeTamanho },
+    margemLateral: Number.isFinite(margem.minima) ? { minima: Math.round(margem.minima), alvo: margem.alvo } : null,
   };
 })()`;
 
@@ -262,10 +352,27 @@ ${CAMINHO_JS}
 const ALVO_MINIMO = 24;
 /** Abaixo disto o texto deixa de ser legível em tela pequena. */
 const TEXTO_MINIMO = 12;
+/** Teto da faixa que o playbook lê bem, em ch (45–75ch). O WCAG 1.4.8 (AAA) fala em 80 caracteres. */
+const LINHA_MAXIMA = 75;
+/** Margem lateral do playbook no celular; no tablet ele usa 32px e no desktop, 48. */
+const MARGEM_CELULAR = 16;
+/** A escada do playbook: 400 no texto, 500 na ênfase de interface, 600 nos títulos, 700 reservado. */
+const PESOS_DA_ESCADA = 4;
+
+/** Pares de tamanhos a menos de 1px um do outro: meio pixel não cria hierarquia. */
+function quaseIguais(tamanhos: number[]): Array<[number, number]> {
+  const pares: Array<[number, number]> = [];
+  for (let i = 1; i < tamanhos.length; i++) {
+    const a = tamanhos[i - 1] as number, b = tamanhos[i] as number;
+    if (b - a > 0.01 && b - a < 1) pares.push([a, b]);
+  }
+  return pares;
+}
 
 export function achadosDaTela(medidas: MedidaTela[], acessibilidade: AcessibilidadeTela | null = null): AchadoTela[] {
   const achados: AchadoTela[] = [];
-  const alvosJaVistos = new Set<string>();
+  const alvosJaVistos = new Set<string>(), longasJaVistas = new Set<string>(), paresJaVistos = new Set<string>();
+  let pesosJaDitos = false;
   if (acessibilidade) {
     const a = acessibilidade;
     for (const t of a.temas) {
@@ -305,6 +412,38 @@ export function achadosDaTela(medidas: MedidaTela[], acessibilidade: Acessibilid
       achados.push({ regra: "quase alinhado", gravidade: "baixa", largura: m.largura, alvo: q.alvo,
         evidencia: `borda ${q.borda} em ${q.valor}px, a ${distancia}px da coluna de ${q.coluna}px que o resto da página usa — ou alinha, ou afasta o bastante para virar intenção` });
     }
+    // O mesmo parágrafo comprido em duas larguras é um achado, na primeira em que aparece.
+    const longas = (m.linhasLongas?.exemplos ?? []).filter((e) => !longasJaVistas.has(e.split(" (")[0] ?? e));
+    for (const e of longas) longasJaVistas.add(e.split(" (")[0] ?? e);
+    if (m.linhasLongas?.total && longas.length) {
+      achados.push({ regra: "linha longa demais", gravidade: m.linhasLongas.maior > 100 ? "media" : "baixa", largura: m.largura, alvo: longas[0] ?? "texto",
+        evidencia: `${m.linhasLongas.total} parágrafo(s) acima de ${LINHA_MAXIMA}ch por linha, o mais longo com ~${m.linhasLongas.maior}ch — o playbook lê bem entre 45 e 75ch, e o WCAG 1.4.8 fala em 80 caracteres; um max-width de 65ch resolve${longas.length > 1 ? " — também " + longas.slice(1).join(", ") : ""}` });
+    }
+    const t = m.tipografia;
+    if (t) {
+      const pares = quaseIguais(t.tamanhos).filter(([a, b]) => !paresJaVistos.has(a + "|" + b));
+      for (const [a, b] of pares) paresJaVistos.add(a + "|" + b);
+      if (pares.length) {
+        // O tamanho mais raro do par é quase sempre o intruso; mostrar onde ele mora
+        // poupa quem vai corrigir de caçar o elemento.
+        const onde = (n: number) => t.onde?.[String(n)];
+        achados.push({ regra: "tamanhos quase iguais", gravidade: "baixa", largura: m.largura, alvo: onde(pares[0]![1]) ?? "texto",
+          evidencia: `${pares.slice(0, 4).map(([a, b]) => `${a} e ${b}px${onde(b) ? ` (${onde(b)})` : ""}`).join(", ")} na mesma tela, de ${t.tamanhos.length} tamanhos ao todo — menos de 1px não cria hierarquia: é o mesmo papel escrito de dois jeitos, e um degrau da escala resolve` });
+      }
+      const entreDegraus = t.pesos.filter((p) => p % 100 !== 0);
+      if (!pesosJaDitos && (t.pesos.length > PESOS_DA_ESCADA || entreDegraus.length)) {
+        pesosJaDitos = true;
+        achados.push({ regra: "escada de pesos", gravidade: "baixa", largura: m.largura, alvo: "texto",
+          evidencia: `${t.pesos.length} peso(s) na tela (${t.pesos.join(", ")})${entreDegraus.length ? `, ${entreDegraus.join(" e ")} entre dois degraus` : ""} — o playbook fecha a escada em ${PESOS_DA_ESCADA}: 400 no texto, 500 na ênfase de interface, 600 nos títulos e 700 reservado` });
+      }
+    }
+    // Texto colado na borda: a margem que o playbook dá ao celular é 16px. Abaixo de 8,
+    // em qualquer largura, o texto encosta na moldura do aparelho.
+    const margem = m.margemLateral;
+    if (margem && (margem.minima < 8 || (margem.minima < MARGEM_CELULAR && m.largura < 600))) {
+      achados.push({ regra: "margem lateral estreita", gravidade: margem.minima < 8 ? "media" : "baixa", largura: m.largura, alvo: margem.alvo,
+        evidencia: `texto a ${margem.minima}px da borda da tela em ${m.largura}px — o playbook usa ${MARGEM_CELULAR}px de margem no celular, 32 no tablet e 48 no desktop` });
+    }
   }
   const ordem = { alta: 0, media: 1, baixa: 2 };
   achados.sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade] || a.largura - b.largura || a.regra.localeCompare(b.regra));
@@ -318,7 +457,13 @@ export function resumoDaTela(medidas: MedidaTela[], achados: AchadoTela[], acess
   linhas.push("Medido na própria página renderizada, em " + medidas.map((m) => m.largura + "px").join(", ") + ".", "");
   for (const m of medidas) {
     const colunas = m.colunas.length ? m.colunas.join(", ") + "px" : "nenhuma coluna repetida o bastante para ser regra";
-    linhas.push(`- **${m.largura}px** — rolagem horizontal: ${m.rolagemHorizontal > 1 ? m.rolagemHorizontal + "px" : "nenhuma"} · bordas esquerdas dominantes: ${colunas}`);
+    const margem = m.margemLateral === undefined ? "" : ` · margem lateral: ${m.margemLateral ? m.margemLateral.minima + "px" : "sem texto para medir"}`;
+    linhas.push(`- **${m.largura}px** — rolagem horizontal: ${m.rolagemHorizontal > 1 ? m.rolagemHorizontal + "px" : "nenhuma"} · bordas esquerdas dominantes: ${colunas}${margem}`);
+  }
+  // A escala é uma só; mede-se na maior largura, onde a tela mostra mais dela.
+  const maior = [...medidas].sort((a, b) => b.largura - a.largura)[0];
+  if (maior?.tipografia?.tamanhos.length) {
+    linhas.push(`- **tipografia** (${maior.largura}px) — ${maior.tipografia.tamanhos.length} tamanho(s) de texto: ${maior.tipografia.tamanhos.join(", ")}px · pesos ${maior.tipografia.pesos.join(", ")}`);
   }
   // Tema que não reagiu não é tema aprovado: dizer "sem achados no escuro" de uma página
   // que nem mudou de cor seria atestar o que ninguém viu.
