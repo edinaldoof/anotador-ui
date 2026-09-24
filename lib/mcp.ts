@@ -17,14 +17,16 @@ import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
 import { aliasesDoTsconfig, conferirArquivosDeAgente, gerarSkillDeDesign, lerArquivosDeAgente, prontidaoParaAgentes } from "./arquivos-agente.ts";
 import { medirUrl } from "./captura.ts";
-import { analisarSistema, deBiblioteca, emPixels, lerSistemaDeDesign, paraDtcg, type CategoriaToken, type SistemaDeDesign, type TokenDesign } from "./design.ts";
+import { analisarSistema, lerSistemaDeDesign, paraDtcg, type CategoriaToken, type SistemaDeDesign } from "./design.ts";
 import { extrairDesign } from "./extracao.ts";
 import { buscarComponente } from "./componentes.ts";
-import { lerProjeto, paraRgb, tailwindDoProjeto, type ArquivoFonte } from "./fonte.ts";
+import { lerProjeto, tailwindDoProjeto, type ArquivoFonte } from "./fonte.ts";
 import { achadosDaTela } from "./tela.ts";
+import { conferirValor, descreverToken } from "./valores.ts";
+import { analisarUso } from "./uso.ts";
 
 // Os testes e quem já importava daqui continuam achando a busca no mesmo lugar.
-export { buscarComponente };
+export { buscarComponente, conferirValor };
 
 type Id = string | number | null;
 interface RespostaMcp { jsonrpc: "2.0"; id: Id; result?: unknown; error?: { code: number; message: string } }
@@ -37,123 +39,6 @@ const LIMITE_TEXTO = 60_000;
 const CATEGORIAS: CategoriaToken[] = ["cor", "espaco", "texto", "raio", "sombra", "fonte", "outro"];
 
 export interface OpcoesMcp { fonte: string; chrome?: string | null; versao?: string }
-
-// ---------------------------------------------------------------------------
-// Consultas ao sistema — puras, testáveis sem processo nem navegador
-// ---------------------------------------------------------------------------
-
-/**
- * Alias para outro token é a camada semântica (`--cor-acao: var(--azul-600)`); valor
- * cru é a primitiva. Não é convenção de nome, é estrutura: quem aponta para outro
- * token declarou uma intenção, e é esse que o agente deve preferir.
- */
-function camadaDe(t: TokenDesign): "semantica" | "primitiva" {
-  return /^var\(--/.test(t.valor.trim()) ? "semantica" : "primitiva";
-}
-
-function descreverToken(t: TokenDesign): Record<string, unknown> {
-  return {
-    nome: t.nome, valor: t.valor, categoria: t.categoria, camada: camadaDe(t), ...(deBiblioteca(t.nome) ? { biblioteca: true } : {}),
-    ...(t.px !== undefined ? { px: t.px } : {}), ...(t.rgb ? { rgb: t.rgb } : {}),
-    ...(t.intencao ? { intencao: t.intencao } : {}), onde: `${t.arquivo}:${t.linha}`, usar: `var(${t.nome})`,
-  };
-}
-
-// OKLab: distância que acompanha o olho. Em RGB, dois azuis visivelmente diferentes
-// podem ficar mais perto que um azul e o mesmo azul um tom abaixo.
-function paraOklab([r, g, b]: [number, number, number]): [number, number, number] {
-  const lin = (c: number) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
-  const [R, G, B] = [lin(r), lin(g), lin(b)];
-  const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
-  const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B);
-  const s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
-  return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
-}
-function distanciaCor(a: [number, number, number], b: [number, number, number]): number {
-  const [x, y] = [paraOklab(a), paraOklab(b)];
-  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
-}
-
-// Entre tokens de mesmo valor: do projeto antes de biblioteca, semântico antes de
-// primitivo, explicado antes de mudo. É o que o autor quis que fosse usado, e o que
-// continua certo quando a paleta mudar. Sugerir `var(--rdp-accent-color)` — a variável
-// interna do date picker — para pintar um botão seria obedecer ao valor e errar o sistema.
-function preferencia(a: TokenDesign, b: TokenDesign): number {
-  return Number(deBiblioteca(a.nome)) - Number(deBiblioteca(b.nome))
-    || (camadaDe(a) === "semantica" ? 0 : 1) - (camadaDe(b) === "semantica" ? 0 : 1)
-    || (a.intencao ? 0 : 1) - (b.intencao ? 0 : 1) || a.nome.localeCompare(b.nome);
-}
-/** O token a recomendar: o preferido, desde que seja do projeto. */
-function recomendado(tokens: TokenDesign[]): TokenDesign | undefined {
-  return [...tokens].sort(preferencia).find((t) => !deBiblioteca(t.nome));
-}
-
-/**
- * Entre tokens do projeto com o mesmo valor, qual usar — ou nenhum, se a escolha é de
- * papel. `--cor-acao: var(--azul-600)` e `--azul-600` são uma camada sobre a outra: a
- * semântica resolve sozinha. Já `--color-action-primary`, `--color-focus` e
- * `--color-brand-teal-deep` com o mesmo #046b66 são papéis diferentes, e o Pré-Projetos
- * proíbe por escrito a cor da marca em botão. Recomendar o primeiro da lista ali
- * ensinaria o agente a errar com confiança; sem `usar`, ele escolhe pelo papel.
- */
-function escolherPorPapel(tokens: TokenDesign[]): { usar: TokenDesign | null; papeis: TokenDesign[] } {
-  const doProjeto = tokens.filter((t) => !deBiblioteca(t.nome));
-  const apontados = new Set(doProjeto.flatMap((t) => [.../var\((--[A-Za-z0-9_-]+)\)/g[Symbol.matchAll](t.valor)].map((m) => m[1])));
-  const papeis = doProjeto.filter((t) => !apontados.has(t.nome)).sort(preferencia);
-  return { usar: papeis.length === 1 ? papeis[0] ?? null : null, papeis: papeis.length > 1 ? papeis : [] };
-}
-
-export function conferirValor(sistema: SistemaDeDesign, valor: string, categoria?: CategoriaToken): Record<string, unknown> {
-  const texto = valor.trim();
-  const rgb = categoria === undefined || categoria === "cor" ? paraRgb(texto) : null;
-  if (rgb) {
-    const comCor = sistema.tokens.map((t) => ({ t, rgb: t.rgb ? paraRgb(t.rgb) : null })).filter((c): c is { t: TokenDesign; rgb: [number, number, number] } => !!c.rgb);
-    const medidos = comCor.map((c) => ({ t: c.t, d: distanciaCor(rgb, c.rgb) })).sort((a, b) => a.d - b.d || preferencia(a.t, b.t));
-    const exatos = medidos.filter((m) => m.d < 0.002).map((m) => m.t).sort(preferencia);
-    // Abaixo de 0,02 em OKLab a diferença mal se vê: é quase sempre o mesmo token
-    // escrito à mão com um dígito trocado, e o agente deveria usar o token.
-    const proximos = medidos.filter((m) => m.d >= 0.002 && m.d <= 0.08 && !deBiblioteca(m.t.nome)).slice(0, 3);
-    // Quase igual: a mesma cor escrita com um dígito trocado. Todos os tokens daquela
-    // cor entram na escolha, não só o primeiro da distância.
-    const quase = proximos[0] && proximos[0].d < 0.02 ? medidos.filter((m) => Math.abs(m.d - (proximos[0]?.d ?? 0)) < 0.0005).map((m) => m.t) : [];
-    const escolha = escolherPorPapel(exatos.length ? exatos : quase);
-    return {
-      valor: texto, tipo: "cor", noSistema: exatos.some((t) => !deBiblioteca(t.nome)),
-      usar: escolha.usar ? `var(${escolha.usar.nome})` : null,
-      exatos: exatos.map(descreverToken),
-      proximos: proximos.map((m) => ({ ...descreverToken(m.t), distancia: Math.round(m.d * 1000) / 1000, quaseIgual: m.d < 0.02 })),
-      ...(escolha.papeis.length ? { papeis: escolha.papeis.map(descreverToken) } : {}),
-      observacao: escolha.papeis.length ? `${escolha.papeis.length} tokens do projeto têm esta cor, com papéis diferentes (ação, link, foco, marca…): escolha pelo papel do elemento e pela intenção de cada um — não pelo valor`
-        : recomendado(exatos) ? "a cor já tem token; use-o em vez do valor literal"
-        : proximos[0] && proximos[0].d < 0.02 ? "praticamente a mesma cor de um token existente — provavelmente é ele"
-        : proximos.length ? "nenhum token com esta cor; os mais próximos estão listados — prefira um deles ou declare um token novo com intenção"
-        : "nenhum token parecido; se a cor é nova de propósito, declare um token com um comentário dizendo para que serve",
-    };
-  }
-  const px = emPixels(texto);
-  if (px === undefined) return { valor: texto, tipo: "desconhecido", noSistema: false, observacao: "não é uma cor nem uma medida em px, rem ou em" };
-  const cat: CategoriaToken = categoria ?? "espaco";
-  const candidatos = sistema.tokens.filter((t) => t.px !== undefined && !deBiblioteca(t.nome) && (cat === "espaco" ? t.categoria === "espaco" : t.categoria === cat));
-  const medidos = candidatos.map((t) => ({ t, d: Math.abs((t.px as number) - px) })).sort((a, b) => a.d - b.d || preferencia(a.t, b.t));
-  const exatos = medidos.filter((m) => m.d < 0.01).map((m) => m.t).sort(preferencia);
-  const proximos = medidos.filter((m) => m.d >= 0.01 && m.d <= Math.max(4, px * 0.25)).slice(0, 3);
-  const base = sistema.espaco.base;
-  const naEscala = cat === "espaco" && base ? Math.abs(px % base) < 0.01 : cat === "texto" && sistema.escalaDeTexto.length ? sistema.escalaDeTexto.includes(px) : null;
-  const medida = escolherPorPapel(exatos);
-  return {
-    valor: texto, tipo: cat, px, noSistema: exatos.length > 0,
-    usar: medida.usar ? `var(${medida.usar.nome})` : null,
-    exatos: exatos.map(descreverToken),
-    proximos: proximos.map((m) => ({ ...descreverToken(m.t), diferencaPx: Math.round(m.d * 100) / 100 })),
-    ...(medida.papeis.length ? { papeis: medida.papeis.map(descreverToken) } : {}),
-    ...(naEscala === null ? {} : { naEscala, ...(cat === "espaco" && base ? { passo: base } : {}), ...(cat === "texto" ? { escalaDeTexto: sistema.escalaDeTexto } : {}) }),
-    observacao: medida.papeis.length ? `${medida.papeis.length} tokens do projeto têm esta medida, com papéis diferentes (ritmo, recuo, alvo de toque…): escolha pelo papel`
-      : exatos.length ? "a medida já tem token; use-o em vez do valor literal"
-      : naEscala === false ? `fora da escala do projeto${cat === "espaco" && base ? ` (passo de ${base}px)` : ""}; prefira o token mais próximo`
-      : proximos.length ? "sem token exato; os mais próximos estão listados"
-      : "sem token para esta medida",
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Protocolo
@@ -186,7 +71,7 @@ export const FERRAMENTAS = [
   {
     name: "auditar_sistema",
     title: "Auditar o sistema declarado",
-    description: "O que o CSS do projeto declara e não se sustenta: espaçamento fora do passo da escala, a mesma cor escrita em vários tokens em vez de apontar para um só, tokens declarados e nunca usados. Análise do código, sem abrir a página.",
+    description: "O que o CSS do projeto declara e não se sustenta — espaçamento fora do passo, a mesma cor em vários tokens, token nunca usado — e o quanto as telas usam o sistema: valores literais no código com o token que existe para cada um, cobertura de controles (botão cru contra o Button do sistema) por tela, componentes base sem uso e os dez componentes do núcleo. Análise do código, sem abrir a página.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { ...SOMENTE_LEITURA, openWorldHint: false },
   },
@@ -279,8 +164,13 @@ export function criarServidorMcp(opcoes: OpcoesMcp): { tratar(mensagem: unknown)
         return resultado({ consulta, total: encontrados.length, componentes: encontrados, ...(encontrados.length ? {} : { observacao: "nenhum componente exportado com esse nome ou nessa pasta" }) });
       }
       case "auditar_sistema": {
-        const { sistema: s, achados } = analisarSistema((await sistema()).arquivos);
-        return resultado({ tokens: s.tokens.length, arquivos: s.arquivos, passoDeEspaco: s.espaco.base ?? null, total: achados.length, achados: achados.slice(0, 80) });
+        const { arquivos } = await sistema();
+        const { sistema: s, achados } = analisarSistema(arquivos);
+        const uso = analisarUso(arquivos, s);
+        return resultado({
+          tokens: s.tokens.length, arquivos: s.arquivos, passoDeEspaco: s.espaco.base ?? null, total: achados.length, achados: achados.slice(0, 80),
+          uso: { ...uso, literais: uso.literais.slice(0, 30), semUso: uso.semUso.map((c) => ({ nome: c.nome, arquivo: c.arquivo })) },
+        });
       }
       case "medir_pagina": {
         const url = args["url"], larguras = args["larguras"];

@@ -229,6 +229,14 @@ As regras foram calibradas contra projetos reais, porque linter que grita demais
 | cor literal repetida | dois tokens escrevendo o mesmo valor. `--color-text-main: var(--color-brand-ink)` é alias e **não** conta: alias é o jeito certo de dar nome semântico |
 | token sem uso | nem `var()` nem utilitária derivada o referenciam; prefixo de biblioteca é sinalizado à parte, porque ela lê a variável em tempo de execução |
 
+`anotador design` termina com **o sistema em uso** — o outro lado da auditoria: o quanto as telas usam o que o CSS declara. Três medidas do [playbook](https://www.designsystems.one/playbook) do designsystems.one que um analisador de código faz sem opinião:
+
+- **valores literais no código** — "#4f46e5 em 137 lugares" —, agrupados pelo valor (`text-[11px]` e `text-[0.6875rem]` são o mesmo), cada um com o token que existe para ele. Quando vários tokens têm o mesmo valor com papéis diferentes, não recomenda nenhum: a escolha é de papel. Sem escala de texto declarada, compara com a do Tailwind (`text-xs`, `text-sm`…);
+- **cobertura dos controles**, por tela — `<button>` cru contra o `Button` do sistema, `<input>` contra `Input`, e assim por diante. Elemento cru só pesa quando o sistema tem o equivalente, e `<input type="hidden">` nunca conta;
+- **componentes base sem uso** no produto e os **dez do núcleo** que o playbook considera suficientes para 80% de um produto interno.
+
+Ficou de fora o que exige gente e não código: tempo até o primeiro protótipo, NPS do time, processo de RFC. No Pré-Projetos, a primeira leitura deu 86% de cobertura, com a tela de workflow em 33%, e 45 textos de 11px fora de qualquer escala.
+
 O CSS diz o que foi declarado; a página renderizada diz o que acontece. A avaliação abre a tela em 390, 768 e 1280px e mede o que só existe depois de renderizar — rolagem horizontal, elemento vazando, texto abaixo de 12px, alvo de toque abaixo do mínimo do WCAG 2.2 e borda a poucos pixels de uma coluna que o resto da página respeita — e isso entra no dossiê como uma seção própria.
 
 Depois, forçando as preferências do sistema, mede o que o overlay não alcança — porque ele vê só o tema e as preferências de quem está olhando: **contraste nos temas claro e escuro**, com a mesma régua do overlay (o tema escuro é forçado por `prefers-color-scheme`, `data-theme` e `.dark`; se a página não mudar, o relatório diz "não detectado" em vez de aprovar o que ninguém viu), **falta de região principal** (`<main>`) e **animação que segue em loop com movimento reduzido**. O que o [checklist de acessibilidade](https://www.designsystems.one/tools/accessibility-checklist) separa como trabalho de leitura — nome genérico de botão, texto de link que não se sustenta sozinho, alt que não descreve, estado só por cor — vai pedido por escrito ao agente no dossiê. Sem achado não é "acessível": é só o que a régua alcança.
@@ -250,7 +258,7 @@ No Cursor, em `.cursor/mcp.json`: `{"mcpServers": {"anotador": {"command": "anot
 | `conferir_valor` | antes de escrever `#3b82f6` ou `13px`: diz se já existe token, qual usar, os mais próximos e se a medida respeita o passo. Cor é comparada em OKLab, então um dígito trocado encontra o token certo; entre tokens de mesmo valor, o semântico vem antes do primitivo, e a variável interna de uma biblioteca nunca é recomendada |
 | `buscar_componente` | antes de criar um componente: os que já existem, com quantas vezes cada um é usado no produto (Storybook e testes não contam) |
 | `listar_tokens` | o vocabulário: valor, camada, a intenção do comentário e `arquivo:linha` |
-| `auditar_sistema` | as regras da tabela acima, sobre o código |
+| `auditar_sistema` | as regras da tabela acima e o sistema em uso: literais com o token de cada um, cobertura por tela, componentes sem uso |
 | `medir_pagina` | a medida em três larguras, sobre a URL que você passar |
 | `conferir_arquivos_de_agente` | se AGENTS.md, CLAUDE.md e skills citam componentes e tokens que ainda existem |
 | `gerar_skill_de_design` | o texto da skill de design do projeto, gerado do código — não grava nada |

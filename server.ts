@@ -23,6 +23,7 @@ import { ChatAgentes, ErroChat } from "./lib/chat.ts";
 import { saidaPublicaAvaliacao } from "./lib/avaliacao-conversa.ts";
 import { achadosDaTela, resumoDaTela, type AcessibilidadeTela, type MedidaTela } from "./lib/tela.ts";
 import { servirMcpStdio } from "./lib/mcp.ts";
+import { analisarUso, linhasDoUso } from "./lib/uso.ts";
 import { aliasesDoTsconfig, conferirArquivosDeAgente, gerarSkillDeDesign, lerArquivosDeAgente, prontidaoParaAgentes } from "./lib/arquivos-agente.ts";
 import { serializar } from "./lib/persistencia.ts";
 import { lerLimitesConta } from "./lib/limites.ts";
@@ -1946,7 +1947,7 @@ uso:
   anotador conectar <url> [--porta 3999]        (troca o app de um anotador já no ar)
   anotador desconectar [--porta 3999]
   anotador fontes [--compact] [--forcar]        (instala a San Francisco da Apple nesta máquina)
-  anotador design [--fonte dir] [--tudo]        (tokens do projeto e o que foge das próprias regras)
+  anotador design [--fonte dir] [--tudo]        (tokens do projeto, o que foge das próprias regras e o quanto as telas usam o sistema)
   anotador design --tokens > tokens.json        (os mesmos tokens no formato do W3C, que o Figma lê)
   anotador mcp [--fonte dir]                    (o sistema de design como servidor MCP, para qualquer agente consultar)
   anotador agentes [--fonte dir]                (confere se AGENTS.md, CLAUDE.md e skills citam nomes que ainda existem)
@@ -2089,6 +2090,9 @@ async function principal(): Promise<void> {
       console.log(`    [${a.gravidade}] ${a.alvo}${a.onde ? `  (${a.onde})` : ""}`);
       console.log(`          ${a.evidencia}`);
     }
+    // O outro lado: o quanto as telas usam o que o CSS declara.
+    console.log("\no sistema em uso");
+    for (const linha of linhasDoUso(analisarUso(await lerProjeto(fonte), sistema))) console.log(linha);
     return;
   }
   if (comando === "agentes") {
