@@ -106,7 +106,7 @@ test("contraste nos dois temas, região principal e movimento: aponta o que falh
   const achados = achadosDaTela([vazia(1280)], {
     largura: 1280,
     temas: [
-      { tema: "claro", detectado: true, total: 0, pior: 21, exemplos: [] },
+      { tema: "claro", detectado: true, total: 0, pior: null, exemplos: [] },
       { tema: "escuro", detectado: true, total: 2, pior: 2.1, exemplos: ["p.aviso (2.1:1, mínimo 4.5)", "span.nota (3.9:1, mínimo 4.5)"] },
     ],
     semMain: true,
@@ -115,7 +115,7 @@ test("contraste nos dois temas, região principal e movimento: aponta o que falh
   assert.deepEqual(achados.map((a) => [a.gravidade, a.regra]), [["alta", "contraste abaixo do mínimo"], ["media", "sem região principal"], ["baixa", "animação ignora movimento reduzido"]]);
   assert.match(achados[0]!.evidencia, /no tema escuro, o pior com 2\.1:1/);
   // Tema que a página não tem não é tema aprovado.
-  const semEscuro = { largura: 1280, temas: [{ tema: "claro" as const, detectado: true, total: 0, pior: 21, exemplos: [] }, { tema: "escuro" as const, detectado: false, total: 3, pior: 1.5, exemplos: ["x"] }], semMain: false, movimento: null };
+  const semEscuro = { largura: 1280, temas: [{ tema: "claro" as const, detectado: true, total: 0, pior: null, exemplos: [] }, { tema: "escuro" as const, detectado: false, total: 3, pior: 1.5, exemplos: ["x"] }], semMain: false, movimento: null };
   assert.deepEqual(achadosDaTela([vazia(1280)], semEscuro), [], "contraste de um tema que não reagiu não vira achado");
   assert.match(resumoDaTela([vazia(1280)], [], semEscuro), /tema escuro\*\* — não detectado/);
 });
@@ -147,6 +147,7 @@ test("forçando o tema e o movimento reduzido na página renderizada", { skip: !
     const ruim = (await medirUrl(base + "/ruim", { larguras: [1280] })).acessibilidade;
     assert.ok(ruim);
     assert.deepEqual(ruim.temas.map((t) => [t.tema, t.detectado, t.total]), [["claro", true, 0], ["escuro", true, 1]]);
+    assert.equal(ruim.temas[0]?.pior, null, "sem falha não há pior caso — nem um 21 para alguém ler como nota");
     assert.match(ruim.temas[1]!.exemplos[0] ?? "", /^div > p\.aviso \(1\.\d:1, mínimo 4\.5\)$/);
     assert.equal(ruim.semMain, true);
     assert.equal(ruim.movimento?.total, 1);

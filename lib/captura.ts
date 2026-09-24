@@ -144,7 +144,7 @@ async function medirLarguras(pagina: Pagina, larguras: readonly number[], altura
   return medidas;
 }
 
-interface ResultadoContraste { fundo: string; total: number; pior: number; exemplos: string[]; semMain: boolean }
+interface ResultadoContraste { fundo: string; total: number; pior: number | null; exemplos: string[]; semMain: boolean }
 
 /**
  * Contraste nos dois temas, região principal e movimento reduzido — o que o overlay não

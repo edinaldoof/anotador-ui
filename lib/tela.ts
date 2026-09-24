@@ -120,7 +120,8 @@ export interface ContrasteTema {
   /** A página mudou de cara ao forçar o tema. Sem isso, não se afirma nada sobre ele. */
   detectado: boolean;
   total: number;
-  pior: number;
+  /** Menor razão encontrada; nulo quando nenhum texto ficou abaixo do mínimo. */
+  pior: number | null;
   exemplos: string[];
 }
 
@@ -162,7 +163,8 @@ ${CAMINHO_JS}
     total++; pior = Math.min(pior, razao);
     if (exemplos.length < 4) exemplos.push(caminho(el) + " (" + razao.toFixed(1) + ":1, mínimo " + minimo + ")");
   }
-  return { fundo: getComputedStyle(document.body).backgroundColor + "|" + getComputedStyle(document.body).color, total, pior: Math.round(pior * 10) / 10, exemplos, semMain: !document.querySelector("main, [role=main]") };
+  // Sem falha, não há "pior": devolver o 21 inicial fazia agente ler 21:1 como nota da página.
+  return { fundo: getComputedStyle(document.body).backgroundColor + "|" + getComputedStyle(document.body).color, total, pior: total ? Math.round(pior * 10) / 10 : null, exemplos, semMain: !document.querySelector("main, [role=main]") };
 })()`;
 
 // Tema por atributo (data-theme) ou por classe (.dark do Tailwind) não obedece a
@@ -201,7 +203,7 @@ export function achadosDaTela(medidas: MedidaTela[], acessibilidade: Acessibilid
     const a = acessibilidade;
     for (const t of a.temas) {
       if (!t.detectado || !t.total) continue;
-      achados.push({ regra: "contraste abaixo do mínimo", gravidade: t.pior < 3 ? "alta" : "media", largura: a.largura, alvo: t.exemplos[0] ?? "texto",
+      achados.push({ regra: "contraste abaixo do mínimo", gravidade: (t.pior ?? 21) < 3 ? "alta" : "media", largura: a.largura, alvo: t.exemplos[0] ?? "texto",
         evidencia: `${t.total} texto(s) abaixo do mínimo do WCAG no tema ${t.tema}, o pior com ${t.pior}:1${t.exemplos.length > 1 ? " — também " + t.exemplos.slice(1).join(", ") : ""}` });
     }
     if (a.semMain) achados.push({ regra: "sem região principal", gravidade: "media", largura: a.largura, alvo: "documento", evidencia: "nenhum <main> nem role=\"main\": quem usa leitor de tela perde o atalho para pular direto ao conteúdo" });
