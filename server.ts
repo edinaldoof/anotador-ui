@@ -23,6 +23,7 @@ import { ChatAgentes, ErroChat } from "./lib/chat.ts";
 import { saidaPublicaAvaliacao } from "./lib/avaliacao-conversa.ts";
 import { achadosDaTela, resumoDaTela, type MedidaTela } from "./lib/tela.ts";
 import { servirMcpStdio } from "./lib/mcp.ts";
+import { aliasesDoTsconfig, conferirArquivosDeAgente, gerarSkillDeDesign, lerArquivosDeAgente } from "./lib/arquivos-agente.ts";
 import { serializar } from "./lib/persistencia.ts";
 import { lerLimitesConta } from "./lib/limites.ts";
 import { sessoesExternasChat, ID_SESSAO_NATIVA } from "./lib/chat-sessoes.ts";
@@ -43,7 +44,7 @@ import { Fila, idSeguro, validarLote } from "./lib/fila.ts";
 import { ErroAnexo, idAnexoSeguro, normalizarPaginaAnexo } from "./lib/anexos.ts";
 import { Continuacoes, ErroContinuacao, hostContinuacao, PAGINA_RETOMADA } from "./lib/continuacao.ts";
 import { capacidadeTranscricao, preaquecerTranscricao, transcreverAudio, ErroTranscricao, MAX_CORPO_TRANSCRICAO } from "./lib/transcricao.ts";
-import { analisarLote, arquivosProvaveis, contextoDeProduto, intencaoDaRota, lerProjeto } from "./lib/fonte.ts";
+import { analisarLote, arquivosProvaveis, contextoDeProduto, intencaoDaRota, lerProjeto, tailwindDoProjeto } from "./lib/fonte.ts";
 import { cabecalhosParaAlvo, ehHtml, extrairNonce, filtrarCabecalhosResposta, injetarScript } from "./lib/injetar.ts";
 import { Difusor, ehPedidoWs, type InfoOuvinte } from "./lib/ws.ts";
 
@@ -1948,6 +1949,8 @@ uso:
   anotador design [--fonte dir] [--tudo]        (tokens do projeto e o que foge das próprias regras)
   anotador design --tokens > tokens.json        (os mesmos tokens no formato do W3C, que o Figma lê)
   anotador mcp [--fonte dir]                    (o sistema de design como servidor MCP, para qualquer agente consultar)
+  anotador agentes [--fonte dir]                (confere se AGENTS.md, CLAUDE.md e skills citam nomes que ainda existem)
+  anotador agentes --gerar > SKILL.md           (a skill de design do projeto, gerada do código)
   anotador avaliacoes [--porta 3999]            (pedidos de avaliação de página, com e sem parecer)
   anotador avaliacao <id> [--porta 3999]        (dossiê e, se houver, o parecer do agente)
   anotador saude [--porta 3999]
@@ -2005,6 +2008,7 @@ async function principal(): Promise<void> {
       compact: { type: "boolean", default: false },
       tudo: { type: "boolean", default: false },
       tokens: { type: "boolean", default: false },
+      gerar: { type: "boolean", default: false },
       forcar: { type: "boolean", default: false },
       ajuda: { type: "boolean", default: false },
     },
@@ -2085,6 +2089,24 @@ async function principal(): Promise<void> {
       console.log(`    [${a.gravidade}] ${a.alvo}${a.onde ? `  (${a.onde})` : ""}`);
       console.log(`          ${a.evidencia}`);
     }
+    return;
+  }
+  if (comando === "agentes") {
+    const codigo = await lerProjeto(fonte);
+    const sistema = lerSistemaDeDesign(codigo);
+    if (values.gerar) {
+      const scripts = await readFile(join(fonte, "package.json"), "utf8").then((t) => (JSON.parse(t) as { scripts?: Record<string, string> }).scripts ?? {}).catch(() => ({}));
+      process.stdout.write(gerarSkillDeDesign({ nome: values.nome ?? salva?.nome ?? basename(resolve(fonte)), codigo, sistema, aliases: await aliasesDoTsconfig(fonte), scripts, tailwind: !!(await tailwindDoProjeto(fonte)), hoje: new Date().toISOString().slice(0, 10) }));
+      return;
+    }
+    const { arquivos, skillsVazias } = await lerArquivosDeAgente(fonte, codigo);
+    const achados = conferirArquivosDeAgente(arquivos, codigo, sistema, skillsVazias);
+    console.log(`${arquivos.length} arquivo(s) de agente em ${fonte}${arquivos.length ? ": " + arquivos.map((a) => a.relativo).join(", ") : ""}`);
+    if (!achados.length) { console.log("todo nome citado existe no código"); return; }
+    console.log(`\n${achados.length} achado(s):`);
+    for (const a of achados) console.log(`  [${a.tipo}] ${a.arquivo}${a.linha ? ":" + a.linha : ""}  ${a.nome}${a.sugestao ? `  → talvez ${a.sugestao}` : ""}\n          ${a.evidencia}`);
+    // Código de saída diferente de zero: é o que faz o CI barrar o documento desatualizado.
+    process.exitCode = 1;
     return;
   }
   if (comando === "fontes") {

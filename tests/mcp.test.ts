@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { after, before, describe, test } from "node:test";
+import { after, afterEach, before, describe, test } from "node:test";
 import { encontrarChromium } from "../lib/cdp.ts";
 import { lerSistemaDeDesign } from "../lib/design.ts";
 import { lerProjeto } from "../lib/fonte.ts";
@@ -123,9 +123,14 @@ describe("servidor MCP por stdio", () => {
     const proxima = () => new Promise<string>((r) => { const l = linhas.shift(); if (l !== undefined) r(l); else esperando.push(r); });
     const enviar = (m: unknown) => filho.stdin.write((typeof m === "string" ? m : JSON.stringify(m)) + "\n");
     const pedir = async (id: number, method: string, params?: unknown) => { enviar({ jsonrpc: "2.0", id, method, ...(params === undefined ? {} : { params }) }); return JSON.parse(await proxima()) as Record<string, any>; };
-    const fechar = () => new Promise<number | null>((r) => { filho.on("exit", (c) => r(c)); filho.stdin.end(); });
+    const fechar = () => new Promise<number | null>((r) => { if (filho.exitCode !== null) return r(filho.exitCode); filho.on("exit", (c) => r(c)); filho.stdin.end(); });
+    abertos.push(filho);
     return { enviar, pedir, proxima, fechar };
   };
+  // Uma asserção que falha no meio não pode deixar o servidor vivo: o processo filho
+  // seguraria o executor de testes até o tempo esgotar, e a falha viraria travamento.
+  const abertos: Array<ReturnType<typeof spawn>> = [];
+  afterEach(() => { for (const f of abertos.splice(0)) if (f.exitCode === null) f.kill(); });
 
   test("negocia a versão, lista as ferramentas e devolve erro de ferramenta como resultado", { timeout: 30_000 }, async () => {
     const mcp = abrir();
@@ -138,7 +143,7 @@ describe("servidor MCP por stdio", () => {
     assert.deepEqual((await mcp.pedir(2, "ping")).result, {});
 
     const lista = await mcp.pedir(3, "tools/list");
-    assert.deepEqual(lista.result.tools.map((f: { name: string }) => f.name), ["listar_tokens", "conferir_valor", "buscar_componente", "auditar_sistema", "medir_pagina", "extrair_design"]);
+    assert.deepEqual(lista.result.tools.map((f: { name: string }) => f.name), ["listar_tokens", "conferir_valor", "buscar_componente", "auditar_sistema", "medir_pagina", "conferir_arquivos_de_agente", "gerar_skill_de_design", "extrair_design"]);
     assert.ok(lista.result.tools.every((f: { annotations: { readOnlyHint: boolean } }) => f.annotations.readOnlyHint), "nenhuma ferramenta mexe no projeto");
 
     const conferido = await mcp.pedir(4, "tools/call", { name: "conferir_valor", arguments: { valor: "#0f766e" } });
@@ -154,6 +159,13 @@ describe("servidor MCP por stdio", () => {
     assert.equal((await mcp.pedir(7, "prompts/list")).error.code, -32601);
     mcp.enviar("{isto não é json");
     assert.equal(JSON.parse(await mcp.proxima()).error.code, -32700);
+
+    const agentes = await mcp.pedir(9, "tools/call", { name: "conferir_arquivos_de_agente", arguments: {} });
+    assert.equal(agentes.result.structuredContent.total, 0);
+    const skill = await mcp.pedir(10, "tools/call", { name: "gerar_skill_de_design", arguments: {} });
+    assert.match(skill.result.content[0].text, /^---\nname: design-system\n/);
+    assert.match(skill.result.content[0].text, /\| `components\/ui\/dialog` \| `Dialog`, `DialogFooter` \| 4 \|/, "sem tsconfig, o caminho do arquivo");
+    assert.doesNotMatch(skill.result.content[0].text, /Não existe `Modal`/, "o projeto tem um Modal, mesmo esquecido: não se diz que ele não existe");
 
     const recurso = await mcp.pedir(8, "resources/read", { uri: "anotador://tokens.dtcg.json" });
     assert.match(recurso.result.contents[0].text, /ação principal: botões e links de destaque/, "a intenção do comentário chega como $description");

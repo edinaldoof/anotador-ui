@@ -12,12 +12,19 @@
 // Cursor sabem lançar como processo local, e dispensa porta, chave e certificado.
 // Sem dependência: o protocolo são seis métodos, e o projeto não tem nenhuma.
 
+import { readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
+import { aliasesDoTsconfig, conferirArquivosDeAgente, gerarSkillDeDesign, lerArquivosDeAgente } from "./arquivos-agente.ts";
 import { medirUrl } from "./captura.ts";
 import { analisarSistema, deBiblioteca, emPixels, lerSistemaDeDesign, paraDtcg, type CategoriaToken, type SistemaDeDesign, type TokenDesign } from "./design.ts";
 import { extrairDesign } from "./extracao.ts";
-import { lerProjeto, paraRgb, type ArquivoFonte } from "./fonte.ts";
+import { buscarComponente } from "./componentes.ts";
+import { lerProjeto, paraRgb, tailwindDoProjeto, type ArquivoFonte } from "./fonte.ts";
 import { achadosDaTela } from "./tela.ts";
+
+// Os testes e quem já importava daqui continuam achando a busca no mesmo lugar.
+export { buscarComponente };
 
 type Id = string | number | null;
 interface RespostaMcp { jsonrpc: "2.0"; id: Id; result?: unknown; error?: { code: number; message: string } }
@@ -97,7 +104,9 @@ export function conferirValor(sistema: SistemaDeDesign, valor: string, categoria
       usar: escolhido ? `var(${escolhido.nome})` : null,
       exatos: exatos.map(descreverToken),
       proximos: proximos.map((m) => ({ ...descreverToken(m.t), distancia: Math.round(m.d * 1000) / 1000, quaseIgual: m.d < 0.02 })),
-      observacao: recomendado(exatos) ? "a cor já tem token; use-o em vez do valor literal"
+      ...(exatos.filter((t) => !deBiblioteca(t.nome)).length > 1 ? { papeis: exatos.filter((t) => !deBiblioteca(t.nome)).map((t) => t.nome) } : {}),
+      observacao: exatos.filter((t) => !deBiblioteca(t.nome)).length > 1 ? "vários tokens do projeto têm esta cor, com papéis diferentes (ação, link, foco, marca…): escolha pelo papel do elemento, não pelo valor — `usar` é só o primeiro da lista"
+        : recomendado(exatos) ? "a cor já tem token; use-o em vez do valor literal"
         : proximos[0] && proximos[0].d < 0.02 ? "praticamente a mesma cor de um token existente — provavelmente é ele"
         : proximos.length ? "nenhum token com esta cor; os mais próximos estão listados — prefira um deles ou declare um token novo com intenção"
         : "nenhum token parecido; se a cor é nova de propósito, declare um token com um comentário dizendo para que serve",
@@ -123,39 +132,6 @@ export function conferirValor(sistema: SistemaDeDesign, valor: string, categoria
       : proximos.length ? "sem token exato; os mais próximos estão listados"
       : "sem token para esta medida",
   };
-}
-
-interface ComponenteEncontrado { nome: string; arquivo: string; linha: number; assinatura: string; usos: number }
-
-/**
- * Componentes exportados em .tsx/.jsx, com quantas vezes cada um é usado. O número é o
- * que importa: um agente que cria `<Modal>` quando o projeto usa `<Dialog>` quarenta
- * vezes não errou o código, errou o vocabulário — e é o erro que mais se repete.
- */
-export function buscarComponente(arquivos: ArquivoFonte[], consulta: string, limite = 10): ComponenteEncontrado[] {
-  const q = consulta.trim().toLowerCase();
-  if (!q) return [];
-  const vistos = new Map<string, ComponenteEncontrado>();
-  for (const a of arquivos) {
-    if (!/\.(tsx|jsx)$/.test(a.relativo) || /\.(stories|test|spec)\.[jt]sx$/.test(a.relativo)) continue;
-    a.linhas.forEach((linha, i) => {
-      const m = /^\s*export\s+(?:default\s+)?(?:async\s+)?(?:function|const|class)\s+([A-Z][A-Za-z0-9]*)/.exec(linha);
-      const nome = m?.[1];
-      if (!nome || vistos.has(nome)) return;
-      if (!nome.toLowerCase().includes(q) && !a.relativo.toLowerCase().includes(q)) return;
-      vistos.set(nome, { nome, arquivo: a.relativo, linha: i + 1, assinatura: linha.trim().slice(0, 200), usos: 0 });
-    });
-  }
-  if (!vistos.size) return [];
-  const padrao = new RegExp("<(" + [...vistos.keys()].join("|") + ")[\\s/>]", "g");
-  // Uso é o que o produto usa: a história do Storybook e o teste existem justamente
-  // para exercitar o componente, e contá-los inflaria quem só é usado em demonstração.
-  for (const a of arquivos) {
-    if (!/\.(tsx|jsx)$/.test(a.relativo) || /\.(stories|test|spec)\.[jt]sx$/.test(a.relativo)) continue;
-    for (const linha of a.linhas) for (const uso of linha.matchAll(padrao)) { const c = uso[1] && vistos.get(uso[1]); if (c) c.usos++; }
-  }
-  // Nome que casa com a consulta antes do que só mora numa pasta com o nome dela.
-  return [...vistos.values()].sort((a, b) => Number(!a.nome.toLowerCase().includes(q)) - Number(!b.nome.toLowerCase().includes(q)) || b.usos - a.usos || a.nome.localeCompare(b.nome)).slice(0, limite);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +177,20 @@ export const FERRAMENTAS = [
     annotations: { ...SOMENTE_LEITURA, openWorldHint: true },
   },
   {
+    name: "conferir_arquivos_de_agente",
+    title: "Conferir AGENTS.md, CLAUDE.md e skills",
+    description: "Confere se os arquivos que os agentes leem — AGENTS.md, CLAUDE.md, skills, regras do Cursor e do Copilot — citam componentes e tokens que ainda existem no código. Documento desatualizado é fonte de alucinação: o agente usa o nome documentado e o build quebra. Aponta também pasta de skill sem SKILL.md e frontmatter fora do padrão.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { ...SOMENTE_LEITURA, openWorldHint: false },
+  },
+  {
+    name: "gerar_skill_de_design",
+    title: "Gerar a skill de design do projeto",
+    description: "Gera, a partir do código, o texto de uma skill design-system: componentes base com o caminho de import e os usos, componentes compartilhados, os nomes comuns de outras bibliotecas que não existem aqui (com o que usar no lugar) e os tokens, semânticos primeiro. Devolve o texto; não grava nada — quem decide onde salvar é a pessoa.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { ...SOMENTE_LEITURA, openWorldHint: false },
+  },
+  {
     name: "extrair_design",
     title: "Extrair design de um site",
     description: "Gera um DESIGN.md de referência a partir de uma URL: cores, tipografia, espaçamento, raios, sombras e componentes medidos nos estilos computados do DOM renderizado, em desktop e mobile. Serve para estudar uma referência externa; não é o sistema deste projeto. Leva de 10 a 45 segundos.",
@@ -220,6 +210,7 @@ function instrucoes(fonte: string): string {
     "Antes de criar um componente, chame buscar_componente e prefira o que o projeto já usa.",
     "Depois de mexer em layout, chame medir_pagina na URL da tela para ver o que quebra no celular.",
     "listar_tokens e auditar_sistema descrevem o que o CSS declara; medir_pagina e extrair_design, o que a página renderiza.",
+    "Depois de editar AGENTS.md, CLAUDE.md ou uma skill, chame conferir_arquivos_de_agente para ver se todo nome citado ainda existe.",
   ].join(" ");
 }
 
@@ -277,6 +268,17 @@ export function criarServidorMcp(opcoes: OpcoesMcp): { tratar(mensagem: unknown)
         const medidas = await medirUrl(url, { chrome: opcoes.chrome ?? null, ...(larguras ? { larguras: larguras as number[] } : {}) });
         if (!medidas.length) return resultado("a página abriu, mas nenhuma largura pôde ser medida", true);
         return resultado({ url, medidas, achados: achadosDaTela(medidas) });
+      }
+      case "conferir_arquivos_de_agente": {
+        const { arquivos, sistema: s } = await sistema();
+        const lidos = await lerArquivosDeAgente(opcoes.fonte, arquivos);
+        const achados = conferirArquivosDeAgente(lidos.arquivos, arquivos, s, lidos.skillsVazias);
+        return resultado({ arquivos: lidos.arquivos.map((a) => a.relativo), total: achados.length, achados, ...(achados.length ? {} : { observacao: "todo nome citado existe no código" }) });
+      }
+      case "gerar_skill_de_design": {
+        const { arquivos, sistema: s } = await sistema();
+        const scripts = await readFile(join(opcoes.fonte, "package.json"), "utf8").then((t) => (JSON.parse(t) as { scripts?: Record<string, string> }).scripts ?? {}).catch(() => ({}));
+        return resultado(gerarSkillDeDesign({ nome: basename(opcoes.fonte), codigo: arquivos, sistema: s, aliases: await aliasesDoTsconfig(opcoes.fonte), scripts, tailwind: !!(await tailwindDoProjeto(opcoes.fonte)), hoje: new Date().toISOString().slice(0, 10) }));
       }
       case "extrair_design": {
         const url = args["url"];

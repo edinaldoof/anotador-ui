@@ -250,9 +250,26 @@ No Cursor, em `.cursor/mcp.json`: `{"mcpServers": {"anotador": {"command": "anot
 | `listar_tokens` | o vocabulário: valor, camada, a intenção do comentário e `arquivo:linha` |
 | `auditar_sistema` | as regras da tabela acima, sobre o código |
 | `medir_pagina` | a medida em três larguras, sobre a URL que você passar |
+| `conferir_arquivos_de_agente` | se AGENTS.md, CLAUDE.md e skills citam componentes e tokens que ainda existem |
+| `gerar_skill_de_design` | o texto da skill de design do projeto, gerado do código — não grava nada |
 | `extrair_design` | o DESIGN.md de um site de referência, pelos estilos computados |
 
 Nenhuma ferramenta altera o projeto. Os tokens também saem como recurso, `anotador://tokens.dtcg.json`, no formato do W3C.
+
+### Arquivos de agente
+
+AGENTS.md, CLAUDE.md, skills e regras do Cursor e do Copilot são o que o agente lê antes de mexer na interface — e documento desatualizado é fonte ativa de alucinação: o agente usa o nome documentado e o build quebra. O Anotador confere esses arquivos contra o código:
+
+```bash
+anotador agentes                     # nome citado que não existe mais; sai com código 1, para o CI barrar
+anotador agentes --gerar > .agents/skills/design-system/SKILL.md
+```
+
+A conferência olha `var(--token)`, `<Componente>`, `import { Nome }` e nome sozinho entre crases, e aceita o que o projeto exporta ou importa de uma biblioteca. Pula o que o documento diz que não existe — uma seção "não use", uma tabela de removidos, o lado errado de "em vez de" — e os comentários HTML. Aponta também pasta de skill sem `SKILL.md`, frontmatter fora do padrão de Agent Skills e AGENTS.md acima de 200 linhas, que entra no contexto em todo turno.
+
+`--gerar` escreve a referência que apodrece quando é mantida à mão: os componentes base com o caminho de import e quantas vezes cada um é usado, os nomes que modelos trazem de outras bibliotecas e que o projeto não tem (com o substituto, quando ele existe no projeto), e os tokens — primeiro os que o autor explicou no comentário, depois os mais usados, contando `var()` e a utilitária do Tailwind. Sai na saída padrão: onde gravar é decisão sua.
+
+A ideia vem do [pack de agent files](https://www.designsystems.one/ai-ready/agent-files) do designsystems.one (CC0), com uma correção medida: o pack diz que o Claude Code não lê AGENTS.md sem um CLAUDE.md com `@AGENTS.md`. No Claude Code 2.1.280 ele lê — o mesmo texto num `NOTAS.md` fica de fora, então não é chute. A ponte continua inofensiva (o arquivo não entra duas vezes; custa uns 96 tokens por turno) e serve a versões antigas, mas não é obrigatória, e o Anotador não a acusa.
 
 ## Avaliação da página
 
@@ -348,6 +365,7 @@ anotador fontes [--compact] [--forcar]         instala a San Francisco da Apple 
 anotador design [--fonte dir] [--tudo]         tokens do projeto e o que foge das próprias regras
 anotador design --tokens                       os mesmos tokens no formato do W3C, na saída padrão
 anotador mcp [--fonte dir]                     o sistema de design como servidor MCP (stdio), para qualquer agente consultar
+anotador agentes [--fonte dir] [--gerar]       confere AGENTS.md, CLAUDE.md e skills contra o código; --gerar escreve a skill de design
 anotador avaliacoes | avaliacao <id>           pedidos de parecer e o dossiê de cada um
 anotador progresso <id> --nota … | nota <id> --texto … | perguntar <id> --texto … [--opcoes "A|B|C"] [--multipla] | processado <id> [--nota …]
 ```
