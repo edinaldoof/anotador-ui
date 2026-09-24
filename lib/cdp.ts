@@ -237,6 +237,19 @@ export class Pagina {
     await this.canal.enviar("Emulation.setEmulatedMedia", { features }, this.sessionId);
   }
 
+  /**
+   * Roda o script antes de qualquer outro, em cada documento que esta aba carregar — para
+   * trocar o que a página vai receber antes de ela pedir. Devolve o id para esquecê-lo.
+   */
+  async antesDeCarregar(script: string): Promise<string> {
+    const r = await this.canal.enviar("Page.addScriptToEvaluateOnNewDocument", { source: script }, this.sessionId);
+    return String(r["identifier"] ?? "");
+  }
+
+  async esquecerScript(id: string): Promise<void> {
+    await this.canal.enviar("Page.removeScriptToEvaluateOnNewDocument", { identifier: id }, this.sessionId);
+  }
+
   async esperar(ms: number): Promise<void> {
     await new Promise((r) => setTimeout(r, ms));
   }

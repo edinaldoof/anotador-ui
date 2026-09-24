@@ -140,6 +140,20 @@ const RESULTADO_EXTRACAO = {
   },
 };
 
+// A página de conexão numa máquina sem nenhum agente instalado — como a do CI. Aqui os
+// agentes existem e o selo "não instalado" nunca aparecia; foi no CI que a régua achou o
+// contraste dele abaixo do mínimo, na aba ativa do tema escuro.
+const SEM_AGENTES = `(() => {
+  const original = window.fetch;
+  window.fetch = async (url, opcoes) => {
+    const r = await original(url, opcoes);
+    if (!String(url).endsWith("/__anotador/agentes")) return r;
+    const dados = await r.json();
+    for (const a of dados.agentes || []) { a.instalado = false; a.caminho = null; }
+    return new Response(JSON.stringify(dados), { status: r.status, headers: { "content-type": "application/json" } });
+  };
+})();`;
+
 interface Medida { vazamentos: string[]; miudos: string[]; contraste: string[]; alvos: string[]; semNome: string[]; sobreposicoes: string[]; linhasLongas: string[]; tipografia: string[]; margens: string[] }
 
 describe("o Anotador passa na própria régua", { skip: chrome ? false : "Chromium não encontrado (defina ANOTADOR_CHROME)", timeout: 240_000 }, () => {
@@ -190,9 +204,18 @@ describe("o Anotador passa na própria régua", { skip: chrome ? false : "Chromi
       // As páginas próprias seguem o tema do sistema: medidas nos dois.
       for (const tema of ["light", "dark"] as const) {
         await pagina.emularPreferencias({ tema });
-        for (const [nome, caminho] of [["conexão", "/__anotador/"], ["extrator", "/__anotador/extrair"], ["microfone", "/__anotador/microfone"], ["extrator com resultado", "/__anotador/extrair"]] as const) {
+        for (const [nome, caminho] of [["conexão", "/__anotador/"], ["conexão sem agentes", "/__anotador/"], ["extrator", "/__anotador/extrair"], ["microfone", "/__anotador/microfone"], ["extrator com resultado", "/__anotador/extrair"]] as const) {
+          const script = nome === "conexão sem agentes" ? await pagina.antesDeCarregar(SEM_AGENTES) : null;
           await pagina.navegar(proxy.origem + caminho);
           await pagina.esperar(600);
+          // A lista de agentes leva uns 3s na primeira vez — ela sonda cada CLI instalado.
+          // Medir antes disso é medir a página sem as abas: foi assim que o selo de "não
+          // instalado" passou meses sem ser medido aqui e reprovou no CI.
+          if (nome.startsWith("conexão")) {
+            await pagina.esperarPor(script ? 'document.querySelector(".agente.ativa .marca-nao")' : 'document.querySelector("#abas .agente")', 15_000);
+            await pagina.esperar(300);
+          }
+          if (script) await pagina.esquecerScript(script);
           if (nome === "extrator com resultado") {
             // A resposta do servidor é trocada na própria página: medir a interface não
             // precisa extrair um site de verdade.
