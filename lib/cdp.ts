@@ -228,6 +228,15 @@ export class Pagina {
     await this.canal.enviar("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: tema }] }, this.sessionId);
   }
 
+  /** Várias preferências de mídia de uma vez: cada chamada substitui a anterior inteira. */
+  async emularPreferencias(p: { tema?: "light" | "dark"; movimentoReduzido?: boolean }): Promise<void> {
+    const features = [
+      ...(p.tema ? [{ name: "prefers-color-scheme", value: p.tema }] : []),
+      ...(p.movimentoReduzido === undefined ? [] : [{ name: "prefers-reduced-motion", value: p.movimentoReduzido ? "reduce" : "no-preference" }]),
+    ];
+    await this.canal.enviar("Emulation.setEmulatedMedia", { features }, this.sessionId);
+  }
+
   async esperar(ms: number): Promise<void> {
     await new Promise((r) => setTimeout(r, ms));
   }

@@ -41,6 +41,8 @@ test("validação rejeita achados e contexto que quebrariam a geração do dossi
   // A seção da tela é a metade medida do sistema de design: entra quando houve medida
   // e some quando não houve, para o agente não receber um título vazio para interpretar.
   assert.doesNotMatch(gerarDossie(pedido, { porta: 3999 }), /Responsividade, grade e alinhamento/);
+  // O que automação não pega vai pedido por escrito ao agente, com exemplos concretos.
+  assert.match(gerarDossie(pedido, { porta: 3999 }), /Acessibilidade que a régua não alcança\*\*: nome genérico de botão ou link \("Enviar", "Saiba mais"/);
   assert.match(gerarDossie(pedido, { porta: 3999, tela: "- **390px** — rolagem horizontal: 47px" }), /## Responsividade, grade e alinhamento\n\n- \*\*390px\*\*/);
   assert.throws(() => validarPedido({ pagina, instantaneo: "x".repeat(8 * 1024 * 1024 + 1) }), /grande demais/);
 });

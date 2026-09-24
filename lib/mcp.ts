@@ -15,7 +15,7 @@
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
-import { aliasesDoTsconfig, conferirArquivosDeAgente, gerarSkillDeDesign, lerArquivosDeAgente } from "./arquivos-agente.ts";
+import { aliasesDoTsconfig, conferirArquivosDeAgente, gerarSkillDeDesign, lerArquivosDeAgente, prontidaoParaAgentes } from "./arquivos-agente.ts";
 import { medirUrl } from "./captura.ts";
 import { analisarSistema, deBiblioteca, emPixels, lerSistemaDeDesign, paraDtcg, type CategoriaToken, type SistemaDeDesign, type TokenDesign } from "./design.ts";
 import { extrairDesign } from "./extracao.ts";
@@ -172,7 +172,7 @@ export const FERRAMENTAS = [
   {
     name: "medir_pagina",
     title: "Medir a página renderizada",
-    description: "Abre a URL num Chromium temporário em 390, 768 e 1280px e mede o que só existe depois de renderizar: rolagem horizontal, elemento vazando da tela, texto abaixo de 12px, alvo de toque abaixo do mínimo do WCAG 2.2 e borda a 1–4px de uma coluna que o resto da página respeita. Use depois de mexer em layout. Leva de 5 a 30 segundos.",
+    description: "Abre a URL num Chromium temporário em 390, 768 e 1280px e mede o que só existe depois de renderizar: rolagem horizontal, elemento vazando da tela, texto abaixo de 12px, alvo de toque abaixo do mínimo do WCAG 2.2, borda a 1–4px de uma coluna que o resto da página respeita — e, forçando as preferências do sistema, contraste nos temas claro e escuro, falta de região principal e animação que ignora movimento reduzido. Use depois de mexer em layout. Leva de 5 a 30 segundos.",
     inputSchema: { type: "object", properties: { url: { type: "string", description: "URL http(s) da tela, ex.: http://localhost:3000/painel." }, larguras: { type: "array", items: { type: "integer", minimum: 240, maximum: 3840 }, maxItems: 6, description: "Larguras em px. Padrão: 390, 768, 1280." } }, required: ["url"], additionalProperties: false },
     annotations: { ...SOMENTE_LEITURA, openWorldHint: true },
   },
@@ -265,15 +265,16 @@ export function criarServidorMcp(opcoes: OpcoesMcp): { tratar(mensagem: unknown)
         const url = args["url"], larguras = args["larguras"];
         if (typeof url !== "string") return resultado("informe a URL http(s) da tela", true);
         if (larguras !== undefined && (!Array.isArray(larguras) || !larguras.every((l) => Number.isInteger(l)))) return resultado("larguras deve ser uma lista de inteiros", true);
-        const medidas = await medirUrl(url, { chrome: opcoes.chrome ?? null, ...(larguras ? { larguras: larguras as number[] } : {}) });
+        const { medidas, acessibilidade } = await medirUrl(url, { chrome: opcoes.chrome ?? null, ...(larguras ? { larguras: larguras as number[] } : {}) });
         if (!medidas.length) return resultado("a página abriu, mas nenhuma largura pôde ser medida", true);
-        return resultado({ url, medidas, achados: achadosDaTela(medidas) });
+        return resultado({ url, medidas, acessibilidade, achados: achadosDaTela(medidas, acessibilidade) });
       }
       case "conferir_arquivos_de_agente": {
         const { arquivos, sistema: s } = await sistema();
         const lidos = await lerArquivosDeAgente(opcoes.fonte, arquivos);
         const achados = conferirArquivosDeAgente(lidos.arquivos, arquivos, s, lidos.skillsVazias);
-        return resultado({ arquivos: lidos.arquivos.map((a) => a.relativo), total: achados.length, achados, ...(achados.length ? {} : { observacao: "todo nome citado existe no código" }) });
+        const prontidao = await prontidaoParaAgentes(opcoes.fonte, arquivos);
+        return resultado({ arquivos: lidos.arquivos.map((a) => a.relativo), total: achados.length, achados, prontidao: { pontos: prontidao.filter((p) => p.presente).length, de: 5, sinais: prontidao }, ...(achados.length ? {} : { observacao: "todo nome citado existe no código" }) });
       }
       case "gerar_skill_de_design": {
         const { arquivos, sistema: s } = await sistema();

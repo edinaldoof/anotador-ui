@@ -21,9 +21,9 @@ import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, chaveConfer
 import { descobrirComandos, expandirComandoChat, idPeloNome, type OpcoesDescoberta } from "./lib/comandos.ts";
 import { ChatAgentes, ErroChat } from "./lib/chat.ts";
 import { saidaPublicaAvaliacao } from "./lib/avaliacao-conversa.ts";
-import { achadosDaTela, resumoDaTela, type MedidaTela } from "./lib/tela.ts";
+import { achadosDaTela, resumoDaTela, type AcessibilidadeTela, type MedidaTela } from "./lib/tela.ts";
 import { servirMcpStdio } from "./lib/mcp.ts";
-import { aliasesDoTsconfig, conferirArquivosDeAgente, gerarSkillDeDesign, lerArquivosDeAgente } from "./lib/arquivos-agente.ts";
+import { aliasesDoTsconfig, conferirArquivosDeAgente, gerarSkillDeDesign, lerArquivosDeAgente, prontidaoParaAgentes } from "./lib/arquivos-agente.ts";
 import { serializar } from "./lib/persistencia.ts";
 import { lerLimitesConta } from "./lib/limites.ts";
 import { sessoesExternasChat, ID_SESSAO_NATIVA } from "./lib/chat-sessoes.ts";
@@ -494,8 +494,8 @@ function rotuloDoModelo(ponte: PonteConfig | null | undefined): string | null {
   return ponte.esforco ? `${titulo} · ${ponte.esforco}` : titulo;
 }
 
-async function extrasDoDossie(fonte: string | null, caminho: string, porta: number, captura: string | null, medidas: MedidaTela[] = []): Promise<Parameters<typeof gerarDossie>[1]> {
-  const base = { porta, captura, sistema: await resumoDoSistema(fonte), tela: resumoDaTela(medidas, achadosDaTela(medidas)) || null };
+async function extrasDoDossie(fonte: string | null, caminho: string, porta: number, captura: string | null, medidas: MedidaTela[] = [], acessibilidade: AcessibilidadeTela | null = null): Promise<Parameters<typeof gerarDossie>[1]> {
+  const base = { porta, captura, sistema: await resumoDoSistema(fonte), tela: resumoDaTela(medidas, achadosDaTela(medidas, acessibilidade), acessibilidade) || null };
   if (!fonte) return base;
   try {
     const arquivos = await lerProjeto(fonte);
@@ -670,7 +670,7 @@ async function processarAvaliacao(ctx: ContextoApi, pedido: Parameters<typeof ge
     const r = await capturarAvaliacao(destino, pedido.pagina.viewport, { urlsInstantaneo: urls, chrome: opcoes.chrome });
     captura = r.caminho;
     if (r.erro) registrar(opcoes, `captura da avaliação ${pedido.id}: ${r.erro}`);
-    if (captura) await avaliacoes.gravar(pedido, gerarDossie(pedido, { ...await extrasDoDossie(opcoes.fonte, pedido.pagina.caminho, ctx.porta(), captura, r.medidas), respostaDireta: !!opcoes.ponte }));
+    if (captura) await avaliacoes.gravar(pedido, gerarDossie(pedido, { ...await extrasDoDossie(opcoes.fonte, pedido.pagina.caminho, ctx.porta(), captura, r.medidas, r.acessibilidade), respostaDireta: !!opcoes.ponte }));
   }
   // Cada avaliação com ponte tem uma execução própria, identificada no chat.
   const entregues = opcoes.ponte ? 0 : difusor.transmitir({
@@ -2101,7 +2101,10 @@ async function principal(): Promise<void> {
     }
     const { arquivos, skillsVazias } = await lerArquivosDeAgente(fonte, codigo);
     const achados = conferirArquivosDeAgente(arquivos, codigo, sistema, skillsVazias);
-    console.log(`${arquivos.length} arquivo(s) de agente em ${fonte}${arquivos.length ? ": " + arquivos.map((a) => a.relativo).join(", ") : ""}`);
+    const sinais = await prontidaoParaAgentes(fonte, codigo);
+    console.log(`prontidão para agentes: ${sinais.filter((s) => s.presente).length}/5 — os sinais do Agent-Ready Index procurados no repositório (equivalente local, não a nota oficial)`);
+    for (const s of sinais) console.log(`  ${s.presente ? "✔" : "✘"} ${s.sinal}: ${s.evidencia}${s.comoChegar ? `\n      → ${s.comoChegar}` : ""}`);
+    console.log(`\n${arquivos.length} arquivo(s) de agente em ${fonte}${arquivos.length ? ": " + arquivos.map((a) => a.relativo).join(", ") : ""}`);
     if (!achados.length) { console.log("todo nome citado existe no código"); return; }
     console.log(`\n${achados.length} achado(s):`);
     for (const a of achados) console.log(`  [${a.tipo}] ${a.arquivo}${a.linha ? ":" + a.linha : ""}  ${a.nome}${a.sugestao ? `  → talvez ${a.sugestao}` : ""}\n          ${a.evidencia}`);

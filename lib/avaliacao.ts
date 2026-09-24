@@ -249,6 +249,9 @@ export function gerarDossie(
     "- **Consistência**: componentes com o mesmo papel se parecem? Espaçamento e alinhamento seguem um ritmo?",
     "- **Densidade e respiro**: falta ou sobra ar? O agrupamento reflete o significado?",
     "- **Elegância**: o que destoa do conjunto e por quê.",
+    // O que nenhuma medição pega e o checklist de acessibilidade separa como trabalho de
+    // leitura: o linter aprova "Saiba mais" porque o link tem nome — só não diz nada.
+    "- **Acessibilidade que a régua não alcança**: nome genérico de botão ou link (\"Enviar\", \"Saiba mais\", \"Clique aqui\"), texto alternativo que não descreve a imagem, estado comunicado só por cor, erro que não diz como corrigir, ordem de foco que não segue a leitura.",
     // Sem medida não há o que apontar, e pedir para olhar uma seção que não existe
     // é o tipo de instrução que faz o agente inventar o que não viu.
     ...(extras.tela ? ["- **Larguras**: a seção de responsividade mede o que quebra e o que quase alinha; diga o que fazer com cada achado, ou por que aquele caso é aceitável."] : []),

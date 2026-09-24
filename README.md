@@ -231,6 +231,8 @@ As regras foram calibradas contra projetos reais, porque linter que grita demais
 
 O CSS diz o que foi declarado; a página renderizada diz o que acontece. A avaliação abre a tela em 390, 768 e 1280px e mede o que só existe depois de renderizar — rolagem horizontal, elemento vazando, texto abaixo de 12px, alvo de toque abaixo do mínimo do WCAG 2.2 e borda a poucos pixels de uma coluna que o resto da página respeita — e isso entra no dossiê como uma seção própria.
 
+Depois, forçando as preferências do sistema, mede o que o overlay não alcança — porque ele vê só o tema e as preferências de quem está olhando: **contraste nos temas claro e escuro**, com a mesma régua do overlay (o tema escuro é forçado por `prefers-color-scheme`, `data-theme` e `.dark`; se a página não mudar, o relatório diz "não detectado" em vez de aprovar o que ninguém viu), **falta de região principal** (`<main>`) e **animação que segue em loop com movimento reduzido**. O que o [checklist de acessibilidade](https://www.designsystems.one/tools/accessibility-checklist) separa como trabalho de leitura — nome genérico de botão, texto de link que não se sustenta sozinho, alt que não descreve, estado só por cor — vai pedido por escrito ao agente no dossiê. Sem achado não é "acessível": é só o que a régua alcança.
+
 ### Servidor MCP
 
 O mesmo sistema, consultável por qualquer agente na hora em que ele vai escrever o código — não só quando alguém pede uma avaliação. `anotador mcp` fala MCP por stdio, sem porta, chave nem dependência:
@@ -264,6 +266,8 @@ AGENTS.md, CLAUDE.md, skills e regras do Cursor e do Copilot são o que o agente
 anotador agentes                     # nome citado que não existe mais; sai com código 1, para o CI barrar
 anotador agentes --gerar > .agents/skills/design-system/SKILL.md
 ```
+
+Antes da lista, `anotador agentes` mostra a **prontidão para agentes**: os cinco sinais do [Agent-Ready Index](https://www.designsystems.one/tools/agent-ready-check) — servidor MCP, llms.txt, tokens W3C, registry de componentes e Figma Code Connect — procurados no repositório, com o critério de detecção de cada um e o comando que resolve quando há um. O check deles só lê site de documentação e repositório públicos; este é o equivalente local, para app interno, e não a nota oficial.
 
 A conferência olha `var(--token)`, `<Componente>`, `import { Nome }` e nome sozinho entre crases, e aceita o que o projeto exporta ou importa de uma biblioteca. Pula o que o documento diz que não existe — uma seção "não use", uma tabela de removidos, o lado errado de "em vez de" — e os comentários HTML. Aponta também pasta de skill sem `SKILL.md`, frontmatter fora do padrão de Agent Skills e AGENTS.md acima de 200 linhas, que entra no contexto em todo turno.
 

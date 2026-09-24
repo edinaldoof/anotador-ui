@@ -192,6 +192,48 @@ export function conferirArquivosDeAgente(docs: ArquivoFonte[], codigo: ArquivoFo
 }
 
 // ---------------------------------------------------------------------------
+// Prontidão para agentes
+// ---------------------------------------------------------------------------
+
+export interface SinalProntidao { sinal: string; presente: boolean; evidencia: string; comoChegar?: string }
+
+async function existe(caminho: string): Promise<boolean> {
+  try { return (await stat(caminho)).isFile(); } catch { return false; }
+}
+
+/**
+ * Os cinco sinais do Agent-Ready Index do designsystems.one, procurados no repositório.
+ * O check deles sonda um site público de documentação e um repositório público; o de
+ * um app interno não é nem um nem outro. Aqui é o equivalente local — não a nota
+ * oficial —, com o mesmo critério de detecção de cada sinal.
+ */
+export async function prontidaoParaAgentes(raiz: string, codigo: ArquivoFonte[]): Promise<SinalProntidao[]> {
+  const primeiro = async (caminhos: string[]) => { for (const c of caminhos) if (await existe(join(raiz, c))) return c; return null; };
+
+  const llms = await primeiro(["llms.txt", "llms-full.txt", "public/llms.txt", "public/llms-full.txt"]);
+  const registro = await primeiro(["registry.json", "public/registry.json", "public/r/index.json"]);
+  // Como o check deles: arquivo de tokens é o que traz as chaves $value e $type.
+  const dtcg = codigo.find((a) => a.relativo.endsWith(".json") && a.linhas.some((l) => l.includes('"$value"')) && a.linhas.some((l) => l.includes('"$type"')));
+  let mcp: string | null = null;
+  try {
+    const config = JSON.parse(await readFile(join(raiz, ".mcp.json"), "utf8")) as { mcpServers?: Record<string, unknown> };
+    const nomes = Object.keys(config.mcpServers ?? {});
+    if (nomes.length) mcp = `.mcp.json registra ${nomes.join(", ")} para quem abre o repositório`;
+  } catch { /* sem configuração de time */ }
+  const rota = codigo.find((a) => /^(src\/)?(app\/(api\/)?mcp\/route|pages\/api\/mcp)\.[jt]sx?$/.test(a.relativo));
+  if (!mcp && rota) mcp = `rota ${rota.relativo}`;
+  const figma = codigo.filter((a) => /\.figma\.[jt]sx?$/.test(a.relativo));
+
+  return [
+    { sinal: "servidor MCP", presente: !!mcp, evidencia: mcp ?? "nenhum .mcp.json com servidor nem rota /mcp no app", ...(mcp ? {} : { comoChegar: "claude mcp add -s project anotador -- anotador mcp --fonte ." }) },
+    { sinal: "llms.txt", presente: !!llms, evidencia: llms ?? "nenhum llms.txt na raiz nem em public/", ...(llms ? {} : { comoChegar: "índice com links absolutos para a documentação, os tokens e o MCP — vale quando há um site de documentação para apontar" }) },
+    { sinal: "tokens W3C (DTCG)", presente: !!dtcg, evidencia: dtcg ? dtcg.relativo : "nenhum JSON com $value e $type", ...(dtcg ? {} : { comoChegar: "anotador design --tokens > tokens/tokens.json" }) },
+    { sinal: "registry de componentes", presente: !!registro, evidencia: registro ?? "nenhum registry.json nem public/r/index.json", ...(registro ? {} : { comoChegar: "padrão shadcn para distribuir componentes a outros repositórios — só faz sentido se houver mais de um app consumindo" }) },
+    { sinal: "Figma Code Connect", presente: figma.length > 0, evidencia: figma.length ? `${figma.length} arquivo(s) *.figma.tsx` : "nenhum *.figma.tsx", ...(figma.length ? {} : { comoChegar: "só se o time desenha no Figma" }) },
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Geração da skill de design
 // ---------------------------------------------------------------------------
 

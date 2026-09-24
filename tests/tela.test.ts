@@ -52,7 +52,9 @@ test("o resumo do dossiê diz as larguras medidas e some quando não houve medid
   assert.match(texto, /bordas esquerdas dominantes: 24, 320px/);
   assert.match(texto, /\| alta \| 390px \| rolagem horizontal \|/);
   const limpo = resumoDaTela([vazia(390)], []);
-  assert.match(limpo, /Nenhum vazamento, texto miúdo, alvo pequeno ou borda quase alinhada/);
+  assert.match(limpo, /Nenhum achado nessas medidas/);
+  // Sem achado não é "acessível": o checklist lembra que a automação pega uma fração.
+  assert.match(limpo, /nome genérico, texto de link que não se sustenta sozinho e estado comunicado só por cor ficam para o seu julgamento/);
 });
 
 test("a medida roda na página e encontra o que só existe depois de renderizar", { skip: !encontrarChromium(), timeout: 30_000 }, async () => {
@@ -98,4 +100,62 @@ test("a medida roda na página e encontra o que só existe depois de renderizar"
     await navegador.fechar();
     await rm(pasta, { recursive: true, force: true });
   }
+});
+
+test("contraste nos dois temas, região principal e movimento: aponta o que falha e cala sobre o tema que não existe", async () => {
+  const achados = achadosDaTela([vazia(1280)], {
+    largura: 1280,
+    temas: [
+      { tema: "claro", detectado: true, total: 0, pior: 21, exemplos: [] },
+      { tema: "escuro", detectado: true, total: 2, pior: 2.1, exemplos: ["p.aviso (2.1:1, mínimo 4.5)", "span.nota (3.9:1, mínimo 4.5)"] },
+    ],
+    semMain: true,
+    movimento: { total: 1, exemplos: ["div.brilho (pulsar)"] },
+  });
+  assert.deepEqual(achados.map((a) => [a.gravidade, a.regra]), [["alta", "contraste abaixo do mínimo"], ["media", "sem região principal"], ["baixa", "animação ignora movimento reduzido"]]);
+  assert.match(achados[0]!.evidencia, /no tema escuro, o pior com 2\.1:1/);
+  // Tema que a página não tem não é tema aprovado.
+  const semEscuro = { largura: 1280, temas: [{ tema: "claro" as const, detectado: true, total: 0, pior: 21, exemplos: [] }, { tema: "escuro" as const, detectado: false, total: 3, pior: 1.5, exemplos: ["x"] }], semMain: false, movimento: null };
+  assert.deepEqual(achadosDaTela([vazia(1280)], semEscuro), [], "contraste de um tema que não reagiu não vira achado");
+  assert.match(resumoDaTela([vazia(1280)], [], semEscuro), /tema escuro\*\* — não detectado/);
+});
+
+test("forçando o tema e o movimento reduzido na página renderizada", { skip: !encontrarChromium(), timeout: 60_000 }, async () => {
+  const { createServer } = await import("node:http");
+  const { medirUrl } = await import("../lib/captura.ts");
+  // /ruim: texto que some no escuro (por data-theme, como o Pré-Projetos), sem <main>,
+  // e um brilho em loop que o CSS não desliga. /boa: o mesmo, feito direito.
+  const paginas: Record<string, string> = {
+    "/ruim": `<!doctype html><html data-theme="light"><style>
+      body{background:#fff;color:#222;font:16px sans-serif}
+      [data-theme=dark] body{background:#111;color:#eee}
+      [data-theme=dark] .aviso{color:#333}
+      .brilho{width:40px;height:40px;animation:pulsar 1s infinite}
+      @keyframes pulsar{50%{opacity:.4}}
+    </style><div><p class="aviso">prazo encerra hoje</p><div class="brilho"></div></div></html>`,
+    "/boa": `<!doctype html><html><style>
+      body{background:#fff;color:#222;font:16px sans-serif}
+      .brilho{width:40px;height:40px;animation:pulsar 1s infinite}
+      @keyframes pulsar{50%{opacity:.4}}
+      @media (prefers-reduced-motion: reduce){.brilho{animation:none}}
+    </style><main><p>prazo encerra hoje</p><div class="brilho"></div></main></html>`,
+  };
+  const servidor = createServer((req, res) => { res.writeHead(200, { "content-type": "text/html; charset=utf-8" }); res.end(paginas[req.url ?? ""] ?? ""); });
+  await new Promise<void>((r) => servidor.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${(servidor.address() as { port: number }).port}`;
+  try {
+    const ruim = (await medirUrl(base + "/ruim", { larguras: [1280] })).acessibilidade;
+    assert.ok(ruim);
+    assert.deepEqual(ruim.temas.map((t) => [t.tema, t.detectado, t.total]), [["claro", true, 0], ["escuro", true, 1]]);
+    assert.match(ruim.temas[1]!.exemplos[0] ?? "", /^div > p\.aviso \(1\.\d:1, mínimo 4\.5\)$/);
+    assert.equal(ruim.semMain, true);
+    assert.equal(ruim.movimento?.total, 1);
+    assert.match(ruim.movimento?.exemplos[0] ?? "", /div\.brilho \(pulsar\)/);
+
+    const boa = (await medirUrl(base + "/boa", { larguras: [1280] })).acessibilidade;
+    assert.ok(boa);
+    assert.equal(boa.temas[1]?.detectado, false, "sem tema escuro, nada muda ao forçá-lo — e isso é dito, não aprovado");
+    assert.equal(boa.semMain, false);
+    assert.equal(boa.movimento?.total, 0, "o CSS desliga o brilho com movimento reduzido");
+  } finally { await new Promise<void>((r) => servidor.close(() => r())); }
 });

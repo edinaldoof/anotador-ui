@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
-import { aliasesDoTsconfig, conferirArquivosDeAgente, gerarSkillDeDesign, lerArquivosDeAgente, usosDeTokens } from "../lib/arquivos-agente.ts";
+import { aliasesDoTsconfig, conferirArquivosDeAgente, gerarSkillDeDesign, lerArquivosDeAgente, prontidaoParaAgentes, usosDeTokens } from "../lib/arquivos-agente.ts";
 import { catalogoDeComponentes } from "../lib/componentes.ts";
 import { lerSistemaDeDesign } from "../lib/design.ts";
 import { lerProjeto } from "../lib/fonte.ts";
@@ -165,4 +165,32 @@ describe("skill de design gerada do código", () => {
     const { arquivos, skillsVazias } = await lerArquivosDeAgente(pasta, codigo);
     assert.deepEqual(conferirArquivosDeAgente(arquivos, codigo, lerSistemaDeDesign(codigo), skillsVazias), []);
   });
+});
+
+test("prontidão: os cinco sinais do Agent-Ready Index, procurados no repositório", async () => {
+  const pasta = await mkdtemp(join(tmpdir(), "anotador-prontidao-"));
+  const pastas = [pasta];
+  try {
+    const vazio = await prontidaoParaAgentes(pasta, await lerProjeto(pasta));
+    assert.deepEqual(vazio.map((s) => [s.sinal, s.presente]), [["servidor MCP", false], ["llms.txt", false], ["tokens W3C (DTCG)", false], ["registry de componentes", false], ["Figma Code Connect", false]]);
+    assert.equal(vazio[0]?.comoChegar, "claude mcp add -s project anotador -- anotador mcp --fonte .");
+
+    // Outra pasta: a leitura do projeto tem cache curto, e a primeira ficaria valendo.
+    const outra = await mkdtemp(join(tmpdir(), "anotador-prontidao-cheia-"));
+    pastas.push(outra);
+    await escrever(outra, ".mcp.json", JSON.stringify({ mcpServers: { anotador: { command: "anotador", args: ["mcp"] } } }));
+    await escrever(outra, "public/llms.txt", "# App\n");
+    // Um JSON qualquer com "value" não é token: o critério é o do W3C, $value e $type.
+    await escrever(outra, "config/cores.json", JSON.stringify({ primaria: { value: "#000" } }));
+    await escrever(outra, "tokens/tokens.json", JSON.stringify({ cor: { acao: { $value: "#046b66", $type: "color" } } }, null, 2));
+    await escrever(outra, "components/button.figma.tsx", "export default {};\n");
+    const cheio = await prontidaoParaAgentes(outra, await lerProjeto(outra));
+    assert.deepEqual(cheio.map((s) => [s.sinal, s.presente, s.evidencia]), [
+      ["servidor MCP", true, ".mcp.json registra anotador para quem abre o repositório"],
+      ["llms.txt", true, "public/llms.txt"],
+      ["tokens W3C (DTCG)", true, "tokens/tokens.json"],
+      ["registry de componentes", false, "nenhum registry.json nem public/r/index.json"],
+      ["Figma Code Connect", true, "1 arquivo(s) *.figma.tsx"],
+    ]);
+  } finally { for (const p of pastas) await rm(p, { recursive: true, force: true }); }
 });
