@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { lerSistemaDeDesign, paraDtcg } from "../lib/design.ts";
 import { REGRAS_A_LIGAR, REGRAS_QUE_FICAM_FORA, localizarNorma } from "../lib/norma.ts";
 import { descobrirComandos } from "../lib/comandos.ts";
-import { criarAlvoFalso, criarProxy, pedir } from "./ajuda.ts";
+import { contaVazia, criarAlvoFalso, criarProxy, pedir } from "./ajuda.ts";
 
 function sistemaDe(css: string) {
   return lerSistemaDeDesign([{ relativo: "app/tokens.css", linhas: css.split("\n") }]);
@@ -205,7 +205,9 @@ test("descobrirComandos lê skills e comandos do projeto e da conta, e o projeto
     await writeFile(join(comandos, "revisar.md"), "Revisa o diff atual antes do commit\n");
     await writeFile(join(comandos, "leia-me.txt"), "não é comando");
 
-    const achados = await descobrirComandos("claude", raiz);
+    // A conta fica numa pasta vazia: o que interessa aqui é o projeto, não a máquina.
+    const conta = contaVazia(join(raiz, "conta"));
+    const achados = await descobrirComandos("claude", raiz, conta);
     const porNome = new Map(achados.map((c) => [c.nome, c]));
 
     assert.equal(porNome.get("publicar")?.descricao, "Sobe a versão e publica o pacote");
@@ -214,7 +216,7 @@ test("descobrirComandos lê skills e comandos do projeto e da conta, e o projeto
     assert.equal(porNome.get("revisar")?.descricao, "Revisa o diff atual antes do commit", "sem frontmatter, vale a primeira linha útil");
     assert.ok(!porNome.has("leia-me"), "extensão fora do padrão do CLI não vira comando");
 
-    assert.deepEqual(await descobrirComandos("gemini", raiz), [], "cada agente procura na pasta dele, não na dos outros");
+    assert.deepEqual(await descobrirComandos("gemini", raiz, conta), [], "cada agente procura na pasta dele, não na dos outros");
   } finally {
     await rm(raiz, { recursive: true, force: true });
   }

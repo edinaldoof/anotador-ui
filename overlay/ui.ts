@@ -4317,6 +4317,14 @@ function ligarComandos(campo: HTMLTextAreaElement, caixa: HTMLElement): { aberto
     campo.dispatchEvent(new Event("input"));
   };
 
+  // Trocar o foco só move a marca: refazer a lista a cada passagem do mouse ficaria
+  // caro com centenas de skills, e recriar o item sob o cursor dispararia outro
+  // mouseenter. Pelo teclado, o item escolhido rola para a vista; sob o mouse ele já está.
+  const marcarFoco = (rolar: boolean): void => {
+    Array.from(lista.children).forEach((item, i) => item.classList.toggle("foco", i === foco));
+    if (rolar) lista.children[foco]?.scrollIntoView({ block: "nearest" });
+  };
+
   const pintar = (): void => {
     lista.replaceChildren();
     if (!visiveis.length) {
@@ -4337,7 +4345,7 @@ function ligarComandos(campo: HTMLTextAreaElement, caixa: HTMLElement): { aberto
           class: "an-comando" + (i === foco ? " foco" : ""),
           onmouseenter: () => {
             foco = i;
-            pintar();
+            marcarFoco(false);
           },
           onclick: () => escolher(c),
         },
@@ -4362,8 +4370,11 @@ function ligarComandos(campo: HTMLTextAreaElement, caixa: HTMLElement): { aberto
       void carregarComandos().then(atualizar);
       return;
     }
+    // Sem teto: a lista rola, e o servidor já manda o do projeto primeiro. Cortar em
+    // oito escondia as skills do projeto atrás das da conta assim que a conta tinha
+    // mais de oito.
     const alvo = t.toLowerCase();
-    visiveis = comandosDoAgente.filter((c) => c.nome.toLowerCase().includes(alvo)).slice(0, 8);
+    visiveis = comandosDoAgente.filter((c) => c.nome.toLowerCase().includes(alvo));
     foco = 0;
     pintar();
   };
@@ -4379,7 +4390,7 @@ function ligarComandos(campo: HTMLTextAreaElement, caixa: HTMLElement): { aberto
         e.preventDefault();
         if (visiveis.length) {
           foco = (foco + (e.key === "ArrowDown" ? 1 : visiveis.length - 1)) % visiveis.length;
-          pintar();
+          marcarFoco(true);
         }
         return true;
       }

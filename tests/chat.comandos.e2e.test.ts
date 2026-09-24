@@ -96,6 +96,10 @@ describe("colisões entre comandos instalados e controles do chat",{skip:chrome?
     await pagina.esperarPor(`${no(".an-chat-historico")}.open`);
     await submeter("/chat:help ");
     await pagina.esperarPor(`${comando("chat:new")}?.checkVisibility()`);
+    // Clicar em enviar tirou o foco do campo; o atraso do blur (150 ms) não pode fechar
+    // o menu que o /help acabou de abrir.
+    await new Promise((r)=>setTimeout(r,400));
+    assert.equal(await pagina.avaliar<boolean>(`!!${comando("chat:new")}?.checkVisibility()`),true,"o menu aberto pelo /help continua aberto");
     await clicar(comando("chat:new"));
     await clicar(enviar);
     await pagina.esperarPor(`${campo}.value===""`);

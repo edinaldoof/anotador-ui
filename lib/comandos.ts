@@ -275,11 +275,14 @@ async function lugaresDePlugins(agente: IdAgente, fonte: string | null, opcoes: 
 }
 
 /**
- * Tudo que o agente aceita como `/nome` neste projeto e nesta máquina. O do projeto
- * ganha do da conta quando os dois declaram o mesmo nome, que é a ordem de precedência
- * dos próprios CLIs.
+ * O que é do repositório aberto vem antes do que é da conta, e o da conta antes do que
+ * chega por plugin. Quem abre o menu num projeto procura primeiro o que o projeto
+ * declarou; com centenas de skills de plugins em ordem alfabética, as do projeto
+ * sumiam no meio da lista.
  */
-export async function descobrirComandos(agente: IdAgente, fonte: string | null, opcoes: OpcoesDescoberta = {}): Promise<ComandoDeAgente[]> {
+const ORDEM_ORIGEM: Record<ComandoDeAgente["origem"], number> = { projeto: 0, "usuário": 1, plugin: 2, nativo: 3 };
+
+async function varrerComandos(agente: IdAgente, fonte: string | null, opcoes: OpcoesDescoberta): Promise<ComandoDeAgente[]> {
   const lugares = [...lugaresDe(agente, fonte, opcoes), ...await lugaresDePlugins(agente, fonte, opcoes)];
   const listas = await Promise.all(lugares.map((lugar) => lerLugar(lugar)));
   const porNome = new Map<string, ComandoDeAgente>();
@@ -288,17 +291,56 @@ export async function descobrirComandos(agente: IdAgente, fonte: string | null, 
     if (existente) continue;
     porNome.set(c.nome, c);
   }
-  return [...porNome.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  return [...porNome.values()].sort((a, b) => ORDEM_ORIGEM[a.origem] - ORDEM_ORIGEM[b.origem] || a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+/**
+ * Uma varredura vale por alguns segundos. Abrir o menu, filtrar e mandar o comando
+ * acontecem em sequência, às vezes em duas abas, e cada pedido refazia a leitura de
+ * todas as pastas — com centenas de SKILL.md de plugins, uma centena de milissegundos
+ * por vez. Pedidos simultâneos esperam a mesma varredura. Um comando criado agora
+ * aparece na lista na próxima; a expansão não espera por ela (ver `expandirComandoChat`).
+ */
+const VALIDADE_CATALOGO_MS = 5_000;
+const catalogos = new Map<string, { em: number; lista: Promise<ComandoDeAgente[]> }>();
+
+function catalogo(agente: IdAgente, fonte: string | null, opcoes: OpcoesDescoberta, fresco: boolean): Promise<ComandoDeAgente[]> {
+  const { casa, claude, codex } = casas(opcoes);
+  const chave = JSON.stringify([agente, fonte, casa, claude, codex]);
+  const agora = Date.now();
+  for (const [k, v] of catalogos) if (agora - v.em > VALIDADE_CATALOGO_MS) catalogos.delete(k);
+  const guardado = catalogos.get(chave);
+  if (guardado && !fresco) return guardado.lista;
+  const entrada = { em: agora, lista: varrerComandos(agente, fonte, opcoes) };
+  catalogos.set(chave, entrada);
+  entrada.lista.catch(() => { if (catalogos.get(chave) === entrada) catalogos.delete(chave); });
+  return entrada.lista;
+}
+
+/**
+ * Tudo que o agente aceita como `/nome` neste projeto e nesta máquina, o do projeto
+ * primeiro. O do projeto também ganha do da conta quando os dois declaram o mesmo
+ * nome, que é a ordem de precedência dos próprios CLIs.
+ */
+export async function descobrirComandos(agente: IdAgente, fonte: string | null, opcoes: OpcoesDescoberta = {}): Promise<ComandoDeAgente[]> {
+  return [...await catalogo(agente, fonte, opcoes, false)];
 }
 
 /** Expande somente comandos descobertos no servidor. Nenhum caminho vem do cliente. */
 export async function expandirComandoChat(texto: string, agente: IdAgente, fonte: string | null, opcoes: OpcoesDescoberta = {}): Promise<string | null> {
   const pedido = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(texto.trim());
   if (!pedido || !nomeSeguro(pedido[1]!)) return null;
-  const comando = (await descobrirComandos(agente, fonte, opcoes)).find((c) => c.nome === pedido[1] && c.suporte === "chat");
-  if (!comando) return null;
-  const lido = await arquivoTexto(comando.arquivo);
-  if (!lido || lido.arquivo !== comando.arquivo) throw new Error("O arquivo deste comando mudou ou não está mais disponível. Atualize a lista.");
+  const achar = async (fresco: boolean) => (await catalogo(agente, fonte, opcoes, fresco)).find((c) => c.nome === pedido[1] && c.suporte === "chat");
+  // A lista guardada só serve para achar o arquivo. Se o comando não está nela, ou o
+  // arquivo mudou desde a varredura, o disco decide antes de a mensagem seguir crua.
+  let comando = await achar(false);
+  let lido = comando ? await arquivoTexto(comando.arquivo) : null;
+  if (!comando || !lido || lido.arquivo !== comando.arquivo) {
+    comando = await achar(true);
+    if (!comando) return null;
+    lido = await arquivoTexto(comando.arquivo);
+    if (!lido || lido.arquivo !== comando.arquivo) throw new Error("O arquivo deste comando mudou ou não está mais disponível. Atualize a lista.");
+  }
   const argumentos = pedido[2]?.trim() ?? "";
   let corpo = lido.texto.replace(/^---\r?\n[\s\S]*?\r?\n---\s*/, "").trim();
   if (comando.arquivo.endsWith(".toml")) {

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { aceitarWs } from "../lib/ws.ts";
 import { iniciarServidor, type OpcoesServidor, type ServidorAnotador } from "../server.ts";
+import type { OpcoesDescoberta } from "../lib/comandos.ts";
 
 export const NONCE = "abc123";
 export const CSP = "default-src 'self'; script-src 'self' 'nonce-abc123'; style-src 'self'; connect-src 'self'; img-src 'self' data:";
@@ -118,6 +119,14 @@ export interface ProxySobTeste {
   fechar(): Promise<void>;
 }
 
+/**
+ * Uma conta sem skills, comandos nem plugins, dentro de `pasta` (que não precisa existir):
+ * o catálogo de comandos lê só o que o teste gravar ali, e não o `~/.claude` de quem roda.
+ */
+export function contaVazia(pasta: string): OpcoesDescoberta {
+  return { casa: pasta, claudeHome: join(pasta, ".claude"), codexHome: join(pasta, ".codex") };
+}
+
 export async function criarProxy(alvo: AlvoFalso, extra: Partial<OpcoesServidor> = {}): Promise<ProxySobTeste> {
   const saida = await mkdtemp(join(tmpdir(), "anotador-teste-"));
   const servidor = await iniciarServidor({
@@ -134,6 +143,7 @@ export async function criarProxy(alvo: AlvoFalso, extra: Partial<OpcoesServidor>
     agente: "Claude",
     registro: null,
     silencioso: true,
+    descoberta: contaVazia(join(saida, "conta")),
     ...extra,
   });
   return {

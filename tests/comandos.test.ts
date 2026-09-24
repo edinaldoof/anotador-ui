@@ -48,8 +48,8 @@ test("Claude usa config alternativa, versão registrada, escopo do projeto e com
     await a.gravar(join(a.fonte, ".claude/commands/equipe/testar.md"), "---\ndescription: Teste da equipe\n---\nRodar testes $ARGUMENTS.");
     await a.gravar(join(a.opcoes.claudeHome, "skills/interna/SKILL.md"), "---\nuser-invocable: false\n---\nInterna.");
     const lista = await descobrirComandos("claude", a.fonte, a.opcoes);
-    assert.deepEqual(lista.map((c) => c.nome), ["ativo:minha", "equipe:testar"]);
-    assert.equal(lista[1]?.origem, "projeto");
+    assert.deepEqual(lista.map((c) => c.nome), ["equipe:testar", "ativo:minha"]);
+    assert.equal(lista[0]?.origem, "projeto");
     assert.match(await expandirComandoChat("/equipe:testar src/", "claude", a.fonte, a.opcoes) ?? "", /Rodar testes src\//);
   } finally { await a.fechar(); }
 });
@@ -68,7 +68,7 @@ test("Antigravity descobre workflows legados, skills e plugins habilitados", asy
       await a.gravar(join(a.fonte, ".agents/plugins", plugin, "skills/revisar/SKILL.md"), "Revisar.");
     }
     const lista = await descobrirComandos("antigravity", a.fonte, a.opcoes);
-    assert.deepEqual(lista.map((c) => c.nome), ["ativo:revisar", "global", "guia", "legado", "publicar", "testar"]);
+    assert.deepEqual(lista.map((c) => c.nome), ["publicar", "testar", "global", "legado", "ativo:revisar", "guia"]);
     assert.equal(lista.find((c) => c.nome === "guia")?.origem, "nativo");
     assert.equal(lista.find((c) => c.nome === "publicar")?.tipo, "workflow");
     assert.match(await expandirComandoChat("/publicar", "antigravity", a.fonte, a.opcoes) ?? "", /Primeiro validar/);
@@ -114,5 +114,40 @@ test("descoberta recusa nomes malformados, arquivos excessivos e ciclos de diret
     await a.gravar(join(a.fonte, ".claude/commands/ok.md"), "Funciona.");
     await symlink(join(a.fonte, ".claude/commands"), join(a.fonte, ".claude/commands/ciclo"));
     assert.deepEqual((await descobrirComandos("claude", a.fonte, a.opcoes)).map((c) => c.nome), ["ok"]);
+  } finally { await a.fechar(); }
+});
+
+test("o do projeto vem primeiro, depois o da conta e o dos plugins, sem cortar a lista", async () => {
+  const a = await ambiente();
+  try {
+    await a.gravar(join(a.opcoes.claudeHome, "settings.json"), JSON.stringify({ enabledPlugins: { "juridico@local": true } }));
+    for (let i = 0; i < 120; i++) {
+      await a.gravar(join(a.opcoes.claudeHome, "skills", "a-conta-" + i, "SKILL.md"), `---\nname: a-conta-${i}\n---\nDa conta.`);
+      await a.gravar(join(a.opcoes.claudeHome, "plugins/cache/local/juridico/v1/skills", "a-" + i, "SKILL.md"), `---\nname: a-${i}\n---\nDo plugin.`);
+    }
+    await a.gravar(join(a.fonte, ".claude/skills/zeta/SKILL.md"), "---\nname: zeta\n---\nDo projeto.");
+    await a.gravar(join(a.fonte, ".claude/commands/publicar.md"), "Publicar.");
+    const lista = await descobrirComandos("claude", a.fonte, a.opcoes);
+    assert.equal(lista.length, 242);
+    assert.deepEqual(lista.slice(0, 2).map((c) => c.nome), ["publicar", "zeta"], "o do projeto na frente, mesmo com nomes que vêm depois na ordem alfabética");
+    const ordem = { projeto: 0, "usuário": 1, plugin: 2, nativo: 3 };
+    assert.ok(lista.every((c, i) => i === 0 || ordem[lista[i - 1]!.origem] <= ordem[c.origem]), "projeto, conta, plugin — nessa ordem");
+    assert.equal(lista[2]?.nome, "a-conta-0");
+    assert.equal(lista.at(-1)?.origem, "plugin");
+  } finally { await a.fechar(); }
+});
+
+test("a lista guardada não esconde da expansão um comando recém-criado nem um arquivo editado", async () => {
+  const a = await ambiente();
+  try {
+    await a.gravar(join(a.fonte, ".claude/commands/antigo.md"), "Versão um.");
+    assert.deepEqual((await descobrirComandos("claude", a.fonte, a.opcoes)).map((c) => c.nome), ["antigo"]);
+    const [x, y] = await Promise.all([descobrirComandos("claude", a.fonte, a.opcoes), descobrirComandos("claude", a.fonte, a.opcoes)]);
+    assert.notEqual(x, y, "cada chamada recebe a própria cópia da lista");
+    await a.gravar(join(a.fonte, ".claude/commands/novo.md"), "Recém-criado $ARGUMENTS.");
+    await a.gravar(join(a.fonte, ".claude/commands/antigo.md"), "Versão dois.");
+    assert.match(await expandirComandoChat("/novo agora", "claude", a.fonte, a.opcoes) ?? "", /Recém-criado agora\./);
+    assert.match(await expandirComandoChat("/antigo", "claude", a.fonte, a.opcoes) ?? "", /Versão dois\./);
+    assert.ok((await descobrirComandos("claude", a.fonte, a.opcoes)).some((c) => c.nome === "novo"), "a varredura que a expansão refez vale para a lista também");
   } finally { await a.fechar(); }
 });

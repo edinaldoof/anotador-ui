@@ -18,7 +18,7 @@ import { parseArgs } from "node:util";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { Ponte, detectarAgentes, atualizarModelosAntigravity, mensagemDeAbertura, mensagemParaLote, modelosDe, sessoesClaude, sessoesCodex, type IdAgente } from "./lib/agentes.ts";
 import { CABECALHO_CHAVE, autorizado, caminhoDaChave, chaveDaSessao, chaveConfere, criarConvite, conviteConfere, daPropriaMaquina, definirSessaoNavegador, mesmaOrigem, motivoDaRecusa } from "./lib/acesso.ts";
-import { descobrirComandos, idPeloNome } from "./lib/comandos.ts";
+import { descobrirComandos, expandirComandoChat, idPeloNome, type OpcoesDescoberta } from "./lib/comandos.ts";
 import { ChatAgentes, ErroChat } from "./lib/chat.ts";
 import { saidaPublicaAvaliacao } from "./lib/avaliacao-conversa.ts";
 import { achadosDaTela, resumoDaTela, type MedidaTela } from "./lib/tela.ts";
@@ -92,6 +92,12 @@ export interface OpcoesServidor {
   /** aceita alvos fora da máquina/rede local */
   permitirExterno?: boolean;
   silencioso?: boolean;
+  /**
+   * Onde procurar as skills e comandos da conta e dos plugins de cada agente. Sem isso,
+   * vale a casa do usuário; os testes apontam para uma pasta vazia, para que a lista
+   * não dependa do que a máquina de quem roda a suíte tem instalado.
+   */
+  descoberta?: OpcoesDescoberta;
 }
 
 export interface PedidoConexao {
@@ -716,7 +722,7 @@ const chatsPorContexto = new WeakMap<ContextoApi, { pasta: string; fonte: string
 function chatDoContexto(ctx: ContextoApi): ChatAgentes {
   const atual = chatsPorContexto.get(ctx);
   if (atual?.pasta === ctx.fila.dir && atual.fonte === ctx.opcoes.fonte) return atual.servico;
-  const servico = new ChatAgentes(ctx.fila.dir, ctx.opcoes.fonte);
+  const servico = new ChatAgentes(ctx.fila.dir, ctx.opcoes.fonte, { expandir: (texto, agente, fonte) => expandirComandoChat(texto, agente, fonte, ctx.opcoes.descoberta) });
   chatsPorContexto.set(ctx, { pasta: ctx.fila.dir, fonte: ctx.opcoes.fonte, servico });
   return servico;
 }
@@ -807,7 +813,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       if (caminho === "/chat/comandos" && metodo === "GET") {
         const agente = url.searchParams.get("agente");
         if (!agente || !["claude", "codex", "gemini", "opencode", "antigravity", "cursor"].includes(agente)) throw new ErroChat("Escolha um agente válido.");
-        responderJson(res, 200, { ok: true, comandos: await descobrirComandos(agente as IdAgente, opcoes.fonte) });
+        responderJson(res, 200, { ok: true, comandos: await descobrirComandos(agente as IdAgente, opcoes.fonte, opcoes.descoberta) });
         return true;
       }
       const chat = chatDoContexto(ctx);
@@ -1310,7 +1316,7 @@ async function tratarApi(req: IncomingMessage, res: ServerResponse, url: URL, ct
       responderJson(res, 200, { ok: true, agente: null, comandos: [] });
       return true;
     }
-    responderJson(res, 200, { ok: true, agente: id, comandos: await descobrirComandos(id, opcoes.fonte) });
+    responderJson(res, 200, { ok: true, agente: id, comandos: await descobrirComandos(id, opcoes.fonte, opcoes.descoberta) });
     return true;
   }
   if (caminho === "/norma" && metodo === "GET") {

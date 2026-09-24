@@ -1140,7 +1140,10 @@ function ligarComandosChat(campo: HTMLTextAreaElement, entrada: HTMLElement): { 
   };
   const atualizar=():void=>{manual=false;foco=0;pintar();if(!menu.hidden)void carregar()};
   campo.addEventListener("input",atualizar);
-  campo.addEventListener("blur",()=>setTimeout(()=>{if(!menu.contains(host?.shadowRoot?.activeElement??null)) {menu.hidden=true;manual=false}},150));
+  // Fecha só se o foco ficou fora do campo e do menu. Clicar em enviar tira o foco do
+  // campo, e `/help` reabre o menu e devolve o foco logo em seguida; sem olhar para o
+  // campo, este atraso fechava o menu que acabara de abrir.
+  campo.addEventListener("blur",()=>setTimeout(()=>{const ativo=host?.shadowRoot?.activeElement??null;if(ativo!==campo&&!menu.contains(ativo)) {menu.hidden=true;manual=false}},150));
   entrada.append(menu);
   return {
     abrir:()=>{fecharConfiguracaoChat(false);manual=true;foco=0;campo.focus();pintar();void carregar()},
