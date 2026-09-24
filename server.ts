@@ -10,7 +10,7 @@ import * as modulo from "node:module";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { homedir, hostname, networkInterfaces, userInfo } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { Writable, type Duplex } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
@@ -22,6 +22,7 @@ import { descobrirComandos, idPeloNome } from "./lib/comandos.ts";
 import { ChatAgentes, ErroChat } from "./lib/chat.ts";
 import { saidaPublicaAvaliacao } from "./lib/avaliacao-conversa.ts";
 import { achadosDaTela, resumoDaTela, type MedidaTela } from "./lib/tela.ts";
+import { servirMcpStdio } from "./lib/mcp.ts";
 import { serializar } from "./lib/persistencia.ts";
 import { lerLimitesConta } from "./lib/limites.ts";
 import { sessoesExternasChat, ID_SESSAO_NATIVA } from "./lib/chat-sessoes.ts";
@@ -1940,6 +1941,7 @@ uso:
   anotador fontes [--compact] [--forcar]        (instala a San Francisco da Apple nesta máquina)
   anotador design [--fonte dir] [--tudo]        (tokens do projeto e o que foge das próprias regras)
   anotador design --tokens > tokens.json        (os mesmos tokens no formato do W3C, que o Figma lê)
+  anotador mcp [--fonte dir]                    (o sistema de design como servidor MCP, para qualquer agente consultar)
   anotador avaliacoes [--porta 3999]            (pedidos de avaliação de página, com e sem parecer)
   anotador avaliacao <id> [--porta 3999]        (dossiê e, se houver, o parecer do agente)
   anotador saude [--porta 3999]
@@ -2008,6 +2010,11 @@ async function principal(): Promise<void> {
   }
   const porta = Number(values.porta);
   const fonte = values.fonte ?? process.cwd();
+  if (comando === "mcp") {
+    // Antes de qualquer outra coisa que possa escrever no stdout: ele é do protocolo.
+    await servirMcpStdio({ fonte: resolve(fonte), chrome: values.chrome ?? encontrarChromium(), versao: VERSAO });
+    return;
+  }
   const registro = new RegistroConexoes();
   const salva = await registro.procurarPorFonte(fonte);
   const nome = values.nome ?? salva?.nome ?? basename(process.cwd());

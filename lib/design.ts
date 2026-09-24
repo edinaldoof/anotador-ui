@@ -192,6 +192,10 @@ export interface AchadoDesign {
 
 /** Prefixos de bibliotecas que consomem as próprias variáveis em tempo de execução. */
 const DE_BIBLIOTECA = /^--(rdp|xy|rmdp|swiper|toastify|radix|cmdk)-/;
+/** Variável que pertence a uma biblioteca (date picker, fluxograma…), não ao sistema do projeto. */
+export function deBiblioteca(nome: string): boolean {
+  return DE_BIBLIOTECA.test(nome);
+}
 
 export interface RelatorioDesign {
   sistema: SistemaDeDesign;

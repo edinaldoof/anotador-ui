@@ -229,6 +229,31 @@ As regras foram calibradas contra projetos reais, porque linter que grita demais
 | cor literal repetida | dois tokens escrevendo o mesmo valor. `--color-text-main: var(--color-brand-ink)` é alias e **não** conta: alias é o jeito certo de dar nome semântico |
 | token sem uso | nem `var()` nem utilitária derivada o referenciam; prefixo de biblioteca é sinalizado à parte, porque ela lê a variável em tempo de execução |
 
+O CSS diz o que foi declarado; a página renderizada diz o que acontece. A avaliação abre a tela em 390, 768 e 1280px e mede o que só existe depois de renderizar — rolagem horizontal, elemento vazando, texto abaixo de 12px, alvo de toque abaixo do mínimo do WCAG 2.2 e borda a poucos pixels de uma coluna que o resto da página respeita — e isso entra no dossiê como uma seção própria.
+
+### Servidor MCP
+
+O mesmo sistema, consultável por qualquer agente na hora em que ele vai escrever o código — não só quando alguém pede uma avaliação. `anotador mcp` fala MCP por stdio, sem porta, chave nem dependência:
+
+```bash
+claude mcp add anotador -- anotador mcp --fonte /caminho/do/projeto        # Claude Code
+codex mcp add anotador -- anotador mcp --fonte /caminho/do/projeto         # Codex CLI
+agy mcp add anotador anotador mcp --fonte /caminho/do/projeto              # Antigravity
+```
+
+No Cursor, em `.cursor/mcp.json`: `{"mcpServers": {"anotador": {"command": "anotador", "args": ["mcp", "--fonte", "${workspaceFolder}"]}}}`. Com `claude mcp add -s project`, a configuração vai para o `.mcp.json` do repositório e vale para o time inteiro.
+
+| Ferramenta | Para que serve |
+|---|---|
+| `conferir_valor` | antes de escrever `#3b82f6` ou `13px`: diz se já existe token, qual usar, os mais próximos e se a medida respeita o passo. Cor é comparada em OKLab, então um dígito trocado encontra o token certo; entre tokens de mesmo valor, o semântico vem antes do primitivo, e a variável interna de uma biblioteca nunca é recomendada |
+| `buscar_componente` | antes de criar um componente: os que já existem, com quantas vezes cada um é usado no produto (Storybook e testes não contam) |
+| `listar_tokens` | o vocabulário: valor, camada, a intenção do comentário e `arquivo:linha` |
+| `auditar_sistema` | as regras da tabela acima, sobre o código |
+| `medir_pagina` | a medida em três larguras, sobre a URL que você passar |
+| `extrair_design` | o DESIGN.md de um site de referência, pelos estilos computados |
+
+Nenhuma ferramenta altera o projeto. Os tokens também saem como recurso, `anotador://tokens.dtcg.json`, no formato do W3C.
+
 ## Avaliação da página
 
 A lupa na barra (`Alt+E`) mede a página com uma régua objetiva e, se você quiser, pede um **parecer ao agente conectado**. São duas coisas separadas de propósito:
@@ -322,6 +347,7 @@ anotador conectar <url> | desconectar | saude | pendentes | ver <id> | conversa 
 anotador fontes [--compact] [--forcar]         instala a San Francisco da Apple nesta máquina
 anotador design [--fonte dir] [--tudo]         tokens do projeto e o que foge das próprias regras
 anotador design --tokens                       os mesmos tokens no formato do W3C, na saída padrão
+anotador mcp [--fonte dir]                     o sistema de design como servidor MCP (stdio), para qualquer agente consultar
 anotador avaliacoes | avaliacao <id>           pedidos de parecer e o dossiê de cada um
 anotador progresso <id> --nota … | nota <id> --texto … | perguntar <id> --texto … [--opcoes "A|B|C"] [--multipla] | processado <id> [--nota …]
 ```

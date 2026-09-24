@@ -3,7 +3,7 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { Navegador } from "./cdp.ts";
+import { Navegador, type Pagina } from "./cdp.ts";
 import type { Fila } from "./fila.ts";
 import { LARGURAS_PADRAO, SCRIPT_MEDIDA, type MedidaTela } from "./tela.ts";
 
@@ -110,14 +110,7 @@ export async function capturarAvaliacao(
       await mkdir(destino.replace(/\/[^/]+$/, ""), { recursive: true });
       await writeFile(destino, await pagina.capturar({ paginaInteira: true }));
       // Depois do print, e no mesmo navegador: reaproveita a navegação que já custou.
-      // Uma largura que falhe não leva as outras junto nem invalida a captura.
-      for (const largura of opcoes.larguras ?? LARGURAS_PADRAO) {
-        try {
-          await pagina.definirViewport(largura, viewport.altura || 800, 1);
-          await pagina.esperar(250);
-          medidas.push(await pagina.avaliar<MedidaTela>(SCRIPT_MEDIDA));
-        } catch { /* uma largura sem medida é menos grave que uma avaliação sem dossiê */ }
-      }
+      medidas.push(...await medirLarguras(pagina, opcoes.larguras ?? LARGURAS_PADRAO, viewport.altura || 800));
       return { caminho: destino, medidas };
     } finally {
       await navegador.fechar();
@@ -131,4 +124,44 @@ export async function capturarAvaliacao(
   } catch (erro) {
     return { caminho: null, erro: erro instanceof Error ? erro.message : String(erro), medidas };
   }
+}
+
+// Uma largura que falhe não leva as outras junto: uma medida a menos é menos grave
+// que nenhuma, e quem lê o resultado vê quais larguras vieram.
+async function medirLarguras(pagina: Pagina, larguras: readonly number[], altura: number): Promise<MedidaTela[]> {
+  const medidas: MedidaTela[] = [];
+  for (const largura of larguras) {
+    try {
+      await pagina.definirViewport(largura, altura, 1);
+      await pagina.esperar(250);
+      medidas.push(await pagina.avaliar<MedidaTela>(SCRIPT_MEDIDA));
+    } catch { /* segue para a próxima largura */ }
+  }
+  return medidas;
+}
+
+/** Abre a URL num Chromium temporário e mede o que a página faz em cada largura. */
+export async function medirUrl(url: string, opcoes: { chrome?: string | null; larguras?: readonly number[]; timeoutMs?: number } = {}): Promise<MedidaTela[]> {
+  let alvo: URL;
+  try { alvo = new URL(url); } catch { throw new Error("Informe uma URL HTTP ou HTTPS válida."); }
+  if (!/^https?:$/.test(alvo.protocol)) throw new Error("A medida aceita somente URLs HTTP ou HTTPS.");
+  if (alvo.username || alvo.password) throw new Error("A URL não pode conter usuário ou senha.");
+  const larguras = (opcoes.larguras?.length ? opcoes.larguras : LARGURAS_PADRAO).filter((l) => Number.isInteger(l) && l >= 240 && l <= 3840).slice(0, 6);
+  if (!larguras.length) throw new Error("As larguras devem ser inteiros entre 240 e 3840 px.");
+  const tentar = async (): Promise<MedidaTela[]> => {
+    const navegador = await Navegador.abrir({ caminho: opcoes.chrome ?? null });
+    try {
+      const pagina = await navegador.novaPagina();
+      await pagina.definirViewport(larguras[0] ?? 1280, 800, 1);
+      await pagina.navegar(alvo.href, 20_000);
+      await pagina.esperar(700);
+      return await medirLarguras(pagina, larguras, 800);
+    } finally {
+      await navegador.fechar();
+    }
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limite = new Promise<never>((_, rejeitar) => { timer = setTimeout(() => rejeitar(new Error("tempo esgotado ao medir a página")), opcoes.timeoutMs ?? 45_000); });
+  try { return await Promise.race([tentar(), limite]); }
+  finally { if (timer) clearTimeout(timer); }
 }
