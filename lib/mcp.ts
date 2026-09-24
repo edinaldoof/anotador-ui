@@ -88,6 +88,21 @@ function recomendado(tokens: TokenDesign[]): TokenDesign | undefined {
   return [...tokens].sort(preferencia).find((t) => !deBiblioteca(t.nome));
 }
 
+/**
+ * Entre tokens do projeto com o mesmo valor, qual usar — ou nenhum, se a escolha é de
+ * papel. `--cor-acao: var(--azul-600)` e `--azul-600` são uma camada sobre a outra: a
+ * semântica resolve sozinha. Já `--color-action-primary`, `--color-focus` e
+ * `--color-brand-teal-deep` com o mesmo #046b66 são papéis diferentes, e o Pré-Projetos
+ * proíbe por escrito a cor da marca em botão. Recomendar o primeiro da lista ali
+ * ensinaria o agente a errar com confiança; sem `usar`, ele escolhe pelo papel.
+ */
+function escolherPorPapel(tokens: TokenDesign[]): { usar: TokenDesign | null; papeis: TokenDesign[] } {
+  const doProjeto = tokens.filter((t) => !deBiblioteca(t.nome));
+  const apontados = new Set(doProjeto.flatMap((t) => [.../var\((--[A-Za-z0-9_-]+)\)/g[Symbol.matchAll](t.valor)].map((m) => m[1])));
+  const papeis = doProjeto.filter((t) => !apontados.has(t.nome)).sort(preferencia);
+  return { usar: papeis.length === 1 ? papeis[0] ?? null : null, papeis: papeis.length > 1 ? papeis : [] };
+}
+
 export function conferirValor(sistema: SistemaDeDesign, valor: string, categoria?: CategoriaToken): Record<string, unknown> {
   const texto = valor.trim();
   const rgb = categoria === undefined || categoria === "cor" ? paraRgb(texto) : null;
@@ -98,14 +113,17 @@ export function conferirValor(sistema: SistemaDeDesign, valor: string, categoria
     // Abaixo de 0,02 em OKLab a diferença mal se vê: é quase sempre o mesmo token
     // escrito à mão com um dígito trocado, e o agente deveria usar o token.
     const proximos = medidos.filter((m) => m.d >= 0.002 && m.d <= 0.08 && !deBiblioteca(m.t.nome)).slice(0, 3);
-    const escolhido = recomendado(exatos) ?? (proximos[0] && proximos[0].d < 0.02 ? proximos[0].t : undefined);
+    // Quase igual: a mesma cor escrita com um dígito trocado. Todos os tokens daquela
+    // cor entram na escolha, não só o primeiro da distância.
+    const quase = proximos[0] && proximos[0].d < 0.02 ? medidos.filter((m) => Math.abs(m.d - (proximos[0]?.d ?? 0)) < 0.0005).map((m) => m.t) : [];
+    const escolha = escolherPorPapel(exatos.length ? exatos : quase);
     return {
       valor: texto, tipo: "cor", noSistema: exatos.some((t) => !deBiblioteca(t.nome)),
-      usar: escolhido ? `var(${escolhido.nome})` : null,
+      usar: escolha.usar ? `var(${escolha.usar.nome})` : null,
       exatos: exatos.map(descreverToken),
       proximos: proximos.map((m) => ({ ...descreverToken(m.t), distancia: Math.round(m.d * 1000) / 1000, quaseIgual: m.d < 0.02 })),
-      ...(exatos.filter((t) => !deBiblioteca(t.nome)).length > 1 ? { papeis: exatos.filter((t) => !deBiblioteca(t.nome)).map((t) => t.nome) } : {}),
-      observacao: exatos.filter((t) => !deBiblioteca(t.nome)).length > 1 ? "vários tokens do projeto têm esta cor, com papéis diferentes (ação, link, foco, marca…): escolha pelo papel do elemento, não pelo valor — `usar` é só o primeiro da lista"
+      ...(escolha.papeis.length ? { papeis: escolha.papeis.map(descreverToken) } : {}),
+      observacao: escolha.papeis.length ? `${escolha.papeis.length} tokens do projeto têm esta cor, com papéis diferentes (ação, link, foco, marca…): escolha pelo papel do elemento e pela intenção de cada um — não pelo valor`
         : recomendado(exatos) ? "a cor já tem token; use-o em vez do valor literal"
         : proximos[0] && proximos[0].d < 0.02 ? "praticamente a mesma cor de um token existente — provavelmente é ele"
         : proximos.length ? "nenhum token com esta cor; os mais próximos estão listados — prefira um deles ou declare um token novo com intenção"
@@ -121,13 +139,16 @@ export function conferirValor(sistema: SistemaDeDesign, valor: string, categoria
   const proximos = medidos.filter((m) => m.d >= 0.01 && m.d <= Math.max(4, px * 0.25)).slice(0, 3);
   const base = sistema.espaco.base;
   const naEscala = cat === "espaco" && base ? Math.abs(px % base) < 0.01 : cat === "texto" && sistema.escalaDeTexto.length ? sistema.escalaDeTexto.includes(px) : null;
+  const medida = escolherPorPapel(exatos);
   return {
     valor: texto, tipo: cat, px, noSistema: exatos.length > 0,
-    usar: exatos[0] ? `var(${exatos[0].nome})` : null,
+    usar: medida.usar ? `var(${medida.usar.nome})` : null,
     exatos: exatos.map(descreverToken),
     proximos: proximos.map((m) => ({ ...descreverToken(m.t), diferencaPx: Math.round(m.d * 100) / 100 })),
+    ...(medida.papeis.length ? { papeis: medida.papeis.map(descreverToken) } : {}),
     ...(naEscala === null ? {} : { naEscala, ...(cat === "espaco" && base ? { passo: base } : {}), ...(cat === "texto" ? { escalaDeTexto: sistema.escalaDeTexto } : {}) }),
-    observacao: exatos.length ? "a medida já tem token; use-o em vez do valor literal"
+    observacao: medida.papeis.length ? `${medida.papeis.length} tokens do projeto têm esta medida, com papéis diferentes (ritmo, recuo, alvo de toque…): escolha pelo papel`
+      : exatos.length ? "a medida já tem token; use-o em vez do valor literal"
       : naEscala === false ? `fora da escala do projeto${cat === "espaco" && base ? ` (passo de ${base}px)` : ""}; prefira o token mais próximo`
       : proximos.length ? "sem token exato; os mais próximos estão listados"
       : "sem token para esta medida",

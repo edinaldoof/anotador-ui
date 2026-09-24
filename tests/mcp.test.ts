@@ -66,6 +66,12 @@ describe("consultas do servidor MCP", () => {
     assert.equal((quase["proximos"] as Array<{ quaseIgual: boolean }>)[0]?.quaseIgual, true);
     assert.ok(!(quase["proximos"] as Array<{ nome: string }>).some((t) => t.nome.startsWith("--rdp-")), "biblioteca fora das sugestões");
 
+    // Dois tokens crus com a mesma cor são dois papéis, não uma camada: nada de "usar".
+    const papeis = conferirValor(lerSistemaDeDesign([{ relativo: "a.css", linhas: [":root {", "  --color-action-primary: #046b66;", "  --color-brand-teal: #046b66; /* marca; nunca em botão */", "}"] }]), "#046b66");
+    assert.equal(papeis["usar"], null, "recomendar o primeiro ensinaria o agente a pintar botão com a cor da marca");
+    assert.deepEqual((papeis["papeis"] as Array<{ nome: string; intencao?: string }>).map((t) => [t.nome, t.intencao ?? null]), [["--color-brand-teal", "marca; nunca em botão"], ["--color-action-primary", null]]);
+    assert.match(String(papeis["observacao"]), /escolha pelo papel/);
+
     // Formatos diferentes, mesma cor.
     assert.equal(conferirValor(sistema, "rgb(15 118 110)")["usar"], "var(--color-action-primary)");
     assert.equal(conferirValor(sistema, "#dc2626")["usar"], null, "vermelho não tem parente no sistema e não se inventa um");
