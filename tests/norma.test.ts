@@ -71,6 +71,28 @@ test("paraDtcg recusa o que o formato não representa, dizendo o motivo", () => 
   assert.deepEqual(valor["spread"], { value: 0, unit: "px" }, "o que o CSS omite vira zero explícito, que o formato exige");
 });
 
+test("paraDtcg exporta movimento como o formato manda: duração e curva, não \"valor composto\"", () => {
+  const { documento, ignorados } = paraDtcg(
+    sistemaDe(`@theme {
+  --motion-duration-feedback: 150ms; /* retorno de clique */
+  --motion-duration-panel: 0.3s;
+  --motion-ease-intro: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: ease-out;
+  --animate-spin: spin 1s linear infinite;
+}`)
+  );
+  const movimento = (documento["movimento"] ?? {}) as Record<string, Record<string, unknown>>;
+  assert.equal(movimento["motion-duration-feedback"]?.["$type"], "duration");
+  assert.deepEqual(movimento["motion-duration-feedback"]?.["$value"], { value: 150, unit: "ms" });
+  assert.equal(movimento["motion-duration-feedback"]?.["$description"], "retorno de clique");
+  assert.deepEqual(movimento["motion-duration-panel"]?.["$value"], { value: 0.3, unit: "s" }, "a unidade escrita é mantida");
+  assert.equal(movimento["motion-ease-intro"]?.["$type"], "cubicBezier");
+  assert.deepEqual(movimento["motion-ease-intro"]?.["$value"], [0.22, 1, 0.36, 1]);
+  assert.deepEqual(movimento["ease-out"]?.["$value"], [0, 0, 0.58, 1], "curva com nome vira os quatro pontos do CSS");
+  // A animação inteira (nome, duração, curva, repetição) não é um tipo do formato.
+  assert.deepEqual(ignorados.map((i) => i.nome), ["--animate-spin"]);
+});
+
 test("exportação de cores preserva alpha explícito sem confundir o último canal com transparência", () => {
   const casos: Array<[string, number]> = [
     ["rgb(255, 0, 0)", 1],

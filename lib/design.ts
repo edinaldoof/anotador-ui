@@ -7,7 +7,7 @@
 import type { ArquivoFonte } from "./fonte.ts";
 import { paraRgb, rgbTexto } from "./fonte.ts";
 
-export type CategoriaToken = "cor" | "espaco" | "texto" | "raio" | "sombra" | "fonte" | "outro";
+export type CategoriaToken = "cor" | "espaco" | "texto" | "raio" | "sombra" | "fonte" | "movimento" | "outro";
 
 export interface TokenDesign {
   nome: string;
@@ -18,6 +18,8 @@ export interface TokenDesign {
   px?: number;
   /** cor normalizada, quando é cor */
   rgb?: string;
+  /** duração em milissegundos, quando é tempo */
+  ms?: number;
   /** o que o comentário ao lado diz que o token significa */
   intencao?: string;
   arquivo: string;
@@ -30,6 +32,8 @@ export interface SistemaDeDesign {
   espaco: EscalaDeEspaco;
   /** tamanhos de texto declarados, em pixels, em ordem */
   escalaDeTexto: number[];
+  /** durações de animação declaradas, em milissegundos, em ordem */
+  duracoes: number[];
   /** cor normalizada → tokens que a declaram (duas entradas = cor duplicada) */
   porCor: Record<string, string[]>;
   arquivos: string[];
@@ -42,13 +46,26 @@ const CATEGORIAS: Array<[RegExp, CategoriaToken]> = [
   [/^--radius/i, "raio"],
   [/^--shadow|^--elevation/i, "sombra"],
   [/^--font-/i, "fonte"],
+  // O playbook: movimento sai em dois tokens, duração e curva. O Tailwind 4 chama os
+  // dele de --ease-* e --animate-*; projetos costumam usar --motion-* e --duration-*.
+  [/^--(motion|duration|ease|easing|transition|animate|animation)(-|$)/i, "movimento"],
 ];
 
 function categoriaDe(nome: string, valor: string): CategoriaToken {
   for (const [re, cat] of CATEGORIAS) if (re.test(nome)) return cat;
   if (paraRgb(valor)) return "cor";
   if (/^-?[\d.]+(rem|px|em)$/.test(valor.trim())) return "espaco";
+  if (emMs(valor) !== undefined || /^cubic-bezier\(/i.test(valor.trim())) return "movimento";
   return "outro";
+}
+
+/** `180ms` → 180, `0.3s` → 300. Sem unidade de tempo, indefinido. */
+export function emMs(valor: string): number | undefined {
+  const m = /^(-?[\d.]+)(ms|s)$/.exec(valor.trim());
+  if (!m?.[1]) return undefined;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return undefined;
+  return m[2] === "ms" ? n : Math.round(n * 1000 * 1000) / 1000;
 }
 
 /** `1.5rem` → 24, `44px` → 44. Sem unidade conhecida, indefinido. */
@@ -124,15 +141,21 @@ export function lerSistemaDeDesign(arquivos: ArquivoFonte[]): SistemaDeDesign {
       token.rgb = rgbTexto(rgb);
       (porCor[token.rgb] ??= []).push(nome);
     }
+    const ms = emMs(valor);
+    if (ms !== undefined) token.ms = ms;
     tokens.push(token);
   }
 
   const espacos = tokens.filter((t) => t.categoria === "espaco" && t.px !== undefined).map((t) => ({ nome: t.nome, px: t.px as number }));
-  const escalaDeTexto = Array.from(new Set(tokens.filter((t) => t.categoria === "texto" && t.px !== undefined).map((t) => t.px as number))).sort((a, b) => a - b);
+  // Só tamanho de letra entra na escala: `--tracking-wide: 0.025em` virava "0,4px" e
+  // `--leading-*` não é tamanho de nada.
+  const escalaDeTexto = Array.from(new Set(tokens.filter((t) => t.categoria === "texto" && t.px !== undefined && /^--(text|font-size)/i.test(t.nome)).map((t) => t.px as number))).sort((a, b) => a - b);
+  const duracoes = Array.from(new Set(tokens.filter((t) => t.categoria === "movimento" && t.ms !== undefined).map((t) => t.ms as number))).sort((a, b) => a - b);
   return {
     tokens: tokens.sort((a, b) => a.categoria.localeCompare(b.categoria) || a.nome.localeCompare(b.nome)),
     espaco: escalaDeEspaco(espacos),
     escalaDeTexto,
+    duracoes,
     porCor,
     arquivos: Array.from(new Set(tokens.map((t) => t.arquivo))),
   };
@@ -230,6 +253,19 @@ export function analisarSistema(arquivos: ArquivoFonte[]): RelatorioDesign {
     });
   }
 
+  // O orçamento do playbook: interface entre 100 e 300ms, painel que expande até 500.
+  // Acima disso é momento raro — abertura, onboarding —, e o token deveria dizer qual.
+  for (const t of sistema.tokens) {
+    if (t.ms === undefined || t.ms <= 500 || t.intencao || DE_BIBLIOTECA.test(t.nome)) continue;
+    achados.push({
+      regra: "movimento acima do orçamento",
+      gravidade: "baixa",
+      alvo: t.nome,
+      evidencia: `${t.ms}ms passa dos 500ms que o playbook dá a painel que expande; acima disso é abertura ou onboarding, raro — diga no comentário para que ele serve`,
+      onde: `${t.arquivo}:${t.linha}`,
+    });
+  }
+
   for (const t of tokensSemUso(sistema, arquivos)) {
     const biblioteca = DE_BIBLIOTECA.test(t.nome);
     achados.push({
@@ -276,6 +312,7 @@ const GRUPO_DTCG: Record<CategoriaToken, string> = {
   raio: "raio",
   sombra: "sombra",
   fonte: "fonte",
+  movimento: "movimento",
   outro: "outro",
 };
 
@@ -286,6 +323,7 @@ const DESCRICAO_GRUPO: Record<string, string> = {
   raio: "Raios de canto",
   sombra: "Elevações",
   fonte: "Famílias tipográficas",
+  movimento: "Durações e curvas de animação",
   outro: "Tokens que não se encaixam nas demais categorias",
 };
 
@@ -381,6 +419,20 @@ function sombraDtcg(valor: string): Record<string, unknown> | null {
   return (camadas.length === 1 ? camadas[0] : camadas) as Record<string, unknown>;
 }
 
+/** As curvas com nome do CSS, nos quatro números que o formato pede. */
+const CURVAS_COM_NOME: Record<string, [number, number, number, number]> = {
+  linear: [0, 0, 1, 1], ease: [0.25, 0.1, 0.25, 1], "ease-in": [0.42, 0, 1, 1], "ease-out": [0, 0, 0.58, 1], "ease-in-out": [0.42, 0, 0.58, 1],
+};
+
+/** `cubic-bezier(0.22, 1, 0.36, 1)` ou `ease-out` → os quatro pontos; outra coisa, nulo. */
+function curvaDtcg(valor: string): [number, number, number, number] | null {
+  const v = valor.trim().toLowerCase();
+  if (CURVAS_COM_NOME[v]) return CURVAS_COM_NOME[v];
+  const m = /^cubic-bezier\(([^)]*)\)$/.exec(v);
+  const n = m?.[1]?.split(",").map((x) => Number(x.trim())) ?? [];
+  return n.length === 4 && n.every(Number.isFinite) ? (n as [number, number, number, number]) : null;
+}
+
 function familiaDtcg(valor: string): string[] {
   return partesDeTopo(valor).map((f) => f.replace(/^["']|["']$/g, "").trim()).filter(Boolean);
 }
@@ -429,6 +481,13 @@ export function paraDtcg(sistema: SistemaDeDesign): ExportacaoDtcg {
         ignorados.push({ nome: t.nome, motivo: "cor que não consegui normalizar: " + bruto });
         continue;
       }
+    } else if (t.ms !== undefined) {
+      tipo = "duration";
+      const unidade = /s$/.test(bruto) && !/ms$/.test(bruto) ? "s" : "ms";
+      valor = { value: Number(bruto.replace(/m?s$/, "")), unit: unidade };
+    } else if (t.categoria === "movimento" && curvaDtcg(bruto)) {
+      tipo = "cubicBezier";
+      valor = curvaDtcg(bruto);
     } else if (/^--font-weight/i.test(t.nome) && /^\d{3}$/.test(bruto)) {
       tipo = "fontWeight";
       valor = Number(bruto);

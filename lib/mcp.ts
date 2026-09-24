@@ -36,7 +36,9 @@ interface ResultadoFerramenta { content: Array<{ type: "text"; text: string }>; 
 const VERSOES_PROTOCOLO = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 /** Resposta grande demais custa contexto do agente em toda chamada seguinte. */
 const LIMITE_TEXTO = 60_000;
-const CATEGORIAS: CategoriaToken[] = ["cor", "espaco", "texto", "raio", "sombra", "fonte", "outro"];
+const CATEGORIAS: CategoriaToken[] = ["cor", "espaco", "texto", "raio", "sombra", "fonte", "movimento", "outro"];
+/** O que `conferir_valor` sabe comparar: cor, medida e duração (ou curva). */
+const CATEGORIAS_DE_VALOR = ["cor", "espaco", "texto", "raio", "movimento"];
 
 export interface OpcoesMcp { fonte: string; chrome?: string | null; versao?: string }
 
@@ -57,8 +59,8 @@ export const FERRAMENTAS = [
   {
     name: "conferir_valor",
     title: "Conferir valor literal",
-    description: "Antes de escrever uma cor, espaçamento, raio ou tamanho de texto literal, pergunte aqui: diz se o valor já tem token (e qual usar), quais tokens estão mais perto e se a medida respeita a escala do projeto. Cores são comparadas em OKLab, então um #3b82f5 escrito à mão encontra o token de #3b82f6.",
-    inputSchema: { type: "object", properties: { valor: { type: "string", description: "Ex.: #3b82f6, rgb(59 130 246), oklch(0.62 0.19 259), 13px, 0.875rem." }, categoria: { type: "string", enum: ["cor", "espaco", "texto", "raio"], description: "Para medidas: onde o valor será usado. Padrão: espaco." } }, required: ["valor"], additionalProperties: false },
+    description: "Antes de escrever uma cor, espaçamento, raio, tamanho de texto ou duração de animação literal, pergunte aqui: diz se o valor já tem token (e qual usar), quais tokens estão mais perto e se a medida respeita a escala do projeto. Cores são comparadas em OKLab, então um #3b82f5 escrito à mão encontra o token de #3b82f6; uma duração vem com a faixa do orçamento de movimento em que cai (feedback até 150ms, abrir e fechar em 200–300ms, painel até 500ms).",
+    inputSchema: { type: "object", properties: { valor: { type: "string", description: "Ex.: #3b82f6, rgb(59 130 246), oklch(0.62 0.19 259), 13px, 0.875rem, 200ms, cubic-bezier(0.22, 1, 0.36, 1)." }, categoria: { type: "string", enum: CATEGORIAS_DE_VALOR, description: "Para medidas: onde o valor será usado. Padrão: espaco. Curva de animação pede movimento; duração é reconhecida sozinha." } }, required: ["valor"], additionalProperties: false },
     annotations: { ...SOMENTE_LEITURA, openWorldHint: false },
   },
   {
@@ -145,14 +147,14 @@ export function criarServidorMcp(opcoes: OpcoesMcp): { tratar(mensagem: unknown)
         const tokens = s.tokens.filter((t) => categoria === undefined || t.categoria === categoria);
         return resultado({
           total: tokens.length, arquivos: s.arquivos,
-          passoDeEspaco: s.espaco.base ?? null, escalaDeTexto: s.escalaDeTexto,
+          passoDeEspaco: s.espaco.base ?? null, escalaDeTexto: s.escalaDeTexto, duracoes: s.duracoes,
           tokens: tokens.map(descreverToken),
         });
       }
       case "conferir_valor": {
         const valor = args["valor"], categoria = args["categoria"];
         if (typeof valor !== "string" || !valor.trim() || valor.length > 200) return resultado("informe o valor como texto, ex.: #3b82f6 ou 13px", true);
-        if (categoria !== undefined && !["cor", "espaco", "texto", "raio"].includes(categoria as string)) return resultado("categoria inválida: use cor, espaco, texto ou raio", true);
+        if (categoria !== undefined && !CATEGORIAS_DE_VALOR.includes(categoria as string)) return resultado(`categoria inválida: use ${CATEGORIAS_DE_VALOR.join(", ")}`, true);
         const { sistema: s } = await sistema();
         return resultado(conferirValor(s, valor, categoria as CategoriaToken | undefined));
       }

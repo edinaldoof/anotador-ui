@@ -298,8 +298,8 @@ export function usosDeTokens(tokens: TokenDesign[], codigo: ArquivoFonte[]): Map
   return usos;
 }
 
-const ORDEM_CATEGORIAS: CategoriaToken[] = ["cor", "espaco", "texto", "raio", "sombra", "fonte", "outro"];
-const TITULO_CATEGORIA: Record<CategoriaToken, string> = { cor: "Cor", espaco: "Espaçamento", texto: "Texto", raio: "Raio", sombra: "Sombra", fonte: "Fonte", outro: "Outros" };
+const ORDEM_CATEGORIAS: CategoriaToken[] = ["cor", "espaco", "texto", "raio", "sombra", "fonte", "movimento", "outro"];
+const TITULO_CATEGORIA: Record<CategoriaToken, string> = { cor: "Cor", espaco: "Espaçamento", texto: "Texto", raio: "Raio", sombra: "Sombra", fonte: "Fonte", movimento: "Movimento", outro: "Outros" };
 
 function celula(texto: string): string {
   return texto.replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
@@ -320,7 +320,7 @@ export function gerarSkillDeDesign(o: OpcoesSkill): string {
   const linhas: string[] = [
     "---",
     "name: design-system",
-    `description: Componentes, tokens e regras de interface do ${nome}, gerados do código pelo Anotador. Use ao criar ou alterar UI, ao escolher um componente, ao resolver o nome de um token ou antes de escrever uma cor, espaçamento, raio ou tamanho de texto literal.`,
+    `description: Componentes, tokens e regras de interface do ${nome}, gerados do código pelo Anotador. Use ao criar ou alterar UI, ao escolher um componente, ao resolver o nome de um token ou antes de escrever uma cor, espaçamento, raio, tamanho de texto ou duração de animação literal.`,
     "---",
     "",
     `<!-- Gerado pelo Anotador em ${o.hoje} a partir do código. Não edite à mão: rode \`anotador agentes --gerar\` de novo, e confira com \`anotador agentes\`. -->`,
@@ -330,7 +330,7 @@ export function gerarSkillDeDesign(o: OpcoesSkill): string {
     "## Antes de escrever UI",
     "",
     "1. **Componente que não está nesta lista não existe.** Procure antes de criar; se o servidor MCP do Anotador estiver ligado, `buscar_componente` responde com os usos de cada um. Na dúvida, pergunte.",
-    "2. **Nada de cor, espaçamento, raio ou tamanho de texto literal.** Use os tokens abaixo — `conferir_valor` diz qual token corresponde a um valor. Um hex solto parece certo no tema claro e erra no escuro e no próximo rebrand.",
+    "2. **Nada de cor, espaçamento, raio, tamanho de texto ou duração literal.** Use os tokens abaixo — `conferir_valor` diz qual token corresponde a um valor. Um hex solto parece certo no tema claro e erra no escuro e no próximo rebrand.",
     "3. **Depois de mexer em layout, meça.** `medir_pagina` abre a tela em 390, 768 e 1280px e aponta rolagem horizontal, vazamento e alvo de toque pequeno.",
     "",
   ];
@@ -373,7 +373,8 @@ export function gerarSkillDeDesign(o: OpcoesSkill): string {
     const fatos: string[] = [];
     if (o.sistema.espaco.base) fatos.push(`passo de espaçamento de ${o.sistema.espaco.base}px`);
     if (o.sistema.escalaDeTexto.length) fatos.push(`escala de texto ${o.sistema.escalaDeTexto.join(", ")}px`);
-    linhas.push(`Primeiro os que o autor explicou no comentário, depois os mais usados no código; o número entre colchetes é quantas vezes cada um aparece. Escolha pelo papel do elemento, não pelo valor: dois tokens com a mesma cor podem ter papéis diferentes.${fatos.length ? " O projeto tem " + fatos.join(" e ") + "." : ""}`, "");
+    if (o.sistema.duracoes.length) fatos.push(`durações de ${o.sistema.duracoes.join(", ")}ms`);
+    linhas.push(`Primeiro os que o autor explicou no comentário, depois os mais usados no código; o número entre colchetes é quantas vezes cada um aparece. Escolha pelo papel do elemento, não pelo valor: dois tokens com a mesma cor podem ter papéis diferentes.${fatos.length ? " O projeto tem " + (fatos.length > 1 ? fatos.slice(0, -1).join(", ") + " e " + fatos[fatos.length - 1] : fatos[0]) + "." : ""}`, "");
     const usos = usosDeTokens(tokens, o.codigo);
     const ordem = (a: TokenDesign, b: TokenDesign) => Number(!a.intencao) - Number(!b.intencao) || (usos.get(b.nome) ?? 0) - (usos.get(a.nome) ?? 0) || a.nome.localeCompare(b.nome);
     for (const categoria of ORDEM_CATEGORIAS) {

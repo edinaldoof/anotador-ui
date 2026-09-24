@@ -34,6 +34,8 @@ async function criarProjeto(): Promise<string> {
     "  --spacing-8: 32px;",
     "  --spacing-hairline: 1px; /* borda de separação, não espaçamento */",
     "  --radius-md: 6px;",
+    "  --motion-duration-feedback: 150ms;",
+    "  --motion-duration-panel: 300ms; /* painel que expande */",
     "}",
     ".botao { background: var(--color-action-primary); padding: var(--spacing-2) var(--spacing-4); }",
   ].join("\n"));
@@ -88,6 +90,18 @@ describe("consultas do servidor MCP", () => {
     assert.deepEqual((torto["proximos"] as Array<{ nome: string }>).map((t) => t.nome), ["--spacing-4"]);
     assert.equal(conferirValor(sistema, "6px", "raio")["usar"], "var(--radius-md)");
     assert.equal(conferirValor(sistema, "flex")["tipo"], "desconhecido");
+  });
+
+  test("a duração diz o token que já existe e em que faixa do orçamento de movimento ela cai", async () => {
+    const sistema = lerSistemaDeDesign(await lerProjeto(pasta));
+    assert.equal(conferirValor(sistema, "300ms")["usar"], "var(--motion-duration-panel)");
+    assert.equal(conferirValor(sistema, "0.3s")["usar"], "var(--motion-duration-panel)", "segundo vira milissegundo antes de comparar");
+    assert.match(String(conferirValor(sistema, "300ms")["faixa"]), /^padrão \(200–300ms\)/);
+    assert.match(String(conferirValor(sistema, "180ms")["faixa"]), /^entre rápido \(100–150ms\) e padrão \(200–300ms\)$/, "entre duas faixas, diz entre quais — não arredonda pelo autor");
+    const lenta = conferirValor(sistema, "800ms");
+    assert.equal(lenta["usar"], null);
+    assert.match(String(lenta["observacao"]), /acima dos 500ms/);
+    assert.equal(conferirValor(sistema, "300ms", "cor")["tipo"], "desconhecido", "pedir cor para uma duração não inventa resposta");
   });
 
   test("componente: o que já existe e é usado vem antes, e história de Storybook não conta como definição", async () => {

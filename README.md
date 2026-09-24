@@ -219,7 +219,7 @@ anotador design --tudo   # inclui token sem uso e cor repetida
 anotador design --tokens > tokens.json   # os mesmos tokens no formato do W3C
 ```
 
-O último exporta no **Design Tokens Format Module**, estável desde outubro de 2025 e lido por Figma, Style Dictionary, Tokens Studio e Penpot. `var(--outro)` vira referência `{cor.outro}`, o comentário do autor vira `$description` e cada token carrega em `$extensions` o nome da variável e o `arquivo:linha` de onde saiu — a viagem de volta continua possível. O que o formato não representa fica de fora com o motivo impresso, porque inventar uma forma aproximada é pior do que declarar a ausência.
+O último exporta no **Design Tokens Format Module**, estável desde outubro de 2025 e lido por Figma, Style Dictionary, Tokens Studio e Penpot. `var(--outro)` vira referência `{cor.outro}`, o comentário do autor vira `$description`, duração e curva de animação saem com os tipos `duration` e `cubicBezier` do formato, e cada token carrega em `$extensions` o nome da variável e o `arquivo:linha` de onde saiu — a viagem de volta continua possível. O que o formato não representa fica de fora com o motivo impresso, porque inventar uma forma aproximada é pior do que declarar a ausência.
 
 As regras foram calibradas contra projetos reais, porque linter que grita demais ninguém lê:
 
@@ -228,16 +228,20 @@ As regras foram calibradas contra projetos reais, porque linter que grita demais
 | espaçamento fora da escala | valor que não é múltiplo do passo que a maioria dos tokens respeita; exceção documentada no comentário cai para gravidade baixa |
 | cor literal repetida | dois tokens escrevendo o mesmo valor. `--color-text-main: var(--color-brand-ink)` é alias e **não** conta: alias é o jeito certo de dar nome semântico |
 | token sem uso | nem `var()` nem utilitária derivada o referenciam; prefixo de biblioteca é sinalizado à parte, porque ela lê a variável em tempo de execução |
+| movimento acima do orçamento | duração acima de 500ms sem comentário dizendo para que serve. O playbook dá 100–300ms à interface e até 500ms a painel que expande; acima disso é abertura ou onboarding, raro — e o `600ms /* abertura rara da marca */` do Pré-Projetos não é achado |
 
 `anotador design` termina com **o sistema em uso** — o outro lado da auditoria: o quanto as telas usam o que o CSS declara. Três medidas do [playbook](https://www.designsystems.one/playbook) do designsystems.one que um analisador de código faz sem opinião:
 
 - **valores literais no código** — "#4f46e5 em 137 lugares" —, agrupados pelo valor (`text-[11px]` e `text-[0.6875rem]` são o mesmo), cada um com o token que existe para ele. Quando vários tokens têm o mesmo valor com papéis diferentes, não recomenda nenhum: a escolha é de papel. Sem escala de texto declarada, compara com a do Tailwind (`text-xs`, `text-sm`…);
 - **cobertura dos controles**, por tela — `<button>` cru contra o `Button` do sistema, `<input>` contra `Input`, e assim por diante. Elemento cru só pesa quando o sistema tem o equivalente, e `<input type="hidden">` nunca conta;
-- **componentes base sem uso** no produto e os **dez do núcleo** que o playbook considera suficientes para 80% de um produto interno.
+- **componentes base sem uso** no produto e os **dez do núcleo** que o playbook considera suficientes para 80% de um produto interno;
+- **tipografia e movimento no código**, dos [fundamentos](https://www.designsystems.one/foundations/typography) do mesmo site: a escada de pesos (o playbook fecha em quatro), entreletra e entrelinha soltas — e quantas estão em texto caixa-alta, porque seis espaçamentos de letra num sobretítulo são um papel escrito de seis jeitos —, duração e curva escritas à mão onde o sistema tem token (no Tailwind 4, `duration-200` compila para o número solto; `p-4` passa por `--spacing` e não conta), duração acima de 500ms fora de animação em loop e animação sem variante para quem pediu movimento reduzido (`motion-safe:`, `motion-reduce:` ou `@media`), a menos que um piso global com `*` desligue tudo de uma vez.
 
-Ficou de fora o que exige gente e não código: tempo até o primeiro protótipo, NPS do time, processo de RFC. No Pré-Projetos, a primeira leitura deu 86% de cobertura, com a tela de workflow em 33%, e 45 textos de 11px fora de qualquer escala.
+Ficou de fora o que exige gente e não código: tempo até o primeiro protótipo, NPS do time, processo de RFC. No Pré-Projetos, a primeira leitura deu 86% de cobertura, com a tela de workflow em 33%, e 45 textos de 11px fora de qualquer escala. A dos fundamentos achou 31 rótulos em caixa-alta com seis espaçamentos de letra diferentes, em 20 arquivos, e `duration-200` onde `--motion-duration-layout` já vale 200ms; os pesos cabem na escada e as dez animações têm variante de movimento reduzido.
 
 O CSS diz o que foi declarado; a página renderizada diz o que acontece. A avaliação abre a tela em 390, 768 e 1280px e mede o que só existe depois de renderizar — rolagem horizontal, elemento vazando, texto abaixo de 12px, alvo de toque abaixo do mínimo do WCAG 2.2 e borda a poucos pixels de uma coluna que o resto da página respeita — e isso entra no dossiê como uma seção própria.
+
+Dos fundamentos, mede também a leitura: **parágrafo acima de 75ch por linha**, o teto da faixa que o playbook lê bem (45–75ch). A régua é em ch, a largura do "0" da fonte, e não em caracteres: em caracteres ela reprovaria a própria correção que recomenda, porque `max-width: 65ch` dá uns 81 caracteres por linha. Mede **tamanhos de texto a menos de 1px um do outro** (12 e 12,5px não criam hierarquia, são o mesmo papel escrito de dois jeitos), **mais de quatro pesos ou um peso entre degraus** (650) e **texto a menos de 16px da borda no celular** — a margem que o playbook usa, com 32 no tablet e 48 no desktop; abaixo de 8px, em qualquer largura. A margem medida é a do texto que se vê: o que rola escondido atrás da borda de uma tabela ou some nas reticências não conta.
 
 Depois, forçando as preferências do sistema, mede o que o overlay não alcança — porque ele vê só o tema e as preferências de quem está olhando: **contraste nos temas claro e escuro**, com a mesma régua do overlay (o tema escuro é forçado por `prefers-color-scheme`, `data-theme` e `.dark`; se a página não mudar, o relatório diz "não detectado" em vez de aprovar o que ninguém viu), **falta de região principal** (`<main>`) e **animação que segue em loop com movimento reduzido**. O que o [checklist de acessibilidade](https://www.designsystems.one/tools/accessibility-checklist) separa como trabalho de leitura — nome genérico de botão, texto de link que não se sustenta sozinho, alt que não descreve, estado só por cor — vai pedido por escrito ao agente no dossiê. Sem achado não é "acessível": é só o que a régua alcança.
 
@@ -255,7 +259,7 @@ No Cursor, em `.cursor/mcp.json`: `{"mcpServers": {"anotador": {"command": "anot
 
 | Ferramenta | Para que serve |
 |---|---|
-| `conferir_valor` | antes de escrever `#3b82f6` ou `13px`: diz se já existe token, qual usar, os mais próximos e se a medida respeita o passo. Cor é comparada em OKLab, então um dígito trocado encontra o token certo; entre tokens de mesmo valor, o semântico vem antes do primitivo, e a variável interna de uma biblioteca nunca é recomendada |
+| `conferir_valor` | antes de escrever `#3b82f6`, `13px` ou `200ms`: diz se já existe token, qual usar, os mais próximos e se a medida respeita o passo. Cor é comparada em OKLab, então um dígito trocado encontra o token certo; entre tokens de mesmo valor, o semântico vem antes do primitivo, e a variável interna de uma biblioteca nunca é recomendada. Duração vem com a faixa do orçamento de movimento em que cai |
 | `buscar_componente` | antes de criar um componente: os que já existem, com quantas vezes cada um é usado no produto (Storybook e testes não contam) |
 | `listar_tokens` | o vocabulário: valor, camada, a intenção do comentário e `arquivo:linha` |
 | `auditar_sistema` | as regras da tabela acima e o sistema em uso: literais com o token de cada um, cobertura por tela, componentes sem uso |

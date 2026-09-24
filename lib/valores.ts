@@ -2,7 +2,7 @@
 // estão perto, se respeita a escala — e quando a escolha é de papel, não de valor.
 // Usado pelo MCP (conferir_valor) e pela análise do sistema em uso (lib/uso.ts).
 
-import { deBiblioteca, emPixels, type CategoriaToken, type SistemaDeDesign, type TokenDesign } from "./design.ts";
+import { deBiblioteca, emMs, emPixels, type CategoriaToken, type SistemaDeDesign, type TokenDesign } from "./design.ts";
 import { paraRgb } from "./fonte.ts";
 
 /**
@@ -17,7 +17,7 @@ function camadaDe(t: TokenDesign): "semantica" | "primitiva" {
 export function descreverToken(t: TokenDesign): Record<string, unknown> {
   return {
     nome: t.nome, valor: t.valor, categoria: t.categoria, camada: camadaDe(t), ...(deBiblioteca(t.nome) ? { biblioteca: true } : {}),
-    ...(t.px !== undefined ? { px: t.px } : {}), ...(t.rgb ? { rgb: t.rgb } : {}),
+    ...(t.px !== undefined ? { px: t.px } : {}), ...(t.rgb ? { rgb: t.rgb } : {}), ...(t.ms !== undefined ? { ms: t.ms } : {}),
     ...(t.intencao ? { intencao: t.intencao } : {}), onde: `${t.arquivo}:${t.linha}`, usar: `var(${t.nome})`,
   };
 }
@@ -66,8 +66,61 @@ function escolherPorPapel(tokens: TokenDesign[]): { usar: TokenDesign | null; pa
   return { usar: papeis.length === 1 ? papeis[0] ?? null : null, papeis: papeis.length > 1 ? papeis : [] };
 }
 
+/**
+ * A faixa do orçamento de movimento do playbook em que a duração cai. Entre duas faixas,
+ * diz entre quais — arredondar para uma delas seria decidir pelo autor.
+ */
+export function faixaDeMovimento(ms: number): string {
+  if (ms < 0) return "negativo: é atraso que começa a animação no meio, não duração";
+  const faixas: Array<[number, number, string]> = [
+    [0, 80, "instantâneo (0–80ms): hover e anel de foco"],
+    [100, 150, "rápido (100–150ms): pressionar, alternar, retorno imediato"],
+    [200, 300, "padrão (200–300ms): abrir, fechar, esmaecer, deslizar"],
+    [400, 500, "considerado (400–500ms): transição de página, painel que expande"],
+    [600, Infinity, "cinematográfico (600ms ou mais): abertura e onboarding — raro"],
+  ];
+  const dentro = faixas.find(([de, ate]) => ms >= de && ms <= ate);
+  if (dentro) return dentro[2];
+  const antes = [...faixas].reverse().find(([, ate]) => ate < ms), depois = faixas.find(([de]) => de > ms);
+  return `entre ${antes?.[2].split(":")[0]} e ${depois?.[2].split(":")[0]}`;
+}
+
 export function conferirValor(sistema: SistemaDeDesign, valor: string, categoria?: CategoriaToken): Record<string, unknown> {
   const texto = valor.trim();
+  // Movimento: duração em ms ou s, ou uma curva. O que importa é o token que já existe
+  // e, para a duração, em que faixa do orçamento ela cai.
+  const ms = categoria === undefined || categoria === "movimento" ? emMs(texto) : undefined;
+  if (ms !== undefined) {
+    const candidatos = sistema.tokens.filter((t) => t.ms !== undefined && !deBiblioteca(t.nome));
+    const medidos = candidatos.map((t) => ({ t, d: Math.abs((t.ms as number) - ms) })).sort((a, b) => a.d - b.d || preferencia(a.t, b.t));
+    const exatos = medidos.filter((m) => m.d < 0.5).map((m) => m.t).sort(preferencia);
+    const proximos = medidos.filter((m) => m.d >= 0.5 && m.d <= Math.max(50, ms * 0.25)).slice(0, 3);
+    const escolha = escolherPorPapel(exatos);
+    return {
+      valor: texto, tipo: "movimento", ms, noSistema: exatos.length > 0,
+      usar: escolha.usar ? `var(${escolha.usar.nome})` : null,
+      exatos: exatos.map(descreverToken),
+      proximos: proximos.map((m) => ({ ...descreverToken(m.t), diferencaMs: Math.round(m.d) })),
+      ...(escolha.papeis.length ? { papeis: escolha.papeis.map(descreverToken) } : {}),
+      faixa: faixaDeMovimento(ms),
+      observacao: escolha.papeis.length ? `${escolha.papeis.length} tokens do projeto têm esta duração, com papéis diferentes: escolha pelo que a animação faz`
+        : exatos.length ? "a duração já tem token; use-o em vez do valor literal"
+        : ms > 500 ? "acima dos 500ms que o playbook dá a painel que expande: em interação frequente, fica lento — reserve para abertura rara"
+        : proximos.length ? "sem token exato; os mais próximos estão listados"
+        : candidatos.length ? "nenhum token de duração perto deste valor"
+        : "o projeto não declara token de duração; o playbook pede duração e curva como tokens",
+    };
+  }
+  if (categoria === "movimento") {
+    const normal = (v: string) => v.toLowerCase().replace(/\s+/g, "");
+    const exatos = sistema.tokens.filter((t) => t.categoria === "movimento" && !deBiblioteca(t.nome) && normal(t.valor) === normal(texto)).sort(preferencia);
+    const escolha = escolherPorPapel(exatos);
+    return {
+      valor: texto, tipo: "movimento", noSistema: exatos.length > 0, usar: escolha.usar ? `var(${escolha.usar.nome})` : null, exatos: exatos.map(descreverToken),
+      ...(escolha.papeis.length ? { papeis: escolha.papeis.map(descreverToken) } : {}),
+      observacao: exatos.length ? "a curva já tem token; use-o em vez do valor literal" : "nenhum token de movimento com este valor",
+    };
+  }
   const rgb = categoria === undefined || categoria === "cor" ? paraRgb(texto) : null;
   if (rgb) {
     const comCor = sistema.tokens.map((t) => ({ t, rgb: t.rgb ? paraRgb(t.rgb) : null })).filter((c): c is { t: TokenDesign; rgb: [number, number, number] } => !!c.rgb);

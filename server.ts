@@ -515,6 +515,7 @@ async function resumoDoSistema(fonte: string | null): Promise<string | null> {
       sistema.espaco.base ? `Passo de espaçamento: ${sistema.espaco.base}px, respeitado por ${sistema.espaco.dentro} de ${sistema.espaco.total} tokens de medida.` : "Sem passo de espaçamento claro.",
     ];
     if (sistema.escalaDeTexto.length) linhas.push(`Escala de texto: ${sistema.escalaDeTexto.join(", ")}px.`);
+    if (sistema.duracoes.length) linhas.push(`Durações de animação: ${sistema.duracoes.join(", ")}ms.`);
     const comIntencao = sistema.tokens.filter((t) => t.intencao).slice(0, 12);
     if (comIntencao.length) {
       linhas.push("", "Tokens com intenção declarada — respeite o que o projeto já decidiu:");
